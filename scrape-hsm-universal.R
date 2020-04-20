@@ -5,7 +5,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 18.4.2020
+# Stand: 20.4.2020 vormittags
 
 library("rvest")
 library("tidyverse")
@@ -263,7 +263,9 @@ all_df$hospitalisiert <- as.numeric(all_df$hospitalisiert)
 # Tabelle umsortieren und ausdünnen und umbenennen 
 final_df <- all_df %>%
   select(AGS,kreis,gesamt,kidx,pop,inzidenz,tote,neu7tage,inz7t,AnzahlGenesen,hospitalisiert,notizen) %>%
-  rename(stand = kidx, ags_text = AGS)
+  rename(stand = kidx, ags_text = AGS) %>%
+  mutate(TotProz = round(tote/gesamt*100),
+         GenesenProz = round(AnzahlGenesen/gesamt*100))
 
 ############################# Daten ausgeben ############################
 # Etwas verwinkelte Struktur: 
@@ -581,8 +583,11 @@ sheets_edit(id_basisdaten,as.data.frame(
 
 # Genesene (laut RKI) (Zeile 7)
 # RKI-Daten zu Beginn in rki_df eingelesen - zeitaufwändig
+# Absolute Zahl und Anteil an den Fällen
 
-sheets_edit(id_basisdaten,as.data.frame(genesen_gesamt),
+sheets_edit(id_basisdaten, as.data.frame(paste0(
+  as.character(genesen_gesamt), "(",
+  as.character(round(genesen_gesamt / faelle_gesamt * 100))," %)")),
   range="livedaten!B7", col_names = FALSE, reformat=FALSE)
 
 # Wachstumsrate (Zeile 9)
@@ -605,16 +610,18 @@ dw_trends_id = "D2CJm"     # Logarithmische Trendlinienkarte
 dw_fallzahl_id = "0CS3h"  # Barchart Tote, Fälle, Steigerungsraten
 dw_basisdaten_id= "7HWCI" # Basisdaten
 dw_waswenn_id = "Kedm4" # Was-wäre-wenn
+dw_dynamik_id ="B68Gx"  # 7-Tage-Dynamik nach Kreisen
 
 # Alle einmal ansprechen, damit sie die neuen Daten ziehen
 # - Neu publizieren, damit der DW-Server einmal die Google-Sheet-Daten zieht.
-dw_edit_chart(chart_id = dw_cck_id)
+
 dw_publish_chart(chart_id = dw_cck_id)
 dw_publish_chart(chart_id = dw_fallzahl_id)
 dw_publish_chart(chart_id = dw_tabelle_id)
 dw_publish_chart(chart_id = dw_trends_id)
 dw_publish_chart(chart_id = dw_basisdaten_id)
 dw_publish_chart(chart_id = dw_waswenn_id)
+dw_publish_chart(chart_id = dw_dynamik_id)
 
 #
 cat(as.character(now()),"---- FERTIG ----","\n")

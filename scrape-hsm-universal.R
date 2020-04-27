@@ -1,11 +1,11 @@
-################ scrape-hsm-local.R
-# Ministeriums-Scraper, Entwicklungskopie
+################ scrape-hsm-universal.R
+# Ministeriums-Scraper
 #
 # Greift die Corona-Tagesinfos vom Server soziales.hessen.de ab
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 20.4.2020 vormittags
+# Stand: 26.4.2020 vormittags
 
 library("rvest")
 library("tidyverse")
@@ -20,16 +20,32 @@ library(DatawRappr)
 library(jsonlite)
 library(fuzzyjoin)
 
-# Bei Aufruf mit Argument "server"
+# Init-Werte fürs Logging, das Arbeitsverzeichnis und die Keyfile-Auswahl
 server <- FALSE
+
+# ---- Logging und Update der Semaphore-Seite ----
+id_msg <- "1Q5rCvvSUn6WGcsCnKwGJ0y9PwbiML-34kyxYSYX2Qjk"
+logfile <- ""
+
+msg <- function(x,...) {
+  print(paste0(x,...))
+  # Zeitstempel in B6, Statuszeile in C6
+  sheets_edit(id_msg,as.data.frame(now(tzone = "CEST")),sheet="Tabellenblatt1",
+              range="B6",col_names = FALSE,reformat=FALSE)
+  sheets_edit(id_msg,as.data.frame(paste0(x,...)),sheet="Tabellenblatt1",
+              range="C6",col_names = FALSE,reformat=FALSE)
+  if (logfile != "") {
+    cat(x,...,file = logfile, append = TRUE)
+  }
+}
 
 # Argumente werden in einem String-Vektor namens args übergeben,
 # wenn ein Argument übergeben wurde, dort suchen, sonst Unterverzeichnis "src"
 
 args = commandArgs(trailingOnly = TRUE)
 if (length(args)!=0) { 
-  server <- args[1] %in% c("server","nologs")
-  logfile <- args[1] != "nologs"
+  server <- args[1] %in% c("server","logfile")
+  if(args[1] == "logfile") logfile <- "./logs/scrape-hsm.log"
 } 
 
 sheets_email <- "googlesheets4@scrapers-272317.iam.gserviceaccount.com"
@@ -39,30 +55,29 @@ sheets_keypath <- "C:/Users/Jan/Documents/PythonScripts/creds/scrapers-272317-4a
 if (server) {
   # Arbeitsverzeichnis, Logdatei beschreiben
   setwd("/home/jan_eggers_hr_de/rscripts/")
-  if (logfile) sink(file = "/home/jan_eggers_hr_de/rscripts/logs/scrape-hsm.log", append = TRUE, type = "message")
   # Authentifizierung Google-Docs umbiegen
   sheets_keypath <- "/home/jan_eggers_hr_de/key/scrapers-272317-4a60db8e6863.json"
 } 
 
+
 sheets_deauth() # Authentifizierung löschen
 sheets_auth(email=sheets_email,path=sheets_keypath)
 
-cat(as.character(now()),"\n\n---------------- START",as.character(today()),"------------------\n")
-
+msg(as.character(now()),"\n\n---------------- START ",as.character(today()),"------------------\n")
 
 # Vorbereitung: Index-Datei einlesen; enthält Kreise/AGS und Bevölkerungszahlen
-cat(as.character(now()),"Lies index/kreise-index-pop.xlsx","\n")
+msg(as.character(now()),"Lies index/kreise-index-pop.xlsx","\n")
 kreise <- read.xlsx("index/kreise-index-pop.xlsx")
 
 # RKI-Daten lesen und auf Hessen filtern
-cat(as.character(now()),"Lies RKI-Daten (>100k Fälle, das dauert)","\n")
+msg(as.character(now()),"Lies RKI-Daten (>100k Fälle, das dauert)","\n")
 rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"
 rki_df <- read.csv(url(rki_url)) %>% 
   filter(Bundesland == "Hessen")
 
 
 # ---- Google-Tabellen fallzahl, wachstum, cck einlesen ----
-cat(as.character(now()),"Lies die Google-Tabellen...","\n")
+msg(as.character(now()),"Lies die Google-Tabellen...","\n")
 
 
 # Tabelle: "Covid Choropleth Kreise"
@@ -80,7 +95,7 @@ cck_df <- read_sheet(id_cck,sheet="daten")
 
 
 # ---- Ministeriums-Seite lesen und auf Aktualisierung prüfen ----
-cat(as.character(now()),"URL der Ministeriums-Seite abfragen...","\n")
+msg(as.character(now()),"URL der Ministeriums-Seite abfragen...","\n")
 
 url <- "https://soziales.hessen.de/gesundheit/infektionsschutz/coronavirus-sars-cov-2/taegliche-uebersicht-der-bestaetigten-sars-cov-2-faelle-hessen"
 m <- c("Januar","Februar","März","April","Mai","Juni","Juli","August","September","November","Dezember")
@@ -115,17 +130,16 @@ while(this_date <= last_date) {
     http_408 = function (e) {408} # Timeout
   ) %in% c(403,404,405,408)) {
     simpleWarning("Seite nicht erreichbar ")
-    cat("Warte 60 Sekunden...\n")
+    msg("Warte 60 Sekunden...\n")
     Sys.sleep(60)
   } 
   tryCatch(webpage <- read_html(url)) # Seite einlesen. Versuchs halt. 
 
     # Datum grabben - irgendwo, wo "Stand: " steht
   ts_htm <- html_nodes(webpage,"p")
-  for(x in ts_htm)
-  {
+  for(x in ts_htm) {
     httxt = html_text(x)
-    if (str_detect(httxt,"Stand[\\s\\:]+[0-9]")) 
+    if (str_detect(httxt,"Stand[\\s]+[0-9]")) 
       ts <- str_extract(html_text(x),"[0-9]+\\.\\s[JFMAMJJASOND][a-zä]*\\s2020\\,\\s[0-9]+\\:[0-9][0-9]\\sUhr")
   }
             
@@ -141,7 +155,7 @@ while(this_date <= last_date) {
   datum <- paste0(tag,".",monat,".",jahr)
   this_date <- make_date(year = jahr, month = monat, day = tag)
   if (this_date == last_date) {
-    cat(as.character(now()),"Warte 60 Sekunden...\n")
+    msg(as.character(now()),"Warte 60 Sekunden auf Refresh...\n")
     Sys.sleep(60)
   }
 }
@@ -150,7 +164,7 @@ if (!server) {
   library(beepr)
   beep(2)
 }
-cat(as.character(now()),"GELESEN: --- Seite vom",tag,monat,jahr,"---\n")
+msg(as.character(now()),"GELESEN: --- Seite vom",tag,monat,jahr,"---\n")
 
 # Den PDF-Link holen und sichern. 
 #pdf_link <- str_extract(str_detect(html_nodes(webpage,"a"),"pdf"),'https://.+\\.pdf')
@@ -178,7 +192,7 @@ table_df$tote[is.na(table_df$tote)] <- 0
 #Plausibilitäts-Prüfung!
 
 if (!server) View(table_df)
-cat(as.character(now()),"Gelesen:",nrow(table_df),"Zeilen",ncol(table_df),"Spalten")
+msg(as.character(now()),"Gelesen:",nrow(table_df),"Zeilen",ncol(table_df),"Spalten")
 if (nrow(table_df)>27) simpleError("Zu viele Einträge?")
 if (ncol(table_df)!=7 | ncol(table_df)<2) simpleError("Formatänderung!")
 
@@ -218,7 +232,7 @@ if (table_df$gesamt[27] <= fallzahl_df$faelle[nrow(fallzahl_df)] ) {
 # Von den Daten aus dem Google-Doc "Covid Choropleth Karte" nur die Notizen und Todesfälle behalten
 notizen_df <- cck_df %>% select(kreis,notizen,tote_hsde = tote)
 
-cat(as.character(now()),"Tabelle all_df zusammenführen...","\n")
+msg(as.character(now()),"Tabelle all_df zusammenführen...","\n")
 
 # ---- RKI-Daten Genesene nach Kreis ----
 genesen_df <- rki_df %>% 
@@ -292,7 +306,7 @@ final_df <- all_df %>%
 #   des RKI aus dem Dashboard und bereitet daraus Aufstellungen der Fälle und Todesfälle
 #   nach Alter und Geschlecht auf. 
 
-cat(as.character(now()),"Starte Datenausgabe","\n")
+msg(as.character(now()),"Starte Datenausgabe","\n")
 
 # Authentifizierung aktualisieren - wenn es zu lange gedauert hat, ist sie verfallen
 sheets_deauth() # Authentifizierung löschen
@@ -302,19 +316,19 @@ sheets_auth(email=sheets_email,path=sheets_keypath)
 
 # Tabelle für den heutigen Tag mit Zeitstempel abspeichern
 write.xlsx(final_df,file=paste0("archiv/",ts_clean,".xlsx"),overwrite = TRUE)
-cat(as.character(now()),"Archivkopie nach archiv/ geschrieben","\n")
+msg(as.character(now()),"Archivkopie nach archiv/ geschrieben","\n")
 
 # Tabelle in das GoogleDoc "Covid Choropleth Kreise" schreiben
 sheets_write(final_df,ss = id_cck, sheet = "daten")
 
 
-# ---- Aktualisiere das ARD-Sheet aktuelle Daten ----
+b# ---- Aktualisiere das ARD-Sheet aktuelle Daten ----
 ard_df <- final_df %>%
   mutate(Genesene = AnzahlGenesen, Quelle = url) %>%
   select(1,2,3,11,7,12,4) %>%
   rename(AGS = ags_text,Kreisname = kreis,Fallzahlen=gesamt,Tote=tote,Zeitstempel= stand)
   
-cat(as.character(now()),"ARD-Seite Hessen (Google) aktualisieren","\n")
+msg(as.character(now()),"ARD-Seite Hessen (Google) aktualisieren","\n")
 
 ard_id = "1OKodgGnSTFRrF51cIrsL7qz0xwAdR8DXovGzD01dqEM"
 sheets_write(ard_df,ss = ard_id,sheet = "06_hessen")
@@ -367,7 +381,7 @@ fallzahl_df <- fallzahl_df  %>%
  
 
 
-cat(as.character(now()),"Fallzahlen Hessen (Google), daten/livedaten aktualisieren","\n")
+msg(as.character(now()),"Fallzahlen Hessen (Google), daten/livedaten aktualisieren","\n")
 
 #sheets_edit statt sheets_write, um den reformat-Parameter zu haben
 sheets_edit(fallzahl_df,ss = id_fallzahl, sheet = "daten",reformat=FALSE)
@@ -380,7 +394,7 @@ sheets_edit(fall4w_df,ss = id_fallzahl, sheet = "livedaten",reformat=FALSE)
 
 # ---- Schreibe aktualisierte Werte in Google-Doc id_wachstum ----  
 
-cat(as.character(now()),"Wachstumsberechnung (Google) aktualisieren","\n")
+msg(as.character(now()),"Wachstumsberechnung (Google) aktualisieren","\n")
 
 # Aktuelle Fallzahl und Datum - Stichtag ist der 11.3. (ungefähr Inzidenz 1)
 #
@@ -413,7 +427,7 @@ sheets_edit(id_wachstum,
             sheet="Tabellenblatt1",range="F8",col_names=FALSE,reformat=FALSE
             )
 
-cat(as.character(now()),"Trendformel hessen aktualisiert","\n")
+msg(as.character(now()),"Trendformel hessen aktualisiert","\n")
 
 #RKI-Abfragestring konstruieren
 
@@ -425,7 +439,7 @@ rki_rest_query2 <- paste0("https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/
   "&outStatistics=%5B%7B%22statisticType%22%3A%22max%22%2C%22onStatisticField%22%3A%22Fallzahl%22%2C%22outStatisticFieldName%22%3A%22value%22%7D%5D",
   "&outSR=102100&cacheHint=true")
   
-cat(as.character(now()),"RKI-JSON-Query:",rki_rest_query2,"\n")
+msg(as.character(now()),"RKI-JSON-Query:",rki_rest_query2,"\n")
 
 library(jsonlite)
 # Das JSON einlesen. Gibt eine ziemlich chaotische Liste zurück. 
@@ -459,7 +473,7 @@ sheets_edit(id_wachstum,
             sheet="Tabellenblatt1",range="M8",col_names=FALSE,reformat=FALSE
 )
 
-cat(as.character(now()),"NRW-Daten und -Formeln angepasst","\n")
+msg(as.character(now()),"NRW-Daten und -Formeln angepasst","\n")
 
 
 # Johns-Hopkins-Zahlen von Gestern lesen
@@ -471,7 +485,7 @@ g_monat <- as.character(month(heute-1))
 if (month(heute-1) < 10) g_monat <- paste0("0",g_monat)
 g_jahr <- as.character(year(heute-1))
 
-cat(as.character(now()),"JHU-Daten von",g_monat,"-",g_tag,"-",g_jahr,".csv","\n")
+msg(as.character(now()),"JHU-Daten von",g_monat,"-",g_tag,"-",g_jahr,".csv","\n")
 
 jhu_df <- read.csv(url(paste0("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/",
   g_monat,"-",g_tag,"-",g_jahr,".csv"))) %>%
@@ -507,10 +521,10 @@ sheets_edit(id_wachstum,
 )
 
 
-cat(as.character(now()),"Johns-Hopkins-Zahlen Italien gelesen und geschrieben","\n")
+msg(as.character(now()),"Johns-Hopkins-Zahlen Italien gelesen und geschrieben","\n")
 
 # ---- Master-Tabelle mit allen Meldungen nach Tagen aktualisieren ----
-cat(as.character(now()),"Master-Tabelle schreiben...","\n")
+msg(as.character(now()),"Master-Tabelle schreiben...","\n")
 
 # Master-Tabelle mit allen Meldungen nach Tagen holen
 library(readxl)
@@ -547,7 +561,7 @@ master_id = "1kOEoXMmMOlkaq50ed0ToYeIJZ7sK2KivqbIMKnvpib0"
 sheets_write(master_df,ss = master_id, sheet = "fallzahlen")
 
 # ---- Basisdaten-Seite schreiben ----
-cat(as.character(now()),"Basisdaten-Seite (Google) schreiben...","\n")
+msg(as.character(now()),"Basisdaten-Seite (Google) schreiben...","\n")
 
 id_basisdaten <- "1m6hK7s1AnDbeAJ68GSSMH24z4lL7_23RHEI8TID24R8"
 # Datumsstring schreiben (Zeile 2)
@@ -586,23 +600,32 @@ sheets_edit(id_basisdaten,as.data.frame(
 # Absolute Zahl und Anteil an den Fällen
 
 sheets_edit(id_basisdaten, as.data.frame(paste0(
-  as.character(genesen_gesamt), "(",
+  as.character(genesen_gesamt), " (",
   as.character(round(genesen_gesamt / faelle_gesamt * 100))," %)")),
   range="livedaten!B7", col_names = FALSE, reformat=FALSE)
 
-# Wachstumsrate (Zeile 9)
-# Verdoppelungszeit (Zeile 10)
+# Aktive Fälle (= Gesamt-Tote-Genesene), nur in Prozent (Zeile 8)
+
+
+sheets_edit(id_basisdaten, as.data.frame(paste0(
+  as.character(round((faelle_gesamt-genesen_gesamt-tote_gesamt) / faelle_gesamt * 100))," %")),
+  range="livedaten!B8", col_names = FALSE, reformat=FALSE)
+
+# Wachstumsrate (Zeile 10)
+# Verdoppelungszeit (Zeile 11)
 # Durchschnitt der letzten vier Steigerungsraten (in fall4w_df sind die letzten 4 Wochen)
 steigerung_prozent <- round(mean(fall4w_df$steigerung[22:28]) * 100,1)
 v_zeit <- round(log(2)/log(1+mean(fall4w_df$steigerung[22:28])),1)
 
 sheets_edit(id_basisdaten,as.data.frame(str_replace(paste0(steigerung_prozent," %"),"\\.",",")),
-            range="livedaten!B9", col_names = FALSE, reformat=FALSE)
+            range="livedaten!B10", col_names = FALSE, reformat=FALSE)
 
 sheets_edit(id_basisdaten,as.data.frame(str_replace(paste0(v_zeit," Tage"),"\\.",",")),
-            range="livedaten!B10", col_names = FALSE, reformat=FALSE)
+            range="livedaten!B11", col_names = FALSE, reformat=FALSE)
+
+
 ##### Datawrapper-Grafiken pingen und so aktualisieren #####
-cat(as.character(now()),"Datawrapper-Grafiken pingen...","\n")
+msg(as.character(now()),"Datawrapper-Grafiken pingen...","\n")
 
 dw_cck_id = "YBBaK"       # Choropleth-Karte
 dw_tabelle_id = "KP1H3"   # Tabelle mit den aktuellen Werten Steigerung Verdoppelungszeit
@@ -624,5 +647,6 @@ dw_publish_chart(chart_id = dw_waswenn_id)
 dw_publish_chart(chart_id = dw_dynamik_id)
 
 #
-cat(as.character(now()),"---- FERTIG ----","\n")
+msg(as.character(now()),"---- FERTIG ----","\n")
+msg("OK!")
 

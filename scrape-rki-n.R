@@ -2,12 +2,30 @@
 #
 # Scraped das RKI-Dashboard und legt Daten nach Geschlecht und Alter ab. 
 # 
-# Jan Eggers, zuletzt verändert 18.4. (Umstellung auf CSV)
+# Jan Eggers, zuletzt verändert 26.4. (mit Semaphore/Logging)
 
 #library(jsonlite)
 library(tidyverse)
 library(googlesheets4)
 library(lubridate)
+library(DatawRappr)
+
+# ---- Logging und Update der Semaphore-Seite ----
+id_msg <- "1Q5rCvvSUn6WGcsCnKwGJ0y9PwbiML-34kyxYSYX2Qjk"
+logfile <- ""
+
+msg <- function(x,...) {
+  print(paste0(x,...))
+  # Zeitstempel in B7, Statuszeile in C7
+  sheets_edit(id_msg,as.data.frame(now(tzone = "CEST")),sheet="Tabellenblatt1",
+              range="B7",col_names = FALSE,reformat=FALSE)
+  sheets_edit(id_msg,as.data.frame(paste0(x,...)),sheet="Tabellenblatt1",
+              range="C7",col_names = FALSE,reformat=FALSE)
+  if (logfile != "") {
+    cat(x,...,file = logfile, append = TRUE)
+  }
+}
+
 
 # Bei Aufruf ohne  Argument "server"
 server <- FALSE
@@ -17,27 +35,38 @@ server <- FALSE
 
 args = commandArgs(trailingOnly = TRUE)
 if (length(args)!=0) { 
-  server <- args[1] %in% c("server","nologs")
-  logfile <- args[1] != "nologs"
+  server <- args[1] %in% c("server","logfile")
+  if (args[1] != "logfile") logfile <- "./logs/scrape-rki.log" 
 } 
 
-###### VERSION FÜR DEN SERVER #####
+# ---- Google-Credentials setzen ----
+
+sheets_deauth() # Authentifizierung löschen
 if (server) {
   setwd("/home/jan_eggers_hr_de/rscripts/") 
-  if (logfile) sink(file = "logs/scrape-rki.log", append = TRUE, type = "messages")
+  sheets_auth(email="googlesheets4@scrapers-272317.iam.gserviceaccount.com", 
+              path = "/home/jan_eggers_hr_de/key/scrapers-272317-4a60db8e6863.json")
+} else {
+  sheets_auth(email="googlesheets4@scrapers-272317.iam.gserviceaccount.com", 
+              path = "C:/Users/Jan/Documents/PythonScripts/creds/scrapers-272317-4a60db8e6863.json")
 }
+msg("Google Credentials erfolgreich gesetzt\n")
 
 heute = ymd(today())
-cat("\n\n----Scraper-Job am",as.character(heute),"\n")
-cat("Start: ", as.character(now()),"\n")
+
+msg("\n\n----Scraper-Job am",as.character(heute),"\n")
+msg("Start: ", as.character(now()),"\n")
 
 
 
 #---- Daten für Hessen nach Alter und Geschlecht ----
-cat("Versuche Alter und Geschlecht zu lesen...\n")
-rki_alt_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"
-rki_df <- read.csv(url(rki_alt_url)) 
+msg("Versuche Alter und Geschlecht zu lesen...\n")
+rki_2 <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"
+rki_temp_url <- "https://www.arcgis.com/sharing/rest/content/items/f10774f1c63e40168479a1feb6c7ca74/data"
+rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"
+rki_df <- read.csv(url(rki_temp_url)) 
 
+msg("Daten erfolgreich von Temp-CSV beim RKI gelesen")
 # Hessische Fälle mal vorfiltern; eigentlich nur ein Test
 he_df <- rki_df %>%
   filter(Bundesland == "Hessen") %>%
@@ -130,7 +159,7 @@ if (server) {
 # Alter und Geschlecht
 rki_alter_id="1RxlykWHoIZEq91M1bJNf26VPn8OWwI6VsgvAO47HM8Q"
 
-cat("Ergänze Google-Sheet um die aktuellen Zahlen Hessen nach Alter und Geschlecht\n")
+msg("Ergänze Google-Sheet um die aktuellen Zahlen Hessen nach Alter und Geschlecht\n")
 # Sheet in den richtigen Bereich schreiben
 sheets_edit(rki_alter_id,alter_df,sheet = "quelldaten", range = "A1:D8", col_names = TRUE) 
 
@@ -147,21 +176,29 @@ write.table(alter_df, "rki-alter.csv",
             fileEncoding = "UTF-8")
 
 # Länder-Zahlen in Übersicht faelle
-cat("Ergänze Google-Sheet um Fallzahlen nach Ländern mit Zeitstempel\n")
+msg("Ergänze Google-Sheet um Fallzahlen nach Ländern mit Zeitstempel\n")
 sheets_append(laender_faelle_df,rki_alter_id,sheet ="faelle")
-cat("Ergänze Google-Sheet um Todesfälle nach Ländern mit Zeitstempel\n")
+msg("Ergänze Google-Sheet um Todesfälle nach Ländern mit Zeitstempel\n")
 sheets_append(laender_tote_df,rki_alter_id,sheet ="tote")
 
-cat("Schreibe Altersstruktur Todesfälle...\n")
+msg("Schreibe Altersstruktur Todesfälle...\n")
 sheets_write(tote_df,ss = rki_alter_id, sheet="tote_nach_alter")
 # Beschreibt ein Sheet in dem RKI-Dokument
 # Ein zweites Google Sheet zieht sich per IMPORTRANGE die Daten und rechnet sie um. 
 # Aus dem zieht sich dann wieder Datawrapper alles Wesentliche
 write_csv2(tote_df,"rki-tote.csv")
 
-cat("Schreibe Zeitstempel...\n")
+msg("Schreibe Zeitstempel...\n")
 sheets_edit(rki_alter_id,as.data.frame(as.character(heute)),sheet="live-daten",range= "A1",col_names = FALSE)
 
+# ---- Datawrapper-Grafiken pingen ----
+msg("Pinge Datawrapper-Grafiken...")
+id_alter = "XpbpH"
+id_tote ="JQobx"
+dw_publish_chart(chart_id = id_alter)
+dw_publish_chart(chart_id = id_tote)
 
 
-cat("Erledigt.",as.character(now()))
+
+msg("Erledigt.",as.character(now()))
+msg("OK!")

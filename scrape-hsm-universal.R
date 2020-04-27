@@ -269,6 +269,7 @@ all_df$gesamt <- as.numeric(all_df$gesamt)
 all_df$hospitalisiert <- as.numeric(all_df$hospitalisiert)
 
 
+# ---- Kreisdaten für Choropleth-Karte und für den Google Bucket ausgeben ----
 # Tabellenwerte in Zahlen umwandeln, NA durch 0 ersetzen - nicht mehr nötig
 # table_df$gestern <- as.numeric(ifelse(is.na(as.numeric(table_df$gestern)),"0",table_df$gestern))
 # all_df$neu <- as.numeric(ifelse(is.na(as.numeric(table_df$neu)),"0",table_df$neu))
@@ -312,17 +313,18 @@ msg(as.character(now()),"Starte Datenausgabe","\n")
 sheets_deauth() # Authentifizierung löschen
 sheets_auth(email=sheets_email,path=sheets_keypath)
 
-# ---- Schreibe Archivkopie, aktualisiere Google-Doc KARTE -----
+# Schreibe Archivkopie, aktualisiere Google-Sheet Karte
 
 # Tabelle für den heutigen Tag mit Zeitstempel abspeichern
 write.xlsx(final_df,file=paste0("archiv/",ts_clean,".xlsx"),overwrite = TRUE)
-msg(as.character(now()),"Archivkopie nach archiv/ geschrieben","\n")
+write.csv2(final_df,file="../scrape-hsm.csv")
+msg(as.character(now()),"Archivkopie nach archiv/ und ins Home-Verzeichnis geschrieben","\n")
 
 # Tabelle in das GoogleDoc "Covid Choropleth Kreise" schreiben
 sheets_write(final_df,ss = id_cck, sheet = "daten")
 
 
-b# ---- Aktualisiere das ARD-Sheet aktuelle Daten ----
+# ---- Aktualisiere das ARD-Sheet aktuelle Daten ----
 ard_df <- final_df %>%
   mutate(Genesene = AnzahlGenesen, Quelle = url) %>%
   select(1,2,3,11,7,12,4) %>%

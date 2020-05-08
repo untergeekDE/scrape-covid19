@@ -5,7 +5,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 26.4.2020 vormittags
+# Stand: 5.5.2020
 
 library("rvest")
 library("tidyverse")
@@ -30,10 +30,10 @@ logfile <- ""
 msg <- function(x,...) {
   print(paste0(x,...))
   # Zeitstempel in B6, Statuszeile in C6
-  sheets_edit(id_msg,as.data.frame(now(tzone = "CEST")),sheet="Tabellenblatt1",
-              range="B6",col_names = FALSE,reformat=FALSE)
-  sheets_edit(id_msg,as.data.frame(paste0(x,...)),sheet="Tabellenblatt1",
-              range="C6",col_names = FALSE,reformat=FALSE)
+  d <- data.frame(b6 = now(tzone= "CEST"), c6 = paste0(x,...))
+  sheets_edit(id_msg,d,sheet="Tabellenblatt1",
+              range="B6:C6",col_names = FALSE,reformat=FALSE)
+  if (server) Sys.sleep(10)     # Skript ein wenig runterbremsen wegen Quoa
   if (logfile != "") {
     cat(x,...,file = logfile, append = TRUE)
   }
@@ -63,21 +63,34 @@ if (server) {
 sheets_deauth() # Authentifizierung löschen
 sheets_auth(email=sheets_email,path=sheets_keypath)
 
-msg(as.character(now()),"\n\n---------------- START ",as.character(today()),"------------------\n")
+msg("\n\n---------------- START ",as.character(today()),"------------------\n")
 
 # Vorbereitung: Index-Datei einlesen; enthält Kreise/AGS und Bevölkerungszahlen
-msg(as.character(now()),"Lies index/kreise-index-pop.xlsx","\n")
+msg("Lies index/kreise-index-pop.xlsx","\n")
 kreise <- read.xlsx("index/kreise-index-pop.xlsx")
 
 # RKI-Daten lesen und auf Hessen filtern
-msg(as.character(now()),"Lies RKI-Daten (>100k Fälle, das dauert)","\n")
-rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"
-rki_df <- read.csv(url(rki_url)) %>% 
-  filter(Bundesland == "Hessen")
+# Wird vom RKI-Scraper hier abgelegt. 
+
+rki_df <- read.csv2("rki_df.csv") 
+
+# Achtung: Wenn Datei von gestern, also: today() größer als Zeitstempel der Datei, 
+# dann vielleicht doch noch mal aktualisieren.
+mdate <- file.info("rki_df.csv")$mtime
+if (today()>mdate) {
+  ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
+  rki_df <- read.csv(url(ndr_url)) %>% filter(Bundesland == "Hessen")
+}
+
+genesen_df <- rki_df %>% 
+  select(IdLandkreis,AnzahlGenesen) %>%
+  group_by(IdLandkreis) %>%
+  summarize(AnzahlGenesen = sum(AnzahlGenesen)) %>%
+  mutate(IdLandkreis = paste0("0",as.character(IdLandkreis)))
 
 
 # ---- Google-Tabellen fallzahl, wachstum, cck einlesen ----
-msg(as.character(now()),"Lies die Google-Tabellen...","\n")
+msg("Lies die Google-Tabellen cck_id, wachstum, fallzahl_id (Daten), ...","\n")
 
 
 # Tabelle: "Covid Choropleth Kreise"
@@ -95,7 +108,7 @@ cck_df <- read_sheet(id_cck,sheet="daten")
 
 
 # ---- Ministeriums-Seite lesen und auf Aktualisierung prüfen ----
-msg(as.character(now()),"URL der Ministeriums-Seite abfragen...","\n")
+msg("URL der Ministeriums-Seite abfragen...","\n")
 
 url <- "https://soziales.hessen.de/gesundheit/infektionsschutz/coronavirus-sars-cov-2/taegliche-uebersicht-der-bestaetigten-sars-cov-2-faelle-hessen"
 m <- c("Januar","Februar","März","April","Mai","Juni","Juli","August","September","November","Dezember")
@@ -127,8 +140,9 @@ while(this_date <= last_date) {
     http_404 = function (e) {404},
     http_403 = function (e) {403}, # Forbidden
     http_405 = function (e) {405}, 
-    http_408 = function (e) {408} # Timeout
-  ) %in% c(403,404,405,408)) {
+    http_408 = function (e) {408}, # Timeout
+    http_502 = function (e) {502} # Bad Gateway
+  ) %in% c(403,404,405,408,502)) {
     simpleWarning("Seite nicht erreichbar ")
     msg("Warte 60 Sekunden...\n")
     Sys.sleep(60)
@@ -140,7 +154,7 @@ while(this_date <= last_date) {
   for(x in ts_htm) {
     httxt = html_text(x)
     if (str_detect(httxt,"Stand[\\s]+[0-9]")) 
-      ts <- str_extract(html_text(x),"[0-9]+\\.\\s[JFMAMJJASOND][a-zä]*\\s2020\\,\\s[0-9]+\\:[0-9][0-9]\\sUhr")
+      ts <- str_extract(html_text(x),"[0-9]+\\.\\s[JFMAMJJASOND][a-zä]*\\s?2020\\,\\s?[0-9]+\\:[0-9][0-9]\\sUhr")
   }
             
   ts_clean <- str_replace(str_replace_all(ts,"[\\.\\ \\:]",""),"\\,","-")
@@ -155,7 +169,7 @@ while(this_date <= last_date) {
   datum <- paste0(tag,".",monat,".",jahr)
   this_date <- make_date(year = jahr, month = monat, day = tag)
   if (this_date == last_date) {
-    msg(as.character(now()),"Warte 60 Sekunden auf Refresh...\n")
+    msg("Warte 60 Sekunden auf Refresh...\n")
     Sys.sleep(60)
   }
 }
@@ -164,13 +178,13 @@ if (!server) {
   library(beepr)
   beep(2)
 }
-msg(as.character(now()),"GELESEN: --- Seite vom",tag,monat,jahr,"---\n")
+msg("GELESEN: --- Seite vom ",jahr,"-",monat,"-",tag,"---\n")
 
 # Den PDF-Link holen und sichern. 
-#pdf_link <- str_extract(str_detect(html_nodes(webpage,"a"),"pdf"),'https://.+\\.pdf')
-#pdf <- GET(pdf_link)
+# pdf_link <- str_extract(str_detect(html_nodes(webpage,"a"),"pdf"),'https://.+\\.pdf')
+# pdf <- GET(pdf_link)
 
-# ---- Tabellendaten aus der Webseite extrahieren und aufarbeiten ----
+# ---- Tabellendaten aus der Webseite extrahieren, Kreise matchen ----
 # Die erste Tabelle auf der Seite auslesen
 tables <- html_node(webpage,"table")
 
@@ -180,30 +194,9 @@ tables <- html_node(webpage,"table")
 
 # viel simpler: html_table nutzen
 table_df <- html_table(tables)
-colnames(table_df) <- c("kreis","gesamt","hospitalisiert","tote","inz","neu7tage","inz7t")
-table_df <- table_df[3:nrow(table_df),] 
+colnames(table_df) <- c("kreis","gesamt","tote","inz","neu7tage","inz7t")
 
-
-# Diese Tabellenspalte hat noch viele Leerstellen, die bei is.numeric() 
-# in NA-Werte umgewandelt werden. Die machen nur Ärger!
-table_df$tote <- as.numeric(table_df$tote)
-table_df$tote[is.na(table_df$tote)] <- 0
-
-#Plausibilitäts-Prüfung!
-
-if (!server) View(table_df)
-msg(as.character(now()),"Gelesen:",nrow(table_df),"Zeilen",ncol(table_df),"Spalten")
-if (nrow(table_df)>27) simpleError("Zu viele Einträge?")
-if (ncol(table_df)!=7 | ncol(table_df)<2) simpleError("Formatänderung!")
-
-#Mehr Tests!!!!!!!!!!!!!!!!!!!!!!!!!!
-if (!is.numeric(table_df$gesamt)){
-  table_df$gesamt <- as.numeric(table_df$gesamt)
-  simpleWarning("Tabellenspalte Gesamt nicht numerisch")
-  table_df$gesamt[is.na(table_df$gesamt)] <- 0 # Gesamt-NA-Werte auf 0
-}
-
-
+# Jetzt erst mal das Matching mit den Kreisnamen
 # Die komischen Namen des HMSI standardisieren
 table_df$kreis[table_df$kreis == "SK Darmstadt"] <- "Darmstadt (Stadt)"
 table_df$kreis[table_df$kreis == "SK Wiesbaden"] <- "Wiesbaden (Stadt)"
@@ -215,12 +208,55 @@ table_df$kreis <- str_replace(table_df$kreis,"SK Kassel","Kassel (Stadt)")
 table_df$kreis <- str_remove(table_df$kreis,"LK ")
 table_df$kreis <- str_remove(table_df$kreis,"SK ")
 
-# Spalten in Zahlenwerte umwandeln
-for (i in 2:7) {
-  table_df[,i] <- as.numeric(table_df[,i])
+# Von den Daten aus dem Google-Doc "Covid Choropleth Karte" nur die Notizen und Todesfälle behalten
+notizen_df <- cck_df %>% select(kreis,notizen,tote_hsde = tote)
+
+# Daten in all_df  zusammenführen: AGS, Bevölkerungszahl  
+all_df <- table_df %>%
+  # bis 27.4.: c("kreis","gesamt","hospitalisiert","tote","inz","neu7tage","inz7t")
+  # ab 28.4.: kreis,gesamt,tote,inz,neu7tage,inz7t
+  select(k = 1,
+         gesamt = 2,
+         tote = 3,
+         inzidenz = 4,
+         neu7tage = 5,
+         inz7t = 6) %>%
+  # Fuzzyjoin - um Bindestriche und ähnlichen Kram zu ignorieren
+  stringdist_right_join(kreise, by = c("k" = "kreis"), max_dist=1) %>%
+  # Werte in Zahlen umwandeln
+  mutate(gesamt = as.numeric(gesamt),
+         tote = as.numeric(tote),
+         inzidenz = as.numeric(gesamt)/pop*100000, # rechnen, nicht glauben
+         neu7tage = as.numeric(neu7tage),
+         inz7t = as.numeric(inz7t)) %>%
+  select(kreis,gesamt,tote,inzidenz,neu7tage,inz7t,AGS,pop,Lat,Lon) %>%
+  # RightJoin: Nur die Kreise!
+  mutate(AGS = paste0("06",str_replace(AGS,"000",""))) %>%
+  mutate(stand = ts) %>% # Stand auf Zeitstempel des hmsi-Dokuments setzen
+  right_join(notizen_df, by = c("kreis" = "kreis")) %>%
+  # Anzahle der Toten auf hsde-Informationsstand # FRÜHER
+  # mutate(tote = ifelse(tote < tote_hsde,tote_hsde,tote)) %>% 
+  # Anzahl der Genesenen nach Kreis
+  left_join(genesen_df, by = c("AGS" = "IdLandkreis"))
+
+
+# ---- Plausibilitäts-Prüfung! ----
+
+if (!server) View(all_df)
+msg("Gelesen:",nrow(all_df),"Zeilen",ncol(table_df),"Spalten")
+if (nrow(all_df) > 26) simpleError("Zu viele Einträge?")
+if (nrow(all_df) < 26) simpleError("Kreis fehlt")
+if (ncol(table_df)!=6 | ncol(table_df)<2) simpleError("Formatänderung!")
+# Test mit anti_join: nicht gematchter Kreis?
+if (nrow(stringdist_anti_join(kreise,table_df,by =c("kreis" = "kreis"),max_dist=1)) > 0) {
+  print(stringdist_anti_join(kreise,table_df,by = c("kreis" = "kreis")))
+  simpleError("Nicht gematchter Eintrag\n")
 }
 
+
 summary(table_df)
+
+# ---- CODE für Überschreiben des letzten Wertes anpassen!!!
 # Wenn der Wert kleiner oder gleich dem letzten: Fehlermeldung!
 if (table_df$gesamt[27] <= fallzahl_df$faelle[nrow(fallzahl_df)] ) {
   simpleWarning("Keine Erhöhung der Fallzahl gegen letzten Scan\n")
@@ -229,44 +265,8 @@ if (table_df$gesamt[27] <= fallzahl_df$faelle[nrow(fallzahl_df)] ) {
   no_increment <- TRUE
 } else { no_increment <- FALSE }
 
-# Von den Daten aus dem Google-Doc "Covid Choropleth Karte" nur die Notizen und Todesfälle behalten
-notizen_df <- cck_df %>% select(kreis,notizen,tote_hsde = tote)
 
-msg(as.character(now()),"Tabelle all_df zusammenführen...","\n")
-
-# ---- RKI-Daten Genesene nach Kreis ----
-genesen_df <- rki_df %>% 
-  select(IdLandkreis,AnzahlGenesen) %>%
-  group_by(IdLandkreis) %>%
-  summarize(AnzahlGenesen = sum(AnzahlGenesen)) %>%
-  mutate(IdLandkreis = paste0("0",as.character(IdLandkreis)))
-
-
-# Daten zusammenführen: AGS, Bevölkerungszahl  
-all_df <- table_df %>%
-  select(k = 1,2,4,6,7,3) %>%
-  # Fuzzyjoin - um Bindestriche und ähnlichen Kram zu ignorieren
-  stringdist_right_join(kreise, by = c("k" = "kreis"), max_dist=1) %>%
-  select(kreis,2,3,4,5,6,8:ncol(.)) %>%
-  # Nur die Kreise!
-  mutate(inzidenz = as.numeric(gesamt)/pop*100000) %>%
-  mutate(AGS = paste0("06",str_replace(AGS,"000",""))) %>%
-  mutate(kidx = ts) %>% # Stand auf Zeitstempel des hmsi-Dokuments setzen
-  right_join(notizen_df, by = c("kreis" = "kreis")) %>%
-  # Anzahle der Toten auf hsde-Informationsstand
-  mutate(tote = ifelse(tote < tote_hsde,tote_hsde,tote)) %>% 
-  # Anzahl der Genesenen nach Kreis
-  left_join(genesen_df, by = c("AGS" = "IdLandkreis"))
-
-if (nrow(table_df)<25) simpleError("Zu wenig Einträge!")
-if (nrow(stringdist_anti_join(kreise,table_df,by =c("kreis" = "kreis"),max_dist=1)) > 1) {
-  print(stringdist_anti_join(kreise,table_df,by = c("kreis" = "kreis")))
-  simpleError("Nicht gematchter Eintrag\n")
-}
-
-#zur Sicherheit - alter Code, sollte nicht mehr notwendig sein
-all_df$gesamt <- as.numeric(all_df$gesamt)
-all_df$hospitalisiert <- as.numeric(all_df$hospitalisiert)
+msg("Tabelle all_df zusammenführen...","\n")
 
 
 # ---- Kreisdaten für Choropleth-Karte und für den Google Bucket ausgeben ----
@@ -277,10 +277,12 @@ all_df$hospitalisiert <- as.numeric(all_df$hospitalisiert)
 
 # Tabelle umsortieren und ausdünnen und umbenennen 
 final_df <- all_df %>%
-  select(AGS,kreis,gesamt,kidx,pop,inzidenz,tote,neu7tage,inz7t,AnzahlGenesen,hospitalisiert,notizen) %>%
-  rename(stand = kidx, ags_text = AGS) %>%
+  mutate(AnzahlAktiv = gesamt - tote - AnzahlGenesen) %>%
+  select(ags_text = AGS,kreis,gesamt,stand,pop,inzidenz,tote,neu7tage,inz7t,AnzahlGenesen,AnzahlAktiv,notizen) %>%
   mutate(TotProz = round(tote/gesamt*100),
-         GenesenProz = round(AnzahlGenesen/gesamt*100))
+         GenesenProz = round(AnzahlGenesen/gesamt*100),
+         AktivProz = round(AnzahlAktiv/gesamt*100))
+
 
 ############################# Daten ausgeben ############################
 # Etwas verwinkelte Struktur: 
@@ -307,7 +309,7 @@ final_df <- all_df %>%
 #   des RKI aus dem Dashboard und bereitet daraus Aufstellungen der Fälle und Todesfälle
 #   nach Alter und Geschlecht auf. 
 
-msg(as.character(now()),"Starte Datenausgabe","\n")
+msg(as.character(now()),": Starte Datenausgabe","\n")
 
 # Authentifizierung aktualisieren - wenn es zu lange gedauert hat, ist sie verfallen
 sheets_deauth() # Authentifizierung löschen
@@ -318,7 +320,7 @@ sheets_auth(email=sheets_email,path=sheets_keypath)
 # Tabelle für den heutigen Tag mit Zeitstempel abspeichern
 write.xlsx(final_df,file=paste0("archiv/",ts_clean,".xlsx"),overwrite = TRUE)
 write.csv2(final_df,file="../scrape-hsm.csv")
-msg(as.character(now()),"Archivkopie nach archiv/ und ins Home-Verzeichnis geschrieben","\n")
+msg("Archivkopie nach archiv/ und ins Home-Verzeichnis geschrieben","\n")
 
 # Tabelle in das GoogleDoc "Covid Choropleth Kreise" schreiben
 sheets_write(final_df,ss = id_cck, sheet = "daten")
@@ -327,10 +329,16 @@ sheets_write(final_df,ss = id_cck, sheet = "daten")
 # ---- Aktualisiere das ARD-Sheet aktuelle Daten ----
 ard_df <- final_df %>%
   mutate(Genesene = AnzahlGenesen, Quelle = url) %>%
-  select(1,2,3,11,7,12,4) %>%
-  rename(AGS = ags_text,Kreisname = kreis,Fallzahlen=gesamt,Tote=tote,Zeitstempel= stand)
-  
-msg(as.character(now()),"ARD-Seite Hessen (Google) aktualisieren","\n")
+  # passende Spalten auswählen 
+  select(AGS = ags_text, 
+         Kreisname = kreis, 
+         Fallzahlen = gesamt, 
+         Genesene, 
+         Tote = tote, 
+         Quelle, 
+         Zeitstempel = stand)
+
+msg("ARD-Seite Hessen (Google) aktualisieren","\n")
 
 ard_id = "1OKodgGnSTFRrF51cIrsL7qz0xwAdR8DXovGzD01dqEM"
 sheets_write(ard_df,ss = ard_id,sheet = "06_hessen")
@@ -348,55 +356,51 @@ sheets_write(ard_df,ss = ard_id,sheet = "06_hessen")
 faelle_gesamt <- sum(all_df$gesamt)
 tote_gesamt <- sum(all_df$tote)
 genesen_gesamt <- sum(rki_df$AnzahlGenesen)
-hospitalisiert_gesamt <- sum(all_df$hospitalisiert)
 
 # Zahl der Genesenen für gestern nachtragen
 fallzahl_df$gsum[fallzahl_df$datum == heute-1] <- genesen_gesamt
 
 # Falls keine Erhöhung, letzte Zeile löschen (und so überschreiben)
-if (!no_increment) {
-  fallzahl_df <- fallzahl_df %>%
+fallzahl_df <- fallzahl_df %>%
+  # Format erzwingen
+    select(datum = 1, faelle = 2, steigerung = 3, tote= 4, tote_steigerung = 5, gsum = 6, aktiv = 7) %>%
+    filter(datum != this_date) %>%
     rbind(data.frame(datum = this_date,
                      faelle = faelle_gesamt,
                      steigerung = 0,
                      tote = tote_gesamt,
                      tote_steigerung = 0,
-                     gsum = NA,
-                     hospitalisiert = hospitalisiert_gesamt,
-                     hosp_steigerung = 0))
-} else {
-  fallzahl_df$faelle[fallzahl_df$datum == this_date] <- faelle_gesamt
-  fallzahl_df$tote[fallzahl_df$datum == this_date] <- tote_gesamt
-  fallzahl_df$hospitalisiert[fallzahl_df$datum == this_date] <- hospitalisiert_gesamt
-}
-
-fallzahl_df <- fallzahl_df  %>%
+                     gsum = genesen_gesamt,
+                     aktiv = 0))  %>%
   # Steigerungsrate
   mutate(steigerung = (faelle/lag(faelle)-1)) %>%
   # Steigerungsrate Todesfälle
   mutate(tote_steigerung = (tote/lag(tote)-1)) %>%
   mutate(tote_steigerung = if_else(is.na(tote_steigerung) | is.infinite(tote_steigerung),0,tote_steigerung)) %>%
   mutate(steigerung = if_else(is.na(steigerung) | is.infinite(steigerung),0,steigerung)) %>%
-  # Steigerungsrate Hospitalisierung
-  mutate(hosp_steigerung = (hospitalisiert/lag(hospitalisiert)-1))
+  # Aktive Fälle 
+  mutate(aktiv = faelle-tote-gsum)
 
  
 
 
-msg(as.character(now()),"Fallzahlen Hessen (Google), daten/livedaten aktualisieren","\n")
+msg("Fallzahlen Hessen (Google), daten/livedaten aktualisieren","\n")
 
 #sheets_edit statt sheets_write, um den reformat-Parameter zu haben
 sheets_edit(fallzahl_df,ss = id_fallzahl, sheet = "daten",reformat=FALSE)
-fall4w_df <- fallzahl_df[(nrow(fallzahl_df)-27):nrow(fallzahl_df),] %>%
-  select(1,2,3,4,5,6) # Hospitalisiert ausblenden
+
+# Letzte 4 Wochen auf das livedaten-Blatt
+fall4w_df <- fallzahl_df[(nrow(fallzahl_df)-27):nrow(fallzahl_df),]
 sheets_edit(fall4w_df,ss = id_fallzahl, sheet = "livedaten",reformat=FALSE)
 
-
-
-
+# Daten für das Tab "livedaten-barchart"
+bar4w_df <- t(fall4w_df %>% select(datum,tote,gsum,aktiv))
+colnames(bar4w_df) <- bar4w_df[1,]
+bar4w_df <- cbind(tibble(t = c("Tote","Genesene","Aktiv")),as.data.frame(bar4w_df[-1,]))
+sheets_write(bar4w_df,ss = id_fallzahl, sheet = "livedaten-barchart" )
 # ---- Schreibe aktualisierte Werte in Google-Doc id_wachstum ----  
 
-msg(as.character(now()),"Wachstumsberechnung (Google) aktualisieren","\n")
+msg("Wachstumsberechnung (Google) aktualisieren","\n")
 
 # Aktuelle Fallzahl und Datum - Stichtag ist der 11.3. (ungefähr Inzidenz 1)
 #
@@ -429,7 +433,7 @@ sheets_edit(id_wachstum,
             sheet="Tabellenblatt1",range="F8",col_names=FALSE,reformat=FALSE
             )
 
-msg(as.character(now()),"Trendformel hessen aktualisiert","\n")
+msg("Trendformel hessen aktualisiert","\n")
 
 #RKI-Abfragestring konstruieren
 
@@ -441,7 +445,7 @@ rki_rest_query2 <- paste0("https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/
   "&outStatistics=%5B%7B%22statisticType%22%3A%22max%22%2C%22onStatisticField%22%3A%22Fallzahl%22%2C%22outStatisticFieldName%22%3A%22value%22%7D%5D",
   "&outSR=102100&cacheHint=true")
   
-msg(as.character(now()),"RKI-JSON-Query:",rki_rest_query2,"\n")
+msg("RKI-JSON-Query:",rki_rest_query2,"\n")
 
 library(jsonlite)
 # Das JSON einlesen. Gibt eine ziemlich chaotische Liste zurück. 
@@ -475,7 +479,7 @@ sheets_edit(id_wachstum,
             sheet="Tabellenblatt1",range="M8",col_names=FALSE,reformat=FALSE
 )
 
-msg(as.character(now()),"NRW-Daten und -Formeln angepasst","\n")
+msg("NRW-Daten und -Formeln angepasst","\n")
 
 
 # Johns-Hopkins-Zahlen von Gestern lesen
@@ -487,7 +491,7 @@ g_monat <- as.character(month(heute-1))
 if (month(heute-1) < 10) g_monat <- paste0("0",g_monat)
 g_jahr <- as.character(year(heute-1))
 
-msg(as.character(now()),"JHU-Daten von",g_monat,"-",g_tag,"-",g_jahr,".csv","\n")
+msg("JHU-Daten: Daily Report ",g_monat,"-",g_tag,"-",g_jahr,".csv","\n")
 
 jhu_df <- read.csv(url(paste0("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/",
   g_monat,"-",g_tag,"-",g_jahr,".csv"))) %>%
@@ -523,10 +527,8 @@ sheets_edit(id_wachstum,
 )
 
 
-msg(as.character(now()),"Johns-Hopkins-Zahlen Italien gelesen und geschrieben","\n")
-
 # ---- Master-Tabelle mit allen Meldungen nach Tagen aktualisieren ----
-msg(as.character(now()),"Master-Tabelle schreiben...","\n")
+msg("Master-Tabelle schreiben...","\n")
 
 # Master-Tabelle mit allen Meldungen nach Tagen holen
 library(readxl)
@@ -563,7 +565,7 @@ master_id = "1kOEoXMmMOlkaq50ed0ToYeIJZ7sK2KivqbIMKnvpib0"
 sheets_write(master_df,ss = master_id, sheet = "fallzahlen")
 
 # ---- Basisdaten-Seite schreiben ----
-msg(as.character(now()),"Basisdaten-Seite (Google) schreiben...","\n")
+msg("Basisdaten-Seite (Google) schreiben...","\n")
 
 id_basisdaten <- "1m6hK7s1AnDbeAJ68GSSMH24z4lL7_23RHEI8TID24R8"
 # Datumsstring schreiben (Zeile 2)
@@ -602,8 +604,7 @@ sheets_edit(id_basisdaten,as.data.frame(
 # Absolute Zahl und Anteil an den Fällen
 
 sheets_edit(id_basisdaten, as.data.frame(paste0(
-  as.character(genesen_gesamt), " (",
-  as.character(round(genesen_gesamt / faelle_gesamt * 100))," %)")),
+  as.character(round(genesen_gesamt / faelle_gesamt * 100))," %")),
   range="livedaten!B7", col_names = FALSE, reformat=FALSE)
 
 # Aktive Fälle (= Gesamt-Tote-Genesene), nur in Prozent (Zeile 8)
@@ -625,6 +626,28 @@ sheets_edit(id_basisdaten,as.data.frame(str_replace(paste0(steigerung_prozent," 
 sheets_edit(id_basisdaten,as.data.frame(str_replace(paste0(v_zeit," Tage"),"\\.",",")),
             range="livedaten!B11", col_names = FALSE, reformat=FALSE)
 
+# Tendenz Woche zu Woche (Zeile 12)
+# Durchschnitt der letzten vier Steigerungsraten (in fall4w_df sind die letzten 4 Wochen)
+steigerung_prozent_vorwoche <- round(mean(fall4w_df$steigerung[15:21]) * 100,1)
+v_zeit_vorwoche <- round(log(2)/log(1+mean(fall4w_df$steigerung[15:21])),1)
+
+trend_string <- "bleibt gleich"
+if (steigerung_prozent_vorwoche - steigerung_prozent > 0.5) 
+  trend_string <- "verlangsamt"
+if (steigerung_prozent_vorwoche - steigerung_prozent < -0.5) 
+  trend_string <- "beschleunigt"
+if (steigerung_prozent_vorwoche - steigerung_prozent > 1.5) 
+  trend_string <- "stark verlangsamt"
+if (steigerung_prozent_vorwoche - steigerung_prozent < -1.5) 
+  trend_string <- "stark beschleunigt"
+
+# 
+
+ sheets_edit(id_basisdaten,as.data.frame("Trend Woche zu Woche"),
+               range="livedaten!A12", col_names = FALSE, reformat=FALSE)
+# 
+ sheets_edit(id_basisdaten,as.data.frame(trend_string),
+             range="livedaten!B12", col_names = FALSE, reformat=FALSE)
 
 ##### Datawrapper-Grafiken pingen und so aktualisieren #####
 msg(as.character(now()),"Datawrapper-Grafiken pingen...","\n")

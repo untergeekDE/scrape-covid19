@@ -10,6 +10,9 @@ library(googlesheets4)
 library(lubridate)
 library(DatawRappr)
 
+# Bei Aufruf ohne  Argument "server"
+server <- FALSE
+
 # ---- Logging und Update der Semaphore-Seite ----
 id_msg <- "1Q5rCvvSUn6WGcsCnKwGJ0y9PwbiML-34kyxYSYX2Qjk"
 logfile <- ""
@@ -17,18 +20,17 @@ logfile <- ""
 msg <- function(x,...) {
   print(paste0(x,...))
   # Zeitstempel in B7, Statuszeile in C7
-  sheets_edit(id_msg,as.data.frame(now(tzone = "CEST")),sheet="Tabellenblatt1",
-              range="B7",col_names = FALSE,reformat=FALSE)
-  sheets_edit(id_msg,as.data.frame(paste0(x,...)),sheet="Tabellenblatt1",
-              range="C7",col_names = FALSE,reformat=FALSE)
+  d <- data.frame(b = now(tzone= "CEST"), c = paste0(x,...))
+  sheets_edit(id_msg,d,sheet="Tabellenblatt1",
+              range="B7:C7",col_names = FALSE,reformat=FALSE)
+  if (server) Sys.sleep(10)     # Skript ein wenig runterbremsen wegen Quoa
   if (logfile != "") {
     cat(x,...,file = logfile, append = TRUE)
   }
 }
 
 
-# Bei Aufruf ohne  Argument "server"
-server <- FALSE
+
 
 # Argumente werden in einem String-Vektor namens args übergeben,
 # wenn ein Argument übergeben wurde, dort suchen, sonst Unterverzeichnis "src"
@@ -61,10 +63,13 @@ msg("Start: ", as.character(now()),"\n")
 
 #---- Daten für Hessen nach Alter und Geschlecht ----
 msg("Versuche Alter und Geschlecht zu lesen...\n")
-rki_2 <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"
-rki_temp_url <- "https://www.arcgis.com/sharing/rest/content/items/f10774f1c63e40168479a1feb6c7ca74/data"
 rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"
-rki_df <- read.csv(url(rki_temp_url)) 
+ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
+rki_df <- read.csv(url(ndr_url)) 
+
+rki_url2 <- "https://prod-hub-indexer.s3.amazonaws.com/files/dd4580c810204019a7b8eb3e0b329dd6/0/full/4326/dd4580c810204019a7b8eb3e0b329dd6_0_full_4326.csv"
+rki_temp_url <- "https://www.arcgis.com/sharing/rest/content/items/f10774f1c63e40168479a1feb6c7ca74/data"
+#rki_df <- read.csv(url(rki_temp_url)) 
 
 msg("Daten erfolgreich von Temp-CSV beim RKI gelesen")
 # Hessische Fälle mal vorfiltern; eigentlich nur ein Test
@@ -75,6 +80,11 @@ group_by(Altersgruppe, Geschlecht) %>%
             AnzahlGenesen = sum(AnzahlGenesen),
             AnzahlTodesfall = sum(AnzahlTodesfall)) 
 head(he_df)
+
+# ---- Nur die hessischen Fälle lokal ablegen ----
+
+write_csv2((rki_df %>% filter(Bundesland == "Hessen")),"rki_df.csv")
+
 
 # Tabelle AnzahlFall nach Alter und Geschlecht anordnen
 alter_df <- rki_df %>%
@@ -116,7 +126,7 @@ tote_df <- rki_df %>%
   group_by(Altersgruppe, Geschlecht) %>%
   summarize(AnzahlTodesfall = sum(AnzahlTodesfall)) %>%
   pivot_wider(names_from = Geschlecht, values_from = AnzahlTodesfall) %>%
-  select(1,männlich = M, weiblich = W)
+  select(Altersgruppe,männlich = M, weiblich = W)
 
 # Anteil Todesfälle in der Altersgruppe berechnen
 
@@ -191,13 +201,86 @@ write_csv2(tote_df,"rki-tote.csv")
 msg("Schreibe Zeitstempel...\n")
 sheets_edit(rki_alter_id,as.data.frame(as.character(heute)),sheet="live-daten",range= "A1",col_names = FALSE)
 
+# ---- Zahl der Genesenen für heute nachtragen ----
+id_cck="1h0bvmSjSC-7osQpt94iGre9K5o_Atfj0UnLyQbuN9l4"
+id_fallzahl = "1OhMGQJXe2rbKg-kCccVNpAMc3yT2i3ubmCndf-zX0JU"
+id_basisdaten <- "1m6hK7s1AnDbeAJ68GSSMH24z4lL7_23RHEI8TID24R8"
+
+# - Kreisdaten
+
+cck_df <- read_sheet(id_cck,sheet="daten")
+msg("Kreisdaten berechnen und aktualisieren")
+
+genesen_df <- rki_df %>% 
+  filter(Bundesland == "Hessen") %>%
+  mutate(IdLandkreis = paste0("0",as.character(IdLandkreis))) %>%
+  select(AGS = IdLandkreis,gsum = AnzahlGenesen) %>%
+  group_by(AGS) %>%
+  summarize(gsum = sum(gsum))
+
+# Tabelle 
+cck_df <- cck_df %>%
+  left_join(genesen_df, by = c("ags_text" = "AGS")) %>%
+  mutate(AnzahlGenesen = gsum,
+         AnzahlAktiv = gesamt - tote - AnzahlGenesen,
+         GenesenProz = round(AnzahlGenesen/gesamt*100),
+         AktivProz = round(AnzahlAktiv/gesamt*100)) %>%
+  select(ags_text, kreis, gesamt, stand, 
+         pop, inzidenz, tote, neu7tage,
+         inz7t,AnzahlGenesen,AnzahlAktiv,notizen,
+         TotProz,GenesenProz,AktivProz)
+
+# Tabelle wieder zurückschreiben         
+sheets_write(cck_df,ss = id_cck, sheet = "daten")      
+
+# - Basisdaten-Datenpunkt
+
+msg("Basisdaten um Prozente Genesen/Aktiv von heute ergänzen")
+genesen_gesamt <- sum(genesen_df$gsum)
+faelle_gesamt <- sum(cck_df$gesamt)
+tote_gesamt <- sum(cck_df$tote)
+# Genesene (laut RKI) (Zeile 7)
+# RKI-Daten zu Beginn in rki_df eingelesen - zeitaufwändig
+# Absolute Zahl und Anteil an den Fällen
+
+sheets_edit(id_basisdaten, as.data.frame(paste0(
+  as.character(round(genesen_gesamt / faelle_gesamt * 100))," %")),
+  range="livedaten!B7", col_names = FALSE, reformat=FALSE)
+
+# Aktive Fälle (= Gesamt-Tote-Genesene), nur in Prozent (Zeile 8)
+
+
+sheets_edit(id_basisdaten, as.data.frame(paste0(
+  as.character(round((faelle_gesamt-genesen_gesamt-tote_gesamt) / faelle_gesamt * 100))," %")),
+  range="livedaten!B8", col_names = FALSE, reformat=FALSE)
+
+
+# - Aktive Fälle in fallzahl_df korrigieren
+# fall4w_df zurücklesen, also die 4-Wochen-Statistik 
+
+fall4w_df <- read_sheet(id_fallzahl,sheet="livedaten")
+
+# Sicherheitsabfrage: letzte Zeile gestriges Datum? Wenn ja, dann los. 
+if(fall4w_df$datum[28] == (heute-1)) {
+
+  sheets_edit(id_fallzahl,as.data.frame(genesen_gesamt),sheet = "livedaten", 
+              range = "F29", col_names = FALSE, reformat=FALSE)
+  sheets_edit(id_fallzahl,as.data.frame(faelle_gesamt-genesen_gesamt-tote_gesamt),
+              sheet = "livedaten", range = "G29", col_names = FALSE, reformat=FALSE)
+  bar4w_df <- t(fall4w_df %>% select(datum,tote,gsum,aktiv))
+  colnames(bar4w_df) <- bar4w_df[1,]
+  bar4w_df <- cbind(tibble(t = c("Tote","Genesene","Aktiv")),as.data.frame(bar4w_df[-1,]))
+  sheets_write(bar4w_df,ss = id_fallzahl, sheet = "livedaten-barchart" )
+}
+
+
+
 # ---- Datawrapper-Grafiken pingen ----
 msg("Pinge Datawrapper-Grafiken...")
-id_alter = "XpbpH"
-id_tote ="JQobx"
-dw_publish_chart(chart_id = id_alter)
-dw_publish_chart(chart_id = id_tote)
 
+dw_publish_chart(chart_id = "XpbpH") # id_alter
+dw_publish_chart(chart_id = "JQobx") # id_tote
+dw_publish_chart(chart_id = "7HWCI") # Basisdaten 
 
 
 msg("Erledigt.",as.character(now()))

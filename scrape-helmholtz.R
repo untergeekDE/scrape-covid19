@@ -8,6 +8,7 @@
 # Infoseite SECIR: https://gitlab.com/simm/covid19/secir/-/tree/master
 #
 # CSVs werden am frühen Nachmittag aktualisiert; Skript startet 15 Uhr. 
+# Wenn keine neuen Daten da, versuch es zwei Stunden lang, dann gib auf. 
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
@@ -33,10 +34,10 @@ logfile <- ""
 msg <- function(x,...) {
   print(paste0(x,...))
   # Zeitstempel in B10, Statuszeile in C10
-  sheets_edit(id_msg,as.data.frame(now(tzone = "CEST")),sheet="Tabellenblatt1",
-              range="B10",col_names = FALSE,reformat=FALSE)
-  sheets_edit(id_msg,as.data.frame(paste0(x,...)),sheet="Tabellenblatt1",
-              range="C10",col_names = FALSE,reformat=FALSE)
+  d <- data.frame(b = now(tzone= "CEST"), c = paste0(x,...))
+  sheets_edit(id_msg,d,sheet="Tabellenblatt1",
+              range="B10:C10",col_names = FALSE,reformat=FALSE)
+  if (server) Sys.sleep(10)     # Skript ein wenig runterbremsen wegen Quota
   if (logfile != "") {
     cat(x,...,file = logfile, append = TRUE)
   }
@@ -77,15 +78,25 @@ fallzahl_df <- read_sheet(id_fallzahl,sheet ="rt-helmholtz")
 lastdate <- max(as.Date(fallzahl_df$date))
 
 
+
 # ---- Lies Helmholtz-Daten Rt und schreibe in Hilfsdokument id_fallzahl ----
+brics_url <- "https://gitlab.com/simm/covid19/secir/-/raw/master/img/dynamic/Rt_rawData/Hessen_Rt.csv?inline=false"
+this_date <- lastdate
+starttime <- hour(now())
 
 msg("Lies CSV vom SECIR-Gitlab")
-brics_url <- "https://gitlab.com/simm/covid19/secir/-/raw/master/img/dynamic/Rt_rawData/Hessen_Rt.csv?inline=false"
-brics_df <- read.csv(brics_url)
+while(lastdate == this_date)
+{
+  brics_df <- read.csv(brics_url)
+  this_date <- max(as.Date(brics_df$date))
+  msg("CSV gelesen vom ",this_date," (gestern: ",lastdate,")")
+  if (this_date == lastdate){
+    # Falls Startzeit schon mehr als 2 Stunden zurück: 
+    if (hour(now())> starttime+2) simpleError("Kein neues Datenblatt bis 17 Uhr")
+    Sys.sleep(300)
+  }
+}
 
-update <- max(as.Date(brics_df$date))
-
-msg("CSV gelesen vom ",update," (gestern: ",lastdate,")")
 
 # Maximum, Minimum, Median in Spalten schreiben. Willenlos abgeschrieben. 
 

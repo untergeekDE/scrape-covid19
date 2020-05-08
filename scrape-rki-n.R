@@ -89,28 +89,36 @@ write_csv2((rki_df %>% filter(Bundesland == "Hessen")),"rki_df.csv")
 # Tabelle AnzahlFall nach Alter und Geschlecht anordnen
 alter_df <- rki_df %>%
   filter(Bundesland == "Hessen") %>%
-  filter(str_detect(Altersgruppe,"A[0-9]")) %>% # Alter unbekannt -> filtern
-  mutate(Altersgruppe = paste0(str_replace_all(Altersgruppe,"A","")," Jahre")) %>%
+  # Alter unbekannt? Ausfiltern. 
+  filter(str_detect(Altersgruppe,"A[0-9]")) %>% 
+  # Genesene und Todesfälle ausfiltern - nur aktive Fälle
+  filter(Genesen != 1) %>%              #
+  filter(AnzahlTodesfall == 0) %>%
   group_by(Altersgruppe, Geschlecht) %>%
   summarize(AnzahlFall = sum(AnzahlFall)) %>%
   pivot_wider(names_from = Geschlecht, values_from = AnzahlFall) %>%
   select(1,männlich = M, weiblich = W) 
 
 # Berechne Inzidenzen für die Altersgruppen
+# Quelle Bevölkerungsstatistik Hessen statistik.hessen.de
 alter_df$pop <- c(302453,
                   568195,
                   1482492,
                   2222613,
                   1306319,
                   383737)
+
 alter_df <- alter_df %>%
   mutate(Inzidenz = (männlich+weiblich)/pop*100000) %>%
-  select(1,2,3,5) # Spalte pop wieder rausnehmen
+  select(Altersgruppe, männlich, weiblich, Inzidenz) # Spalte pop wieder rausnehmen
 
 
 # Die Fälle, die nicht zuzuordnen sind - Alter, Geschlecht - in letzte Zeile
 unbek_df <- rki_df %>% 
   filter(Bundesland == "Hessen") %>%
+  # Genesene und Todesfälle ausfiltern - nur aktive Fälle
+  filter(Genesen != 1) %>%              #
+  filter(AnzahlTodesfall == 0) %>%
   filter(!str_detect(Altersgruppe,"A[0-9]") | 
            !(Geschlecht %in% c("M","W")))
 
@@ -124,9 +132,11 @@ tote_df <- rki_df %>%
   filter(str_detect(Altersgruppe,"A[0-9]")) %>% # Alter unbekannt -> filtern
   mutate(Altersgruppe = paste0(str_replace_all(Altersgruppe,"A","")," Jahre")) %>%
   group_by(Altersgruppe, Geschlecht) %>%
-  summarize(AnzahlTodesfall = sum(AnzahlTodesfall)) %>%
-  pivot_wider(names_from = Geschlecht, values_from = AnzahlTodesfall) %>%
-  select(Altersgruppe,männlich = M, weiblich = W)
+  summarize(AnzahlTodesfall = sum(AnzahlTodesfall),
+            AnzahlFall = sum(AnzahlFall)) %>%
+  pivot_wider(names_from = Geschlecht, values_from = c(AnzahlTodesfall, AnzahlFall)) %>%
+  mutate(inz = (AnzahlTodesfall_M+AnzahlTodesfall_W)/(AnzahlFall_W+AnzahlFall_M)*100) %>%
+  select(Altersgruppe,männlich = AnzahlTodesfall_M, weiblich = AnzahlTodesfall_W, Inzidenz = inz)
 
 # Anteil Todesfälle in der Altersgruppe berechnen
 
@@ -192,7 +202,11 @@ msg("Ergänze Google-Sheet um Todesfälle nach Ländern mit Zeitstempel\n")
 sheets_append(laender_tote_df,rki_alter_id,sheet ="tote")
 
 msg("Schreibe Altersstruktur Todesfälle...\n")
+
+
 sheets_write(tote_df,ss = rki_alter_id, sheet="tote_nach_alter")
+tote_id <- "https://docs.google.com/spreadsheets/d/1Mxpth-kJUyA14T4MXLg2sP1KhCYazAuc1Re9sBwY_KA"
+sheets_write(tote_df,ss = tote_id, sheet="Tabellenblatt1")
 # Beschreibt ein Sheet in dem RKI-Dokument
 # Ein zweites Google Sheet zieht sich per IMPORTRANGE die Daten und rechnet sie um. 
 # Aus dem zieht sich dann wieder Datawrapper alles Wesentliche

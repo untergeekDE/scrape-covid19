@@ -652,24 +652,29 @@ if (steigerung_prozent_vorwoche - steigerung_prozent < -1.5)
 ##### Datawrapper-Grafiken pingen und so aktualisieren #####
 msg(as.character(now()),"Datawrapper-Grafiken pingen...","\n")
 
-dw_cck_id = "YBBaK"       # Choropleth-Karte
+dw_cck_id =        # Choropleth-Karte
 dw_tabelle_id = "KP1H3"   # Tabelle mit den aktuellen Werten Steigerung Verdoppelungszeit
 dw_trends_id = "D2CJm"     # Logarithmische Trendlinienkarte
-dw_fallzahl_id = "0CS3h"  # Barchart Tote, Fälle, Steigerungsraten
-dw_basisdaten_id= "7HWCI" # Basisdaten
-dw_waswenn_id = "Kedm4" # Was-wäre-wenn
-dw_dynamik_id ="B68Gx"  # 7-Tage-Dynamik nach Kreisen
+dw_fallzahl_id =   # Barchart Tote, Fälle, Steigerungsraten
+dw_basisdaten_id=  # Basisdaten
+dw_waswenn_id =  # Was-wäre-wenn
+dw_dynamik_id =  # 7-Tage-Dynamik nach Kreisen
 
 # Alle einmal ansprechen, damit sie die neuen Daten ziehen
 # - Neu publizieren, damit der DW-Server einmal die Google-Sheet-Daten zieht.
 
-dw_publish_chart(chart_id = dw_cck_id)
-dw_publish_chart(chart_id = dw_fallzahl_id)
-dw_publish_chart(chart_id = dw_tabelle_id)
-dw_publish_chart(chart_id = dw_trends_id)
-dw_publish_chart(chart_id = dw_basisdaten_id)
-dw_publish_chart(chart_id = dw_waswenn_id)
-dw_publish_chart(chart_id = dw_dynamik_id)
+dw_publish_chart(chart_id = "7HWCI") # Basisdaten
+dw_publish_chart(chart_id = "YBBaK") # Choropleth-Karte Fallinzidenz
+dw_publish_chart(chart_id = "B68Gx") # Choropleth 7-Tage-Dynamik
+dw_publish_chart(chart_id = "V4qmF") # Stacked Barchart
+# dw_publish_chart(chart_id = "0CS3h") # Fälle-Todesfälle-Prozent-Barchart
+dw_publish_chart(chart_id = "KP1H3") # Trendlinien-Grafik
+
+# Kein Update RKI-Barchart Aktive Fälle - RKI-Scraper
+# Kein Update RKI-Barchart Todesfälle - RKI-Scraper
+# Kein Update DIVI-Scraper
+# dw_publish_chart(chart_id = "Kedm4") # Was-wäre-wenn
+# dw_publish_chart(chart_id = "82BUn") # Helmholtz-R-Kurve
 
 #
 msg(as.character(now()),"---- FERTIG ----","\n")

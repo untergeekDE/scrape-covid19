@@ -11,6 +11,7 @@ Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umg
 
 ### Changelog: 
 * 8.5.: Balkengrafik Fälle nach Geschlecht und Altersgruppe auf aktive Fälle gefiltert
+* Helmholtz-Scraper versucht 2 Stunden lang, neueres Blatt zu lesen; wenn kein neueres, Abbruch mit Fehlermeldung
 * 5.5.: RKI-Zahlen werden jetzt gleich morgens aktualisiert
 * Genesene gesamt Basisdaten
 * Genesene und aktive Fälle gesamt Barchart

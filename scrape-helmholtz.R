@@ -12,7 +12,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 30.4.2020 vormittags
+# Stand: 10.5.2020 vormittags
 
 library("rvest")
 library("tidyverse")
@@ -110,17 +110,49 @@ rt_df <- brics_df %>%
   } ) %>%
   ungroup() %>%
   select(date,Min,Med,Max) %>%
-  filter(as.Date(date) > as.Date("2020-03-08"))
+  mutate(date = as.Date(date)) %>%
+  filter(date > as.Date("2020-03-08"))
 
 msg("Schreibe Daten ins Google Sheet")
 sheets_write(rt_df,ss = id_fallzahl, sheet = "rt-helmholtz")
 
+# ---- Jetzt noch die RKI-Tabelle für R dazuholen ----
 
+rki_r_url <- "https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Projekte_RKI/Nowcasting_Zahlen.xlsx?__blob=publicationFile"
+tryCatch(rki_r_df <- read.xlsx(rki_r_url,detectDates = TRUE))
+rki_r_df <- rki_r_df %>%
+  select(datum_erkrankt =1, 
+         neue_punkt_og = 2, 
+         nowcast_025 = 3, 
+         neue_lo_og = 4, 
+         nowcast_975 = 5,
+         neue_hi_og = 6, 
+         neue_punkt = 7, 
+         neue_lo = 8,
+         neue_hi = 9, 
+         r_punkt = 10, 
+         r_lo = 11, 
+         r_hi = 12)
+
+# RKI-Nowcast-Sheet auf Sheet pushen
+msg("Schreibe Kopie der RKI-Daten")
+sheets_write(rki_r_df,ss = id_fallzahl, sheet = "rt-rki")
+
+r_df <- rki_r_df %>%
+  select(datum = datum_erkrankt, r_lo, r_hi) %>%
+  right_join(rt_df, by = c("datum" = "date")) %>%
+  select(datum,r_rki_lo = r_lo, r_rki_hi = r_hi,
+         r_helmholtz_min = Min, 
+         r_helmholtz_med = Med,
+         r_helmholtz_max = Max)
+
+msg("Schreibe Arbeitskopie r_rki_helmholtz")
+sheets_write(r_df, ss = id_fallzahl, sheet = "r_rki_helmholtz")
 # ---- Pinge Datawrapper-Grafik, wenn neue Zahlen ----
 msg("Pinge Datawrapper-Grafik")
 dw_publish_chart(chart_id = "82BUn")
 
-if (update > lastdate) {
+if (this_date > lastdate) {
   msg("OK!")
 } else {
   msg("OK (nur Ping)")

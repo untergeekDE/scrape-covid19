@@ -9,6 +9,10 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des hessischen So
 
 ### Datenexport
 
+Eines der schönsten Features von Datawrapper ist [die Möglichkeit, Daten dynamisch anzuzeigen](https://academy.datawrapper.de/article/60-external-data-sources) (also beim Aufruf der Grafik an den Datenstand anzupassen). Dafür muss entweder ein CSV auf einen dafür ausgelegten Server geschoben werden (wir haben experimentell einen Google-Bucket verwendet), oder ein Google-Sheet genutzt werden - das der Datawrapper-Server in regelmäßigen Stunden, im Stundenabstand in der Regel, ansteuert. 
+
+Da eine Stunde zu lang ist für den Produktiveinsatz, wurde die Kombination gewählt: Google Sheets aktualisieren, Datawrapper-Aktualisierung über Datawrapper-API-Zugriff anstoßen. 
+
 ## Besondere R-Pakete
 (müssen in der Regel über '''devtools::install_github()''' installiert werden)
 * [googlesheets4](https://github.com/tidyverse/googlesheets4) wird benötigt, um Google-Sheets schreiben zu können. Aus denen zieht sich Datawrapper die Daten zur Visualisierung. Unbedingt googlesheets4-Paket installieren, nicht googlesheets - das akzeptiert Google nicht mehr!

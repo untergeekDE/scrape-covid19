@@ -2,7 +2,7 @@
 Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des hessischen Sozialministeriums und des Robert-Koch-Instituts (RKI) zu holen. 
 
 ## Die Scraper
-* scrape-hmsi-universal.R - fragt täglich ab 14 Uhr die Seite des Hessischen Sozialministeriums ab, ergänzt mit 
+* scrape-hmsi-universal.R - fragt täglich ab 14 Uhr die Seite des Hessischen Sozialministeriums ab, ergänzt mit RKI-Daten (die als Datei erwartet werden) und Johns-Hopkins-vergleichdaten für Italien und passt die Daten-Sheets an
 * scrape-rki-n.R - besorgt die Daten des RKI (auf dem Umweg über das NDR-Data-Warehouse) 
 * scrape-helmholtz.R - liest die Reproduktionswert-Daten des SECIR-Modells der Helmholtz-Gesellschaft für Hessen
 * scrape-divi.R - liest morgens die Einzelmeldungen (JSON) und das Überblicks-Blatt (CSV) zur Intensivbettenauslastung

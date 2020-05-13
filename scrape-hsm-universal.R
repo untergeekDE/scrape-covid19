@@ -189,7 +189,7 @@ msg("GELESEN: --- Seite vom ",jahr,"-",monat,"-",tag,"---\n")
 tables <- html_node(webpage,"table")
 
 # #Kopfzeile weg, NA durch 0 ersetzen
-# table_df <- table_df[2:nrow(table_df),]
+# table_df <- table_df[3:nrow(table_df),]
 
 
 # viel simpler: html_table nutzen
@@ -224,11 +224,11 @@ all_df <- table_df %>%
   # Fuzzyjoin - um Bindestriche und ähnlichen Kram zu ignorieren
   stringdist_right_join(kreise, by = c("k" = "kreis"), max_dist=1) %>%
   # Werte in Zahlen umwandeln
-  mutate(gesamt = as.numeric(gesamt),
-         tote = as.numeric(tote),
-         inzidenz = as.numeric(gesamt)/pop*100000, # rechnen, nicht glauben
-         neu7tage = as.numeric(neu7tage),
-         inz7t = as.numeric(inz7t)) %>%
+  mutate(gesamt = as.integer(str_replace(gesamt,"\\.","")),
+         tote = as.integer(tote),
+         inzidenz = as.integer(gesamt)/pop*100000, # rechnen, nicht glauben
+         neu7tage = as.integer(neu7tage),
+         inz7t = as.integer(inz7t)) %>%
   select(kreis,gesamt,tote,inzidenz,neu7tage,inz7t,AGS,pop,Lat,Lon) %>%
   # RightJoin: Nur die Kreise!
   mutate(AGS = paste0("06",str_replace(AGS,"000",""))) %>%
@@ -254,7 +254,7 @@ if (nrow(stringdist_anti_join(kreise,table_df,by =c("kreis" = "kreis"),max_dist=
 }
 
 
-summary(table_df)
+summary(all_df)
 
 # ---- CODE für Überschreiben des letzten Wertes anpassen!!!
 # Wenn der Wert kleiner oder gleich dem letzten: Fehlermeldung!
@@ -379,7 +379,8 @@ fallzahl_df <- fallzahl_df %>%
   mutate(tote_steigerung = if_else(is.na(tote_steigerung) | is.infinite(tote_steigerung),0,tote_steigerung)) %>%
   mutate(steigerung = if_else(is.na(steigerung) | is.infinite(steigerung),0,steigerung)) %>%
   # Aktive Fälle 
-  mutate(aktiv = faelle-tote-gsum)
+  mutate(aktiv = faelle-tote-gsum) %>%
+  mutate(neu = faelle-lag(faelle))
 
  
 
@@ -615,38 +616,42 @@ sheets_edit(id_basisdaten, as.data.frame(paste0(
   range="livedaten!B8", col_names = FALSE, reformat=FALSE)
 
 # Wachstumsrate (Zeile 10)
-# Verdoppelungszeit (Zeile 11)
-# Durchschnitt der letzten vier Steigerungsraten (in fall4w_df sind die letzten 4 Wochen)
+# Durchschnitt der letzten 7 Steigerungsraten (in fall4w_df sind die letzten 4 Wochen)
 steigerung_prozent <- round(mean(fall4w_df$steigerung[22:28]) * 100,1)
 v_zeit <- round(log(2)/log(1+mean(fall4w_df$steigerung[22:28])),1)
 
 sheets_edit(id_basisdaten,as.data.frame(str_replace(paste0(steigerung_prozent," %"),"\\.",",")),
             range="livedaten!B10", col_names = FALSE, reformat=FALSE)
 
-sheets_edit(id_basisdaten,as.data.frame(str_replace(paste0(v_zeit," Tage"),"\\.",",")),
+# Neufälle/100.000 in letzten sieben Tagen
+steigerung_7t=sum(fall4w_df$neu[22:28])
+steigerung_7t_inzidenz <- round(steigerung_7t/sum(kreise$pop)*100000,1)
+sheets_edit(id_basisdaten,as.data.frame(str_replace(paste0(steigerung_7t_inzidenz,
+                                                          " (",steigerung_7t," Fälle)"),"\\.",",")),
             range="livedaten!B11", col_names = FALSE, reformat=FALSE)
 
-# Tendenz Woche zu Woche (Zeile 12)
-# Durchschnitt der letzten vier Steigerungsraten (in fall4w_df sind die letzten 4 Wochen)
-steigerung_prozent_vorwoche <- round(mean(fall4w_df$steigerung[15:21]) * 100,1)
-v_zeit_vorwoche <- round(log(2)/log(1+mean(fall4w_df$steigerung[15:21])),1)
-
-trend_string <- "bleibt gleich"
-if (steigerung_prozent_vorwoche - steigerung_prozent > 0.5) 
-  trend_string <- "verlangsamt"
-if (steigerung_prozent_vorwoche - steigerung_prozent < -0.5) 
-  trend_string <- "beschleunigt"
-if (steigerung_prozent_vorwoche - steigerung_prozent > 1.5) 
-  trend_string <- "stark verlangsamt"
-if (steigerung_prozent_vorwoche - steigerung_prozent < -1.5) 
-  trend_string <- "stark beschleunigt"
+# Tendenz Woche zu Woche mit Fallzahl (Zeile 12)
+# Neufälle vorige Woche zu vergangener Woche
+steigerung_7t_vorwoche <- sum(fall4w_df$neu[15:21])
+steigerung_prozent_vorwoche <- (steigerung_7t/steigerung_7t_vorwoche*100)-100
+  
+trend_string <- "&#9632;"
+if (steigerung_prozent_vorwoche < -10) # gefallen 
+  trend_string <- "<b style='color:#019b72'>&#9660;</b><!--gefallen-->"
+if (steigerung_prozent_vorwoche > 10) # gestiegen
+  trend_string <- "<b style='color:#cc1a14'>&#9650;</b><!--gestiegen-->"
+if (steigerung_prozent_vorwoche < -25) # stark gefallen
+  trend_string <- "<b style='color:#019b72'>&#9660;&#9660;</b><!--stark gefallen-->"
+if (steigerung_prozent_vorwoche > 25) # stark gestiegen
+  trend_string <- "<b style='color:#cc1a14'>&#9650;&#9650;</b><!--stark gestiegen-->"
 
 # 
 
  sheets_edit(id_basisdaten,as.data.frame("Trend Woche zu Woche"),
                range="livedaten!A12", col_names = FALSE, reformat=FALSE)
 # 
- sheets_edit(id_basisdaten,as.data.frame(trend_string),
+ sheets_edit(id_basisdaten,as.data.frame(paste0(trend_string,
+              " (",steigerung_7t - steigerung_7t_vorwoche," Fälle)")),
              range="livedaten!B12", col_names = FALSE, reformat=FALSE)
 
 ##### Datawrapper-Grafiken pingen und so aktualisieren #####

@@ -23,7 +23,7 @@ msg <- function(x,...) {
   d <- data.frame(b = now(tzone= "CEST"), c = paste0(x,...))
   sheets_edit(id_msg,d,sheet="Tabellenblatt1",
               range="B7:C7",col_names = FALSE,reformat=FALSE)
-  if (server) Sys.sleep(10)     # Skript ein wenig runterbremsen wegen Quoa
+  if (server) Sys.sleep(5)     # Skript ein wenig runterbremsen wegen Quoa
   if (logfile != "") {
     cat(x,...,file = logfile, append = TRUE)
   }
@@ -59,26 +59,42 @@ heute = ymd(today())
 msg("\n\n----Scraper-Job am",as.character(heute),"\n")
 msg("Start: ", as.character(now()),"\n")
 
+#---- RKI-Daten laden  ----
+
+use_json <- FALSE
+
+if (use_json) {
+  rki_json_link <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/RKI_COVID19/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json"
+  daten_liste <- read_json(rki_json_link, simplifyVector = TRUE)
+  rki_df <- daten_liste$features$attributes
+  # Datumsspalten in solche umwandeln
+  rki_df$Meldedatum <- as.Date(rki_df$Meldedatum)
+  rki_df$Refdatum <- as.Date(rki_df$Refdatum)
+  
+  rki_df$Datenstand <- as.Date(dmy_hm(rki_df$Datenstand))
+  # 
+  # 
+  # MAGIC HAPPENS
+  
+  msg("Achtung, experimenteller JSON-Datenzugang aktiv")
+} else {
+  ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
+  rki_df <- read.csv(url(ndr_url)) 
+  msg("Daten erfolgreich von Temp-CSV beim RKI gelesen")
+  
+}
+
+
+
 
 
 #---- Daten für Hessen nach Alter und Geschlecht ----
-msg("Versuche Alter und Geschlecht zu lesen...\n")
-rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"
-ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
-rki_df <- read.csv(url(ndr_url)) 
 
-rki_url2 <- "https://prod-hub-indexer.s3.amazonaws.com/files/dd4580c810204019a7b8eb3e0b329dd6/0/full/4326/dd4580c810204019a7b8eb3e0b329dd6_0_full_4326.csv"
-rki_temp_url <- "https://www.arcgis.com/sharing/rest/content/items/f10774f1c63e40168479a1feb6c7ca74/data"
-#rki_df <- read.csv(url(rki_temp_url)) 
-
-msg("Daten erfolgreich von Temp-CSV beim RKI gelesen")
 # Hessische Fälle mal vorfiltern; eigentlich nur ein Test
 he_df <- rki_df %>%
   filter(Bundesland == "Hessen") %>%
-group_by(Altersgruppe, Geschlecht) %>% 
-  summarize(AnzahlFall = sum(AnzahlFall),
-            AnzahlGenesen = sum(AnzahlGenesen),
-            AnzahlTodesfall = sum(AnzahlTodesfall)) 
+group_by(Meldedatum) %>% 
+  summarize(NeuFall = sum(AnzahlFall)) 
 head(he_df)
 
 # ---- Nur die hessischen Fälle lokal ablegen ----
@@ -287,6 +303,18 @@ if(fall4w_df$datum[28] == (heute-1)) {
   sheets_write(bar4w_df,ss = id_fallzahl, sheet = "livedaten-barchart" )
 }
 
+# ---- Neufälle nach Meldungsdatum letzte 4 Wochen ----
+
+# gleitendes 7-Tage-Mittel
+he_df <- he_df %>% mutate(Trend = (lag(NeuFall)+
+                                          lag(NeuFall,n=2)+
+                                          lag(NeuFall,n=3)+
+                                          lag(NeuFall,n=4)+
+                                          lag(NeuFall,n=5)+
+                                          lag(NeuFall,n=6)+
+                                          NeuFall)/7)
+neu_df <- he_df[(nrow(fallzahl_df)-27):nrow(fallzahl_df),]
+sheets_write(neu_df,ss = id_fallzahl, sheet = "4-wochen-neu" )
 
 
 # ---- Datawrapper-Grafiken pingen ----
@@ -295,6 +323,7 @@ msg("Pinge Datawrapper-Grafiken...")
 dw_publish_chart(chart_id = "XpbpH") # id_alter
 dw_publish_chart(chart_id = "JQobx") # id_tote
 dw_publish_chart(chart_id = "7HWCI") # Basisdaten 
+dw_publish_chart(chart_id = "NrBYs") # Neufälle
 
 
 msg("Erledigt.",as.character(now()))

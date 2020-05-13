@@ -32,6 +32,8 @@ Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umg
 Eins der schönsten Features 
 
 ### Changelog: 
+* 13.5.: Basisdaten ohne Verdoppelungszeit, aber mit Trend zur Vorwoche; Neufälle (Meldedatum) nach Tagen (basierend auf RKI-Daten) als neue Grafik erzeugt und gepusht; gemeldete Neufälle pro Tag als Datum mit aus den HMSI-Daten erzeugt. 
+* 11.5.: Helmholtz-Daten werden um das RKI-R ergänzt (aus einem XLS, das das RKI auf die Seite stellt)
 * 8.5.: Balkengrafik Fälle nach Geschlecht und Altersgruppe auf aktive Fälle gefiltert
 * Helmholtz-Scraper versucht 2 Stunden lang, neueres Blatt zu lesen; wenn kein neueres, Abbruch mit Fehlermeldung
 * 5.5.: RKI-Zahlen werden jetzt gleich morgens aktualisiert

@@ -313,7 +313,7 @@ he_df <- he_df %>% mutate(Trend = (lag(NeuFall)+
                                           lag(NeuFall,n=5)+
                                           lag(NeuFall,n=6)+
                                           NeuFall)/7)
-neu_df <- he_df[(nrow(fallzahl_df)-27):nrow(fallzahl_df),]
+neu_df <- he_df[(nrow(he_df)-27):nrow(he_df),]
 sheets_write(neu_df,ss = id_fallzahl, sheet = "4-wochen-neu" )
 
 

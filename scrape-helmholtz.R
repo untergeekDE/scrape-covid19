@@ -2,7 +2,7 @@
 # 
 # Einfaches Kopier-Skript. Schaut nach einem neuen CSV auf dem 
 # SECIR-Repository der Helmholtz-System-Immunologoen und kopiert es in ein
-# Blatt des fallzahl-id-Google-Sheets. 
+# Blatt des fallzahl-id-Google-Sheets.  
 #
 # Kontakt bei Helmholtz: Saham Khailaie, khailaie.sahamoddin@gmail.com
 # Infoseite SECIR: https://gitlab.com/simm/covid19/secir/-/tree/master
@@ -12,7 +12,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 10.5.2020 vormittags
+# Stand: 11.5.2020 vormittags
 
 library("rvest")
 library("tidyverse")
@@ -119,20 +119,24 @@ sheets_write(rt_df,ss = id_fallzahl, sheet = "rt-helmholtz")
 # ---- Jetzt noch die RKI-Tabelle für R dazuholen ----
 
 rki_r_url <- "https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Projekte_RKI/Nowcasting_Zahlen.xlsx?__blob=publicationFile"
-tryCatch(rki_r_df <- read.xlsx(rki_r_url,detectDates = TRUE))
+tryCatch(rki_r_df <- read.xlsx(rki_r_url,sheet = 1,detectDates = TRUE))
+# Gerne kommen auf Blatt 1 mal die Erläuterungen. Dann mit Blatt 2 starten. 
+if (ncol(rki_r_df < 2)) {
+  tryCatch(rki_r_df <- read.xlsx(rki_r_url,sheet = 2,detectDates = TRUE))
+  
+}
+
 rki_r_df <- rki_r_df %>%
   select(datum_erkrankt =1, 
          neue_punkt_og = 2, 
-         nowcast_025 = 3, 
-         neue_lo_og = 4, 
-         nowcast_975 = 5,
-         neue_hi_og = 6, 
-         neue_punkt = 7, 
-         neue_lo = 8,
-         neue_hi = 9, 
-         r_punkt = 10, 
-         r_lo = 11, 
-         r_hi = 12)
+         neue_lo_og = 3, 
+         neue_hi_og = 4, 
+         neue_punkt = 5, 
+         neue_lo = 6,
+         neue_hi = 7, 
+         r_punkt = 8, 
+         r_lo = 9, 
+         r_hi = 10)
 
 # RKI-Nowcast-Sheet auf Sheet pushen
 msg("Schreibe Kopie der RKI-Daten")
@@ -146,11 +150,15 @@ r_df <- rki_r_df %>%
          r_helmholtz_med = Med,
          r_helmholtz_max = Max)
 
+# Auf letzte 14 Tage beschränken
+r_df <- r_df[nrow(r_df)-(27:0),]
+
+
 msg("Schreibe Arbeitskopie r_rki_helmholtz")
 sheets_write(r_df, ss = id_fallzahl, sheet = "r_rki_helmholtz")
 # ---- Pinge Datawrapper-Grafik, wenn neue Zahlen ----
 msg("Pinge Datawrapper-Grafik")
-dw_publish_chart(chart_id = "82BUn")
+dw_publishh_chart(chart_id = "82BUn")
 
 if (this_date > lastdate) {
   msg("OK!")

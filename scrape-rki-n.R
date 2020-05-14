@@ -108,7 +108,7 @@ alter_df <- rki_df %>%
   # Alter unbekannt? Ausfiltern. 
   filter(str_detect(Altersgruppe,"A[0-9]")) %>% 
   # Genesene und Todesfälle ausfiltern - nur aktive Fälle
-  filter(Genesen != 1) %>%              #
+  filter(AnzahlGenesen == 0) %>%              #
   filter(AnzahlTodesfall == 0) %>%
   group_by(Altersgruppe, Geschlecht) %>%
   summarize(AnzahlFall = sum(AnzahlFall)) %>%

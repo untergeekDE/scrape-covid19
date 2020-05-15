@@ -5,7 +5,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 5.5.2020
+# Stand: 15.5.2020
 
 library("rvest")
 library("tidyverse")
@@ -342,7 +342,7 @@ msg("ARD-Seite Hessen (Google) aktualisieren","\n")
 
 ard_id = "1OKodgGnSTFRrF51cIrsL7qz0xwAdR8DXovGzD01dqEM"
 sheets_write(ard_df,ss = ard_id,sheet = "06_hessen")
-# ---- Aktualisiere Google-Doc id_fallzahl ----
+# ---- Aktualisiere Fälle/4 Wochen über Google-Doc id_fallzahl ----
 
 # NEU: Frontseite "livedaten" enthält nur die letzten vier Wochen, 
 # sonst wird die grafische Darstellung zu voll. 
@@ -380,7 +380,8 @@ fallzahl_df <- fallzahl_df %>%
   mutate(steigerung = if_else(is.na(steigerung) | is.infinite(steigerung),0,steigerung)) %>%
   # Aktive Fälle 
   mutate(aktiv = faelle-tote-gsum) %>%
-  mutate(neu = faelle-lag(faelle))
+  mutate(neu = faelle-lag(faelle)) %>%
+  mutate(aktiv_ohne_neu = aktiv-neu)
 
  
 
@@ -651,7 +652,8 @@ if (steigerung_prozent_vorwoche > 25) # stark gestiegen
                range="livedaten!A12", col_names = FALSE, reformat=FALSE)
 # 
  sheets_edit(id_basisdaten,as.data.frame(paste0(trend_string,
-              " (",steigerung_7t - steigerung_7t_vorwoche," Fälle)")),
+              " (",ifelse(steigerung_7t_vorwoche > 0,"+",""),
+              steigerung_7t - steigerung_7t_vorwoche," Fälle)")),
              range="livedaten!B12", col_names = FALSE, reformat=FALSE)
 
 ##### Datawrapper-Grafiken pingen und so aktualisieren #####
@@ -661,9 +663,9 @@ msg(as.character(now()),"Datawrapper-Grafiken pingen...","\n")
 # - Neu publizieren, damit der DW-Server einmal die Google-Sheet-Daten zieht.
 
 dw_publish_chart(chart_id = "7HWCI") # Basisdaten
+dw_publish_chart(chart_id = "aWy4J") # Flächengrafik
 dw_publish_chart(chart_id = "YBBaK") # Choropleth-Karte Fallinzidenz
 dw_publish_chart(chart_id = "B68Gx") # Choropleth 7-Tage-Dynamik
-dw_publish_chart(chart_id = "V4qmF") # Stacked Barchart
 dw_publish_chart(chart_id = "0CS3h") # Fälle-Todesfälle-Prozent-Barchart
 dw_publish_chart(chart_id = "KP1H3") # Trendlinien-Grafik
 
@@ -672,6 +674,7 @@ dw_publish_chart(chart_id = "KP1H3") # Trendlinien-Grafik
 # Kein Update DIVI-Scraper
 # dw_publish_chart(chart_id = "Kedm4") # Was-wäre-wenn
 # dw_publish_chart(chart_id = "82BUn") # Helmholtz-R-Kurve
+# dw_publish_chart(chart_id = "V4qmF") # Stacked Barchart
 
 #
 msg(as.character(now()),"---- FERTIG ----","\n")

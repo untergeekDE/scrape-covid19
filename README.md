@@ -29,7 +29,14 @@ Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umg
 
 ## Es geht auch ohne Datawrapper-API...
 
-Eins der schönsten Features 
+Eins der schönsten Features von Datawrapper ist die Möglichkeit, Daten dynamisch anzeigen zu können - dass Grafiken ohne unser Zutun aktualisiert werden, wenn die Daten sich geändert haben. Dazu muss man entweder
+* eine CSV-Datei auf einem dafür geeigneten Server hinterlegen
+* ein via URL öffentlich einsehbares Google Sheet ([Beispieldatei]()) als Quelle angeben
+Die zweite Methode hat einen Nachteil: Um hohe Last zu vermeiden, werden die Daten auf dem Datawrapper-Server zwischengespeichert und nur in Abständen aktualisiert - in der Regel stündlich. Wem das nicht schnell genug geht - und mir geht es nicht schnell genug - der muss entweder über die Datawrapper-API oder von Hand eine Neu-Veröffentlichung der betreffenden Grafik auslösen; so macht es mein Code. Oder eben die Server-Lösung bauen - dann sind sowohl die datawRappr- als auch die googlesheets4-Library verzichtbar. 
+
+[Details hier in der Datawrapper Academy.](https://academy.datawrapper.de/article/60-external-data-sources)
+
+Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen.  
 
 ### Changelog: 
 * 15.5.: Flächendiagramm für Tote, Aktive Fälle, Neufälle, Genesene (nach Spiegel-Vorbild) 

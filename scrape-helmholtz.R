@@ -88,6 +88,9 @@ msg("Lies CSV vom SECIR-Gitlab")
 while(lastdate == this_date)
 {
   brics_df <- read.csv(brics_url)
+  # Manchmal enthält das Dokument Kontrollzeilen, die man daran erkennt, dass in Spalte date
+  # kein gültiges Datum liegt. 
+  brics_df <- brics_df %>% filter(str_detect(date,"\\d{4}-\\d\\d-\\d\\d"))
   this_date <- max(as.Date(brics_df$date))
   msg("CSV gelesen vom ",this_date," (gestern: ",lastdate,")")
   if (this_date == lastdate){

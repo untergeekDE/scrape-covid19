@@ -7,6 +7,7 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des hessischen So
 - Quelle RKI: https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0
 - Quelle DIVI: https://www.divi.de/images/Dokumente/Tagesdaten_Intensivregister_CSV/
 - Quelle Helmholtz: https://gitlab.com/simm/covid19/secir/-/tree/master/img/dynamic/Rt_rawData
+- Quelle JHU: https://gitlab.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/
 
 ### Endpunkte 
 
@@ -28,6 +29,7 @@ Die Zahlen des Hessischen Ministeriums für Soziales und Integration (HMSI) lieg
 * scrape-rki-n.R - besorgt die Daten des RKI (auf dem Umweg über das NDR-Data-Warehouse) 
 * scrape-helmholtz.R - liest die Reproduktionswert-Daten des SECIR-Modells der Helmholtz-Gesellschaft für Hessen
 * scrape-divi.R - liest morgens die Einzelmeldungen (JSON) und das Überblicks-Blatt (CSV) zur Intensivbettenauslastung
+* scrape-jhu.R - baut aus RKI-Daten via API und JHU-Daten via Github ein Google Sheet für die logarithmische Inzidenz-Wachstumskurve
 
 ### Datenexport
 
@@ -62,6 +64,7 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 19.5.: Teile des scrape-hsm-universal-R-Skripts ausgelagert in scrape-jhu.R (und Umstellung auf RKI- statt HMSI-Daten)
 * 15.5.: Flächendiagramm für Tote, Aktive Fälle, Neufälle, Genesene (nach Spiegel-Vorbild) 
 * 14.5.: Bugfix - Aktive Fälle (RKI) nach Alter und Geschlecht werden jetzt korrekt gefiltert
 * 13.5.: Basisdaten ohne Verdoppelungszeit, aber mit Trend zur Vorwoche; Neufälle (Meldedatum) nach Tagen (basierend auf RKI-Daten) als neue Grafik erzeugt und gepusht; gemeldete Neufälle pro Tag als Datum mit aus den HMSI-Daten erzeugt. 

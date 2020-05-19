@@ -72,11 +72,11 @@ kreise <- read.xlsx("index/kreise-index-pop.xlsx")
 # RKI-Daten lesen und auf Hessen filtern
 # Wird vom RKI-Scraper hier abgelegt. 
 
-rki_df <- read.csv2("rki_df.csv") 
+rki_df <- read.csv2("hessen_rki_df.csv") 
 
 # Achtung: Wenn Datei von gestern, also: today() größer als Zeitstempel der Datei, 
 # dann vielleicht doch noch mal aktualisieren.
-mdate <- file.info("rki_df.csv")$mtime
+mdate <- file.info("hessen_rki_df.csv")$mtime
 if (today()>mdate) {
   ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
   rki_df <- read.csv(url(ndr_url)) %>% filter(Bundesland == "Hessen")
@@ -396,139 +396,10 @@ fall4w_df <- fallzahl_df[(nrow(fallzahl_df)-27):nrow(fallzahl_df),]
 sheets_edit(fall4w_df,ss = id_fallzahl, sheet = "livedaten",reformat=FALSE)
 
 # Daten für das Tab "livedaten-barchart"
-bar4w_df <- t(fall4w_df %>% select(datum,tote,gsum,aktiv))
+bar4w_df <- t(fall4w_df %>% select(datum,tote,aktiv_ohne_neu,neu,gsum))
 colnames(bar4w_df) <- bar4w_df[1,]
-bar4w_df <- cbind(tibble(t = c("Tote","Genesene","Aktiv")),as.data.frame(bar4w_df[-1,]))
+bar4w_df <- cbind(tibble(t = c("Tote","Aktive","Neue","Genesene")),as.data.frame(bar4w_df[-1,]))
 sheets_write(bar4w_df,ss = id_fallzahl, sheet = "livedaten-barchart" )
-# ---- Schreibe aktualisierte Werte in Google-Doc id_wachstum ----  
-
-msg("Wachstumsberechnung (Google) aktualisieren","\n")
-
-# Aktuelle Fallzahl und Datum - Stichtag ist der 11.3. (ungefähr Inzidenz 1)
-#
-he_ofs <-   8+as.numeric(today() - as.Date("2020-03-11"))
-
-# Aktuelle Fallzahl schreiben
-sheets_edit(id_wachstum,as.data.frame(faelle_gesamt),sheet="Tabellenblatt1",
-            range=paste0("C",as.character(he_ofs)),col_names = FALSE,reformat=FALSE)
-# Datum schreiben
-sheets_edit(id_wachstum,as.data.frame(heute),sheet="Tabellenblatt1",
-            range=paste0("B",as.character(he_ofs)),col_names = FALSE,reformat=FALSE)
-# Inzidenz als Formel schreiben
-sheets_edit(id_wachstum,
-            as.data.frame(sheets_formula(paste0("=C",he_ofs,"/6265809*100000"))),
-            sheet="Tabellenblatt1",range=paste0("D",as.character(he_ofs)),col_names=FALSE,reformat=FALSE)
-# Prozentuales Wachstum 
-sheets_edit(id_wachstum,
-            as.data.frame(sheets_formula(paste0("=C",he_ofs,"/C",he_ofs-1,"-1"))),
-            sheet="Tabellenblatt1",range=paste0("E",as.character(he_ofs)),col_names=FALSE,reformat=FALSE)
-
-# Trend-Formel anpassen =VARIATION(D24:D30;$A$24:$A$30;$A$8:$A$40)
-sheets_edit(id_wachstum, 
-            as.data.frame(sheets_formula(paste0(
-              "=VARIATION(D",he_ofs-6,
-              ":D",he_ofs,
-              ";$A$",he_ofs-6,
-              ":$A$",he_ofs,
-              ";$A$8:$A$",he_ofs+20,")")
-              )),
-            sheet="Tabellenblatt1",range="F8",col_names=FALSE,reformat=FALSE
-            )
-
-msg("Trendformel hessen aktualisiert","\n")
-
-#RKI-Abfragestring konstruieren
-
-rki_rest_query2 <- paste0("https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/",
-  "Coronaf%C3%A4lle_in_den_Bundesl%C3%A4ndern/FeatureServer/0/",
-  "query?f=json&where=1%3D1",
-  "&returnGeometry=false&spatialRel=esriSpatialRelIntersects",
-  "&outFields=*&groupByFieldsForStatistics=LAN_ew_GEN&orderByFields=LAN_ew_GEN%20asc",
-  "&outStatistics=%5B%7B%22statisticType%22%3A%22max%22%2C%22onStatisticField%22%3A%22Fallzahl%22%2C%22outStatisticFieldName%22%3A%22value%22%7D%5D",
-  "&outSR=102100&cacheHint=true")
-  
-msg("RKI-JSON-Query:",rki_rest_query2,"\n")
-
-library(jsonlite)
-# Das JSON einlesen. Gibt eine ziemlich chaotische Liste zurück. 
-daten_liste <- read_json(rki_rest_query2, simplifyVector = TRUE)
-zahl_nrw <- daten_liste$features$attributes$value[10]
-
-# Rausfinden, welche Tabellenzelle dran ist. 
-# Die Basiszelle für NRW ist J8, das Referenzdatum (Inzidenz ca. 1) der 5.3.2020
-nrw_ofs <-   8+as.numeric(today() - as.Date("2020-03-07"))
-
-sheets_edit(id_wachstum,as.data.frame(zahl_nrw),sheet="Tabellenblatt1",
-    paste0("J",as.character(nrw_ofs)),col_names = FALSE,reformat=FALSE)
-# Inzidenz als Formel schreiben
-sheets_edit(id_wachstum,
-    as.data.frame(sheets_formula(paste0("=J",nrw_ofs,"/17932651*100000"))),
-    sheet="Tabellenblatt1", paste0("K",as.character(nrw_ofs)),col_names=FALSE,reformat=FALSE)
-#Prozentuales Wachstum 
-sheets_edit(id_wachstum,
-            as.data.frame(sheets_formula(paste0("=J",nrw_ofs,"/J",nrw_ofs-1,"-1"))),
-            sheet="Tabellenblatt1", paste0("L",as.character(nrw_ofs)),col_names=FALSE,reformat=FALSE)
-
-# Trend-Formel NRW in M8 anpassen
-sheets_edit(id_wachstum, 
-            as.data.frame(sheets_formula(paste0(
-              "=GROWTH(K",nrw_ofs-6,
-              ":K",nrw_ofs,
-              ";$A$",nrw_ofs-6,
-              ":$A$",nrw_ofs,
-              ";$A$8:$A$",nrw_ofs+7,")")
-            )),
-            sheet="Tabellenblatt1",range="M8",col_names=FALSE,reformat=FALSE
-)
-
-msg("NRW-Daten und -Formeln angepasst","\n")
-
-
-# Johns-Hopkins-Zahlen von Gestern lesen
-# Dummerweise die Dateinamen genau anders herum mm-tt-yyyy. Scheiß Amis. 
-
-g_tag <- as.character(day(heute-1))
-if (day(heute-1) < 10) g_tag <- paste0("0",g_tag)
-g_monat <- as.character(month(heute-1))
-if (month(heute-1) < 10) g_monat <- paste0("0",g_monat)
-g_jahr <- as.character(year(heute-1))
-
-msg("JHU-Daten: Daily Report ",g_monat,"-",g_tag,"-",g_jahr,".csv","\n")
-
-jhu_df <- read.csv(url(paste0("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/",
-  g_monat,"-",g_tag,"-",g_jahr,".csv"))) %>%
-  filter(Combined_Key == "Italy")
-
-# Zahlen für Italien eintragen
-# Formeln für Italien eintragen
-# Anpassung Trendlinien-Formel in Q8 (für ITA)
-
-ita_ofs <-   7+as.numeric(today() - as.Date("2020-02-27"))
-
-sheets_edit(id_wachstum,as.data.frame(jhu_df$Confirmed),sheet="Tabellenblatt1",
-            paste0("N",as.character(ita_ofs)),col_names = FALSE,reformat=FALSE)
-# Inzidenz als Formel schreiben
-sheets_edit(id_wachstum,
-            as.data.frame(sheets_formula(paste0("=N",ita_ofs,"/60262701*100000"))),
-            sheet="Tabellenblatt1", paste0("O",as.character(ita_ofs)),col_names=FALSE,reformat=FALSE)
-#Prozentuales Wachstum 
-sheets_edit(id_wachstum,
-            as.data.frame(sheets_formula(paste0("=N",ita_ofs,"/N",ita_ofs-1,"-1"))),
-            sheet="Tabellenblatt1", paste0("P",as.character(nrw_ofs)),col_names=FALSE,reformat=FALSE)
-
-# Trend-Formel ITA in Q8 anpassen
-sheets_edit(id_wachstum, 
-            as.data.frame(sheets_formula(paste0(
-              "=GROWTH(O",ita_ofs-6,
-              ":O",ita_ofs,
-              ";$A$",ita_ofs-6,
-              ":$A$",ita_ofs,
-              ";$A$8:$A$",ita_ofs,")")
-            )),
-            sheet="Tabellenblatt1",range="Q8",col_names=FALSE,reformat=FALSE
-)
-
-
 # ---- Master-Tabelle mit allen Meldungen nach Tagen aktualisieren ----
 msg("Master-Tabelle schreiben...","\n")
 
@@ -648,11 +519,8 @@ if (steigerung_prozent_vorwoche > 25) # stark gestiegen
 
 # 
 
- sheets_edit(id_basisdaten,as.data.frame("Trend Woche zu Woche"),
-               range="livedaten!A12", col_names = FALSE, reformat=FALSE)
-# 
  sheets_edit(id_basisdaten,as.data.frame(paste0(trend_string,
-              " (",ifelse(steigerung_7t_vorwoche > 0,"+",""),
+              " (",ifelse(steigerung_7t-steigerung_7t_vorwoche > 0,"+",""),
               steigerung_7t - steigerung_7t_vorwoche," Fälle)")),
              range="livedaten!B12", col_names = FALSE, reformat=FALSE)
 

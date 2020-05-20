@@ -3,11 +3,12 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des hessischen So
 
 ## Die Daten
 
-- Quelle HMSI: https://soziales.hessen.de/gesundheit/infektionsschutz/coronavirus-sars-cov-2/taegliche-uebersicht-der-bestaetigten-sars-cov-2-faelle-hessen
 - Quelle RKI: https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0
 - Quelle DIVI: https://www.divi.de/images/Dokumente/Tagesdaten_Intensivregister_CSV/
 - Quelle Helmholtz: https://gitlab.com/simm/covid19/secir/-/tree/master/img/dynamic/Rt_rawData
 - Quelle JHU: https://gitlab.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/
+
+Die [Quelle "Hessisches Sozialministerium"](https://soziales.hessen.de/gesundheit/infektionsschutz/coronavirus-sars-cov-2/taegliche-uebersicht-der-bestaetigten-sars-cov-2-faelle-hessen) wurde wegen mangelnder Zuverlässigkeit und fehlender API/CSV zum 21.5. aussortiert. 
 
 ### Endpunkte 
 
@@ -20,13 +21,8 @@ Die Daten werden in der Regel in ein Google Sheet geschrieben.
 
 Die tägliche Übersicht des Ministeriums wird bis auf weiteres auch hier angeboten: https://d.data.gcp.cloud.hr.de/scrape-hsm.csv
   
-### Mangelnde Zuverlässigkeit der Ministeriumsdaten für Hessen
-
-Die Zahlen des Hessischen Ministeriums für Soziales und Integration (HMSI) liegen nur als PDF-Mailing oder [als Tabelle auf einer täglich aktualisierten Seite](https://soziales.hessen.de/gesundheit/infektionsschutz/corona-hessen/taegliche-uebersicht-der-bestaetigten-sars-cov-2-faelle-hessen) vor - die wegen kleiner menschlicher Fehler nicht zuverlässig automatisch gelesen kann. Eine Umstellung auf die RKI-Daten ist deshalb angezeigt. 
-
-## Die Scraper
-* scrape-hmsi-universal.R - fragt täglich ab 14 Uhr die Seite des Hessischen Sozialministeriums ab, ergänzt mit RKI-Daten (die als Datei erwartet werden) und Johns-Hopkins-vergleichdaten für Italien und passt die Daten-Sheets an
-* scrape-rki-n.R - besorgt die Daten des RKI (auf dem Umweg über das NDR-Data-Warehouse) 
+## Die Skripte
+* hessen-zahlen-aufbereiten.R - holt morgens die RKI-Daten, rechnet ein paar Auswertungen, beschreibt Tabellen und erneuert die Grafiken
 * scrape-helmholtz.R - liest die Reproduktionswert-Daten des SECIR-Modells der Helmholtz-Gesellschaft für Hessen
 * scrape-divi.R - liest morgens die Einzelmeldungen (JSON) und das Überblicks-Blatt (CSV) zur Intensivbettenauslastung
 * scrape-jhu.R - baut aus RKI-Daten via API und JHU-Daten via Github ein Google Sheet für die logarithmische Inzidenz-Wachstumskurve
@@ -64,6 +60,7 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 21.5.: Neues Skript hessen-zahlen-auswerten.R löst scrape-hsm-universal.R und scrape-rki-n.R ab
 * 19.5.: Teile des scrape-hsm-universal-R-Skripts ausgelagert in scrape-jhu.R (und Umstellung auf RKI- statt HMSI-Daten)
 * 15.5.: Flächendiagramm für Tote, Aktive Fälle, Neufälle, Genesene (nach Spiegel-Vorbild) 
 * 14.5.: Bugfix - Aktive Fälle (RKI) nach Alter und Geschlecht werden jetzt korrekt gefiltert

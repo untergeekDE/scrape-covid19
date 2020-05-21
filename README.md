@@ -16,7 +16,7 @@ Die Daten werden in der Regel in ein Google Sheet geschrieben.
 
 - https://docs.google.com/spreadsheets/d/17s82vieTzxblhzqNmHw814F0xWN0ruJkqnFB1OpameQ/edit - alle Daten
 
-Die tägliche Übersicht des Ministeriums wird bis auf weiteres auch hier angeboten: https://d.data.gcp.cloud.hr.de/scrape-hsm.csv
+Die tägliche Übersicht der Fallzahlen, Inzidenzen, Neufälle in den letzten 7 Tagen etc. nach Kreisen wird bis auf weiteres auch hier angeboten: https://d.data.gcp.cloud.hr.de/scrape-hsm.csv
   
 ## Die Skripte
 * hessen-zahlen-aufbereiten.R - holt morgens die RKI-Daten, rechnet ein paar Auswertungen, beschreibt Tabellen und erneuert die Grafiken

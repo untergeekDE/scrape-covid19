@@ -39,6 +39,8 @@ library(lubridate)
 library(DatawRappr)
 library(jsonlite)
 
+# Alles weg, was noch im Speicher rumliegt
+rm(list=ls())
 
 # Init-Werte fürs Logging, das Arbeitsverzeichnis und die Keyfile-Auswahl
 server <- FALSE
@@ -491,9 +493,18 @@ sheets_edit(gsheet_id,as.data.frame(as.character(heute)),sheet="ToteAlter",range
 
 # ---- Aufräumarbeiten, Grafiken pingen ---- 
 
+basisdaten <- sheets_read(ss=gsheet_id,sheet="Basisdaten")
 alte_basisdaten_id = "1m6hK7s1AnDbeAJ68GSSMH24z4lL7_23RHEI8TID24R8"
-sheets_write(sheets_read(ss=gsheet_id,sheet="Basisdaten"),
-             ss=alte_basisdaten_id,sheet="LIVEDATEN")
+sheets_write(basisdaten, ss=alte_basisdaten_id,sheet="LIVEDATEN")
+basisdaten <- basisdaten %>%
+  select(1,Messzahl = 2) %>%
+  mutate(Messzahl = as.character(Messzahl)) %>%
+  mutate(Messzahl = str_replace(Messzahl,"NULL"," "))
+basisdaten$Messzahl[11] <- as.character(steigerung_prozent_vorwoche)
+write_csv2(basisdaten,"Basisdaten.csv",quote_escape="double")
+msg("Daten auf alte Basisdaten-Seite kopiert")
+
+
 msg("Daten auf alte Basisdaten-Seite kopiert")
 
 msg(as.character(now()),"Datawrapper-Grafiken pingen...","\n")

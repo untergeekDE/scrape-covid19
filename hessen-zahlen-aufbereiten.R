@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 20.5.2020
+# Stand: 23.5.2020
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -114,9 +114,15 @@ if (use_json) {
   
   msg("Achtung, experimenteller JSON-Datenzugang aktiv")
 } else {
+  rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"  
   ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
-  rki_df <- read.csv(url(ndr_url)) 
-  msg("Daten erfolgreich von Temp-CSV beim RKI gelesen")
+  rki_df <- read.csv(url(rki_url)) 
+  if (ncol(rki_df)> 17 & nrow(rki_df) > 100000) {
+    msg("Daten erfolgreich vom RKI-CSV gelesen")
+  } else {
+    rki_df <- read.csv(url(ndl_url))
+    msg("Daten erfolgreich aus dem NDR Data Warehouse gelesen")
+  }
   
 }
 
@@ -126,7 +132,9 @@ rki_he_df <- rki_df %>%
   filter(Bundesland == "Hessen") %>% 
   group_by(Meldedatum)
 
-ts = max(ymd(rki_he_df$Datenstand))
+# Der Datenstand ist bei allen Einträgen gleich; Format: "23.05.2020, 00:00 Uhr"
+# Extrahiere Datum
+ts = max(as.Date(rki_he_df$Datenstand,format="%d.%m.%Y"))
 
 msg("RKI-Daten gelesen - ",nrow(rki_df)," Zeilen ",ncol(rki_df)," Spalten - ",ts)
 
@@ -440,7 +448,7 @@ aktive_df <- aktive_df %>%
 unbek_df <- rki_df %>% 
   filter(Bundesland == "Hessen") %>%
   # Genesene und Todesfälle ausfiltern - nur aktive Fälle
-  filter(Genesen == 0) %>%              #
+  filter(AnzahlGenesen == 0) %>%              #
   filter(AnzahlTodesfall == 0) %>%
   filter(!str_detect(Altersgruppe,"A[0-9]") | 
            !(Geschlecht %in% c("M","W")))

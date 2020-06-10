@@ -3,8 +3,8 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des hessischen So
 
 ## Die Daten
 
-- Quelle RKI: https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0
-- Quelle DIVI: https://www.divi.de/images/Dokumente/Tagesdaten_Intensivregister_CSV/
+- Quelle RKI: https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0 und API
+- Quelle DIVI: https://www.divi.de/register/tagesreport und API
 - Quelle Helmholtz: https://gitlab.com/simm/covid19/secir/-/tree/master/img/dynamic/Rt_rawData
 - Quelle JHU: https://gitlab.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/
 
@@ -57,6 +57,10 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 10.6.: Nachdem fast alles fast drei Wochen fast störungsfrei lief, sind Reparaturen nötig - v.a. durch Umstellung auf RKI-JSON via API
+* 10.6.: Update auf googlesheets4-Library v0.2.0, die fast alle Funktionen umbenannt hat
+* 10.6.: URL des DIVI-Tagesreports muss aus Seite gescraped werden, da er jetzt eine laufende Nummer enthält
+* 10.6.: Timeouts für DIVI und Helmholtz - wenn 2h kein neueres (bzw. tagesaktuelles) Dokument, abbrechen
 * 21.5.: Neues Skript hessen-zahlen-auswerten.R löst scrape-hsm-universal.R und scrape-rki-n.R ab
 * 19.5.: Teile des scrape-hsm-universal-R-Skripts ausgelagert in scrape-jhu.R (und Umstellung auf RKI- statt HMSI-Daten)
 * 15.5.: Flächendiagramm für Tote, Aktive Fälle, Neufälle, Genesene (nach Spiegel-Vorbild) 

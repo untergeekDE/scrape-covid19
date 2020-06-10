@@ -1,9 +1,10 @@
 # DIVI Scraper Skript
 # Zieht die Daten von der DIVI-Seite - bis die ein CSV liefern
-# Da die täglich um 9 Uhr aktualisiert werden, sollte das Skript um 7:10 UTC laufen. 
+# Da die täglich zu 9 Uhr aktualisiert werden, sollte das Skript um 7:30 UTC laufen. 
+# Erfahrungsgemäß dauert es ein oder zwei Stunden länger. 
 # 
 # 23.3. Till Hafermann, hr-Datenteam
-# zuletzt bearbeitet: 1.5.je
+# zuletzt bearbeitet: 09.06.je
 
 #------------------------------------------#
 #       Load required packages             #
@@ -16,18 +17,25 @@ require(googlesheets4)
 require(httr)
 require(openxlsx)
 require(DatawRappr)
+require(rvest)
+
+
+# Alles weg, was noch im Speicher rumliegt
+rm(list=ls())
+
 
 # ---- Logging und Update der Semaphore-Seite, Vorbereitung Google Sheet ----
 id_msg <- "1Q5rCvvSUn6WGcsCnKwGJ0y9PwbiML-34kyxYSYX2Qjk"
 logfile <- ""
 
+
 msg <- function(x,...) {
   print(paste0(x,...))
   # Zeitstempel in B8, Statuszeile in C8
-  sheets_edit(id_msg,as.data.frame(now(tzone = "CEST")),sheet="Tabellenblatt1",
-              range="B8",col_names = FALSE,reformat=FALSE)
-  sheets_edit(id_msg,as.data.frame(paste0(x,...)),sheet="Tabellenblatt1",
-              range="C8",col_names = FALSE,reformat=FALSE)
+  d <- data.frame(b = now(tzone= "CEST"), c = paste0(x,...))
+  range_write(id_msg,d,sheet="Tabellenblatt1",
+              range="B8:C8",col_names = FALSE,reformat=FALSE)
+  if (server) Sys.sleep(5)     # Skript ein wenig runterbremsen wegen Quota
   if (logfile != "") {
     cat(x,...,file = logfile, append = TRUE)
   }
@@ -40,15 +48,15 @@ if (length(args)!=0) {
   if(args[1] == "logfile") logfile <- "./logs/scrape-hsm.log"
 } 
 
-sheets_deauth() # Authentifizierung löschen
+gs4_deauth() # Authentifizierung löschen
 
 ###### VERSION FÜR DEN SERVER #####
 if (server) {
   setwd("/home/jan_eggers_hr_de/rscripts/") 
-  sheets_auth(email="googlesheets4@scrapers-272317.iam.gserviceaccount.com", 
+  gs4_auth(email="googlesheets4@scrapers-272317.iam.gserviceaccount.com", 
               path = "/home/jan_eggers_hr_de/key/scrapers-272317-4a60db8e6863.json")
 } else {
-  sheets_auth(email="googlesheets4@scrapers-272317.iam.gserviceaccount.com", 
+  gs4_auth(email="googlesheets4@scrapers-272317.iam.gserviceaccount.com", 
               path = "C:/Users/Jan/Documents/PythonScripts/creds/scrapers-272317-4a60db8e6863.json")
 }
 msg("Google Credentials erfolgreich gesetzt\n")
@@ -93,24 +101,34 @@ if (ncol(d_tbl) != 13) simpleError("Formatänderung!")
 # Muss nicht mehr per OCR aus dem SVG gescraped werden, weil es ein handliches CSV gibt, 
 # jeden Tag neu. 
 
-divi_table_url <- "https://www.divi.de/images/Dokumente/Tagesdaten_Intensivregister_CSV/"
-divi_table_file <- paste0("DIVI-Intensivregister_", as.character(ymd(today())),"_09-15.csv")
+# Allerdings muss man es erst mal finden. 
 
+divi_table_url <- "https://www.divi.de"
 
-# Prüfe, ob Date schon erreichbar ist...
-while(tryCatch(
-  stop_for_status(GET(paste0(divi_table_url,divi_table_file))),
-  http_404 = function (e) {404},
-  http_403 = function (e) {403}, # Forbidden
-  http_405 = function (e) {405}, 
-  http_408 = function (e) {408} # Timeout
-) %in% c(403,404,405,408)) {
-  simpleWarning("Seite nicht erreichbar ")
-  msg("Datei ",divi_table_file," nicht vorhanden, warte 60 Sekunden...\n")
-  Sys.sleep(60)
-} 
+ts <- today()-1
+starttime <- now()+7200
+while(ts < today()) {
+  # Suche nach einem aktuellen Datum
+  msg("Versuche CSV-Datei von heute zu lesen...")
+  tryCatch(webpage <- read_html("https://www.divi.de/register/tagesreport")) # Seite einlesen. Versuchs halt. 
+  nodes <- html_nodes(webpage,"a.doclink.docman_track_download.k-ui-namespace") # Alle Links von der Seite holen.
+  # Gehe davon aus, dass der 2. Link zum CSV führt
+  divi_table_file <- html_attr(nodes[2],"href") # Link lesen
+  ts <- ymd(html_attr(nodes[2],"data-title")) # Dateinamen lesen, Datum greppen
+  if (ts < today())
+  {
+    if (now() > starttime+7200) {
+      msg("--TIMEOUT--")
+      simpleError("Keine tagesaktuelle CSV auf der Seite in 2 Stunden")
+    } else {
+      Sys.sleep(120)
+    }
+    
+  }
+}
 
-d_kreise <- read.csv(paste0(divi_table_url,divi_table_file),sep=",",dec = ".") %>%
+d_kreise <- read.csv(paste0(divi_table_url,divi_table_file),sep=",",dec = ".")
+d_kreise <- d_kreise %>%
   mutate(faelle_covid_aktuell = ifelse(faelle_covid_aktuell < faelle_covid_aktuell_beatmet,
                                        faelle_covid_aktuell_beatmet,
                                        faelle_covid_aktuell))
@@ -229,7 +247,7 @@ kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
 h_kreise_dw4 <- d_kreise %>%
   filter(bundesland == 6) %>% 
   mutate(resp_rel = 0, beds_total = 0) %>%
-  select(AGS = gemeindeschluessel, cases = 3, resp = 4, resp_rel, beds_occ="betten_belegt", 
+  select(AGS = gemeindeschluessel, cases = faelle_covid_aktuell, resp = faelle_covid_aktuell_beatmet, resp_rel, beds_occ="betten_belegt", 
          beds_free = "betten_frei", beds_total) %>%
   mutate(resp_rel = round(resp / cases * 100,0),
          beds_total = beds_occ + beds_free,
@@ -243,25 +261,26 @@ h_kreise_dw4 <- d_kreise %>%
 #               save data                  #
 #------------------------------------------#
 
+
 msg("Daten lokal sichern...")
-write.csv(d_tbl, format(Sys.time(), "/home/jan_eggers_hr_de/rscripts/archiv/divi_%Y%m%d_%H%M.csv"), fileEncoding = "UTF-8", row.names = F)
-write.csv(d_beds, format(Sys.time(), "/home/jan_eggers_hr_de/rscripts/archiv/divi_beds_%Y%m%d_%H%M.csv"), fileEncoding = "UTF-8", row.names = F)
-write.csv(h_tbl, format(Sys.time(), "/home/jan_eggers_hr_de/rscripts/archiv/divi_he_%Y%m%d_%H%M.csv"), fileEncoding = "UTF-8", row.names = F)
-write.csv(h_beds, format(Sys.time(), "/home/jan_eggers_hr_de/rscripts/archiv/divi_he_beds_%Y%m%d_%H%M.csv"), fileEncoding = "UTF-8", row.names = F)
+write.csv(d_tbl, format(Sys.time(), "archiv/divi_%Y%m%d_%H%M.csv"), fileEncoding = "UTF-8", row.names = F)
+write.csv(d_beds, format(Sys.time(), "archiv/divi_beds_%Y%m%d_%H%M.csv"), fileEncoding = "UTF-8", row.names = F)
+write.csv(h_tbl, format(Sys.time(), "archiv/divi_he_%Y%m%d_%H%M.csv"), fileEncoding = "UTF-8", row.names = F)
+write.csv(h_beds, format(Sys.time(), "archiv/divi_he_beds_%Y%m%d_%H%M.csv"), fileEncoding = "UTF-8", row.names = F)
 
 msg("Daten im Google-Sheet sichern...")
-write_sheet(d_tbl, ss = sheet_id, sheet = "current")
-write_sheet(d_beds, ss = sheet_id, sheet = "beds_current")
-write_sheet(h_tbl, ss = sheet_id, sheet = "current_hessen")
-write_sheet(h_beds_dw, ss = sheet_id, sheet = "beds_dw_hessen")
-write_sheet(h_beds_dw2, ss = sheet_id, sheet = "beds_dw_hessen2")
-write_sheet(h_beds_dw3, ss = sheet_id, sheet = "beds_dw_hessen3")
-write_sheet(d_beds_dw, ss = sheet_id, sheet = "beds_dw_alle")
-write_sheet(h_kreise_dw4, ss = sheet_id, sheet = "kreise_hessen")
-sheets_append(d_tbl, ss=sheet_id, sheet = "archive")
-sheets_append(d_beds, ss=sheet_id, sheet = "beds_archive")
-sheets_append(h_tbl, ss=sheet_id, sheet = "archive_hessen")
-sheets_append(h_beds, ss=sheet_id, sheet = "beds_hessen_archive")
+sheet_write(d_tbl, ss = sheet_id, sheet = "current")
+sheet_write(d_beds, ss = sheet_id, sheet = "beds_current")
+sheet_write(h_tbl, ss = sheet_id, sheet = "current_hessen")
+sheet_write(h_beds_dw, ss = sheet_id, sheet = "beds_dw_hessen")
+sheet_write(h_beds_dw2, ss = sheet_id, sheet = "beds_dw_hessen2")
+sheet_write(h_beds_dw3, ss = sheet_id, sheet = "beds_dw_hessen3")
+sheet_write(d_beds_dw, ss = sheet_id, sheet = "beds_dw_alle")
+sheet_write(h_kreise_dw4, ss = sheet_id, sheet = "kreise_hessen")
+sheet_append(d_tbl, ss=sheet_id, sheet = "archive")
+sheet_append(d_beds, ss=sheet_id, sheet = "beds_archive")
+sheet_append(h_tbl, ss=sheet_id, sheet = "archive_hessen")
+sheet_append(h_beds, ss=sheet_id, sheet = "beds_hessen_archive")
 
 # ---- Pinge Datawrapper-Grafik 
 

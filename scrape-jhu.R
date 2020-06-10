@@ -24,7 +24,7 @@ msg <- function(x,...) {
   print(paste0(x,...))
   # Zeitstempel in B11, Statuszeile in C11
   d <- data.frame(b = now(tzone= "CEST"), c = paste0(x,...))
-  sheets_edit(id_msg,d,sheet="Tabellenblatt1",
+  range_write(id_msg,d,sheet="Tabellenblatt1",
               range="B11:C11",col_names = FALSE,reformat=FALSE)
   if (server) Sys.sleep(5)     # Skript ein wenig runterbremsen wegen Quota
   if (logfile != "") {
@@ -41,19 +41,19 @@ if (length(args)!=0) {
   if(args[1] == "logfile") logfile <- "./logs/scrape-hsm.log"
 } 
 
-sheets_email <- "googlesheets4@scrapers-272317.iam.gserviceaccount.com"
-sheets_keypath <- "C:/Users/Jan/Documents/PythonScripts/creds/scrapers-272317-4a60db8e6863.json"
+gs4_email <- "googlesheets4@scrapers-272317.iam.gserviceaccount.com"
+gs4_keypath <- "C:/Users/Jan/Documents/PythonScripts/creds/scrapers-272317-4a60db8e6863.json"
   
 if (server) {
   # Arbeitsverzeichnis, Logdatei beschreiben
   setwd("/home/jan_eggers_hr_de/rscripts/")
   # Authentifizierung Google-Docs umbiegen
-  sheets_keypath <- "/home/jan_eggers_hr_de/key/scrapers-272317-4a60db8e6863.json"
+  gs4_keypath <- "/home/jan_eggers_hr_de/key/scrapers-272317-4a60db8e6863.json"
 } 
 
 
-sheets_deauth() # Authentifizierung löschen
-sheets_auth(email=sheets_email,path=sheets_keypath)
+gs4_deauth() # Authentifizierung löschen
+gs4_auth(email=gs4_email,path=gs4_keypath)
 
 msg("\n\n--- START ",as.character(today())," ---\n")
 
@@ -106,23 +106,23 @@ msg("Hessen: ",zahl_hessen," NRW: ", zahl_nrw)
 he_ofs <-   8+as.numeric(today() - as.Date("2020-03-11"))
 
 # Aktuelle Fallzahl schreiben
-sheets_edit(id_wachstum,as.data.frame(faelle_gesamt),sheet="Tabellenblatt1",
+range_write(id_wachstum,as.data.frame(faelle_gesamt),sheet="Tabellenblatt1",
             range=paste0("C",as.character(he_ofs)),col_names = FALSE,reformat=FALSE)
 # Datum schreiben
-sheets_edit(id_wachstum,as.data.frame(heute),sheet="Tabellenblatt1",
+range_write(id_wachstum,as.data.frame(heute),sheet="Tabellenblatt1",
             range=paste0("B",as.character(he_ofs)),col_names = FALSE,reformat=FALSE)
 # Inzidenz als Formel schreiben
-sheets_edit(id_wachstum,
-            as.data.frame(sheets_formula(paste0("=C",he_ofs,"/6265809*100000"))),
+range_write(id_wachstum,
+            as.data.frame(gs4_formula(paste0("=C",he_ofs,"/6265809*100000"))),
             sheet="Tabellenblatt1",range=paste0("D",as.character(he_ofs)),col_names=FALSE,reformat=FALSE)
 # Prozentuales Wachstum 
-sheets_edit(id_wachstum,
-            as.data.frame(sheets_formula(paste0("=C",he_ofs,"/C",he_ofs-1,"-1"))),
+range_write(id_wachstum,
+            as.data.frame(gs4_formula(paste0("=C",he_ofs,"/C",he_ofs-1,"-1"))),
             sheet="Tabellenblatt1",range=paste0("E",as.character(he_ofs)),col_names=FALSE,reformat=FALSE)
 
 # Trend-Formel anpassen =VARIATION(D24:D30;$A$24:$A$30;$A$8:$A$40)
-sheets_edit(id_wachstum, 
-            as.data.frame(sheets_formula(paste0(
+range_write(id_wachstum, 
+            as.data.frame(gs4_formula(paste0(
               "=VARIATION(D",he_ofs-6,
               ":D",he_ofs,
               ";$A$",he_ofs-6,
@@ -138,20 +138,20 @@ msg("Trendformel hessen aktualisiert","\n")
 # Die Basiszelle für NRW ist J8, das Referenzdatum (Inzidenz ca. 1) der 5.3.2020
 nrw_ofs <-   8+as.numeric(today() - as.Date("2020-03-07"))
 
-sheets_edit(id_wachstum,as.data.frame(zahl_nrw),sheet="Tabellenblatt1",
+range_write(id_wachstum,as.data.frame(zahl_nrw),sheet="Tabellenblatt1",
     paste0("J",as.character(nrw_ofs)),col_names = FALSE,reformat=FALSE)
 # Inzidenz als Formel schreiben
-sheets_edit(id_wachstum,
-    as.data.frame(sheets_formula(paste0("=J",nrw_ofs,"/17932651*100000"))),
+range_write(id_wachstum,
+    as.data.frame(gs4_formula(paste0("=J",nrw_ofs,"/17932651*100000"))),
     sheet="Tabellenblatt1", paste0("K",as.character(nrw_ofs)),col_names=FALSE,reformat=FALSE)
 #Prozentuales Wachstum 
-sheets_edit(id_wachstum,
-            as.data.frame(sheets_formula(paste0("=J",nrw_ofs,"/J",nrw_ofs-1,"-1"))),
+range_write(id_wachstum,
+            as.data.frame(gs4_formula(paste0("=J",nrw_ofs,"/J",nrw_ofs-1,"-1"))),
             sheet="Tabellenblatt1", paste0("L",as.character(nrw_ofs)),col_names=FALSE,reformat=FALSE)
 
 # Trend-Formel NRW in M8 anpassen
-sheets_edit(id_wachstum, 
-            as.data.frame(sheets_formula(paste0(
+range_write(id_wachstum, 
+            as.data.frame(gs4_formula(paste0(
               "=GROWTH(K",nrw_ofs-6,
               ":K",nrw_ofs,
               ";$A$",nrw_ofs-6,
@@ -190,20 +190,20 @@ zahl_ita <- sum(jhu_df$Confirmed)
 
 ita_ofs <-   7+as.numeric(heute - as.Date("2020-02-27"))
 
-sheets_edit(id_wachstum,as.data.frame(sum(zahl_ita)),sheet="Tabellenblatt1",
+range_write(id_wachstum,as.data.frame(sum(zahl_ita)),sheet="Tabellenblatt1",
             paste0("N",as.character(ita_ofs)),col_names = FALSE,reformat=FALSE)
 # Inzidenz als Formel schreiben
-sheets_edit(id_wachstum,
-            as.data.frame(sheets_formula(paste0("=N",ita_ofs,"/60262701*100000"))),
+range_write(id_wachstum,
+            as.data.frame(gs4_formula(paste0("=N",ita_ofs,"/60262701*100000"))),
             sheet="Tabellenblatt1", paste0("O",as.character(ita_ofs)),col_names=FALSE,reformat=FALSE)
 #Prozentuales Wachstum 
-sheets_edit(id_wachstum,
-            as.data.frame(sheets_formula(paste0("=N",ita_ofs,"/N",ita_ofs-1,"-1"))),
+range_write(id_wachstum,
+            as.data.frame(gs4_formula(paste0("=N",ita_ofs,"/N",ita_ofs-1,"-1"))),
             sheet="Tabellenblatt1", paste0("P",as.character(nrw_ofs)),col_names=FALSE,reformat=FALSE)
 
 # Trend-Formel ITA in Q8 anpassen
-sheets_edit(id_wachstum, 
-            as.data.frame(sheets_formula(paste0(
+range_write(id_wachstum, 
+            as.data.frame(gs4_formula(paste0(
               "=GROWTH(O",ita_ofs-6,
               ":O",ita_ofs,
               ";$A$",ita_ofs-6,

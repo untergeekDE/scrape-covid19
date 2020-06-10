@@ -12,7 +12,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 11.5.2020 vormittags
+# Stand: 10.6.2020 vormittags
 
 library("rvest")
 library("tidyverse")
@@ -23,6 +23,9 @@ library(lubridate)
 library(openssl)
 library(httr)
 library(DatawRappr)
+
+# Alles weg, was noch im Speicher rumliegt
+rm(list=ls())
 
 # Init-Werte fürs Logging, das Arbeitsverzeichnis und die Keyfile-Auswahl
 server <- FALSE
@@ -35,9 +38,9 @@ msg <- function(x,...) {
   print(paste0(x,...))
   # Zeitstempel in B10, Statuszeile in C10
   d <- data.frame(b = now(tzone= "CEST"), c = paste0(x,...))
-  sheets_edit(id_msg,d,sheet="Tabellenblatt1",
+  range_write(id_msg,d,sheet="Tabellenblatt1",
               range="B10:C10",col_names = FALSE,reformat=FALSE)
-  if (server) Sys.sleep(10)     # Skript ein wenig runterbremsen wegen Quota
+  if (server) Sys.sleep(5)     # Skript ein wenig runterbremsen wegen Quota
   if (logfile != "") {
     cat(x,...,file = logfile, append = TRUE)
   }
@@ -52,26 +55,25 @@ if (length(args)!=0) {
   if(args[1] == "logfile") logfile <- "./logs/scrape-hsm.log"
 } 
 
-sheets_email <- "googlesheets4@scrapers-272317.iam.gserviceaccount.com"
-sheets_keypath <- "C:/Users/Jan/Documents/PythonScripts/creds/scrapers-272317-4a60db8e6863.json"
+gs4_email <- "googlesheets4@scrapers-272317.iam.gserviceaccount.com"
+gs4_keypath <- "C:/Users/Jan/Documents/PythonScripts/creds/scrapers-272317-4a60db8e6863.json"
 
 ###### VERSION FÜR DEN SERVER #####
 if (server) {
   # Arbeitsverzeichnis, Logdatei beschreiben
   setwd("/home/jan_eggers_hr_de/rscripts/")
   # Authentifizierung Google-Docs umbiegen
-  sheets_keypath <- "/home/jan_eggers_hr_de/key/scrapers-272317-4a60db8e6863.json"
+  gs4_keypath <- "/home/jan_eggers_hr_de/key/scrapers-272317-4a60db8e6863.json"
 } 
 
 
-sheets_deauth() # Authentifizierung löschen
-sheets_auth(email=sheets_email,path=sheets_keypath)
+gs4_deauth() # Authentifizierung löschen
+gs4_auth(email=gs4_email,path=gs4_keypath)
 
-msg(as.character(now()),"\n\n---------------- START ",as.character(today()),"------------------\n")
+msg(as.character(now()),"-- scrape-helmholtz --")
 
 # Tabelle: "Corona-Fallzahlen-Hessen"
 id_fallzahl = "1OhMGQJXe2rbKg-kCccVNpAMc3yT2i3ubmCndf-zX0JU"
-dw_rt ="82BUn"
 
 # Vergleichsdaten vom Google Sheet: letztes gelesenes Datum
 fallzahl_df <- read_sheet(id_fallzahl,sheet ="rt-helmholtz")
@@ -82,7 +84,7 @@ lastdate <- max(as.Date(fallzahl_df$date))
 # ---- Lies Helmholtz-Daten Rt und schreibe in Hilfsdokument id_fallzahl ----
 brics_url <- "https://gitlab.com/simm/covid19/secir/-/raw/master/img/dynamic/Rt_rawData/Hessen_Rt.csv?inline=false"
 this_date <- lastdate
-starttime <- hour(now())
+starttime <- now()
 
 msg("Lies CSV vom SECIR-Gitlab")
 while(lastdate == this_date)
@@ -93,9 +95,10 @@ while(lastdate == this_date)
   brics_df <- brics_df %>% filter(str_detect(date,"\\d{4}-\\d\\d-\\d\\d"))
   this_date <- max(as.Date(brics_df$date))
   msg("CSV gelesen vom ",this_date," (gestern: ",lastdate,")")
+  # Neues Datum?
   if (this_date == lastdate){
     # Falls Startzeit schon mehr als 2 Stunden zurück: 
-    if (hour(now())> starttime+2) simpleError("Kein neues Datenblatt bis 17 Uhr")
+    if (now() > starttime+7200) simpleError("Timeout")
     Sys.sleep(300)
   }
 }
@@ -117,7 +120,7 @@ rt_df <- brics_df %>%
   filter(date > as.Date("2020-03-08"))
 
 msg("Schreibe Daten ins Google Sheet")
-sheets_write(rt_df,ss = id_fallzahl, sheet = "rt-helmholtz")
+sheet_write(rt_df,ss = id_fallzahl, sheet = "rt-helmholtz")
 
 # ---- Jetzt noch die RKI-Tabelle für R dazuholen ----
 
@@ -143,7 +146,7 @@ rki_r_df <- rki_r_df %>%
 
 # RKI-Nowcast-Sheet auf Sheet pushen
 msg("Schreibe Kopie der RKI-Daten")
-sheets_write(rki_r_df,ss = id_fallzahl, sheet = "rt-rki")
+sheet_write(rki_r_df,ss = id_fallzahl, sheet = "rt-rki")
 
 r_df <- rki_r_df %>%
   select(datum = datum_erkrankt, r_lo, r_hi) %>%
@@ -158,10 +161,11 @@ r_df <- r_df[nrow(r_df)-(27:0),]
 
 
 msg("Schreibe Arbeitskopie r_rki_helmholtz")
-sheets_write(r_df, ss = id_fallzahl, sheet = "r_rki_helmholtz")
-# ---- Pinge Datawrapper-Grafik, wenn neue Zahlen ----
+sheet_write(r_df, ss = id_fallzahl, sheet = "r_rki_helmholtz")
+
+# ---- Pinge Datawrapper-Grafik R-Werte, wenn neue Zahlen ----
 msg("Pinge Datawrapper-Grafik")
-dw_publishh_chart(chart_id = "82BUn")
+dw_publish_chart(chart_id = "82BUn")
 
 if (this_date > lastdate) {
   msg("OK!")

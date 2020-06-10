@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 23.5.2020
+# Stand: 10.6.2020
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -34,7 +34,7 @@ library(stringr)
 library(readr)
 library(tidyr)
 library(openxlsx)
-library(googlesheets4)
+library(googlesheets4) #v0.2.0 - viele Änderungen
 library(lubridate)
 library(DatawRappr)
 library(jsonlite)
@@ -53,7 +53,7 @@ msg <- function(x,...) {
   print(paste0(x,...))
   # Zeitstempel in B12, Statuszeile in C12
   d <- data.frame(b = now(tzone= "CEST"), c = paste0(x,...))
-  sheets_edit(id_msg,d,sheet="Tabellenblatt1",
+  range_write(id_msg,d,sheet="Tabellenblatt1",
               range="B12:C12",col_names = FALSE,reformat=FALSE)
   if (server) Sys.sleep(5)     # Skript ein wenig runterbremsen wegen Quota
   if (logfile != "") {
@@ -82,8 +82,8 @@ if (server) {
 } 
 
 
-sheets_deauth() # Authentifizierung löschen
-sheets_auth(email=sheets_email,path=sheets_keypath)
+gs4_deauth() # Authentifizierung löschen
+gs4_auth(email=sheets_email,path=sheets_keypath)
 
 # ---- Start, RKI-Daten lesen, Hessen-Fälle filtern, Kopie schreiben ----
 
@@ -97,22 +97,47 @@ kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
 # RKI-Daten lesen und auf Hessen filtern
 # Wird vom RKI-Scraper hier abgelegt. 
 
-use_json <- FALSE
+use_json <- TRUE
 
 if (use_json) {
-  rki_json_link <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/RKI_COVID19/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json"
-  daten_liste <- read_json(rki_json_link, simplifyVector = TRUE)
-  rki_df <- daten_liste$features$attributes
-  # Datumsspalten in solche umwandeln
-  rki_df$Meldedatum <- as.Date(rki_df$Meldedatum)
-  rki_df$Refdatum <- as.Date(rki_df$Refdatum)
-  
-  rki_df$Datenstand <- as.Date(dmy_hm(rki_df$Datenstand))
-  # 
-  # 
-  # MAGIC HAPPENS
-  
   msg("Achtung, experimenteller JSON-Datenzugang aktiv")
+  
+  # JSON-Abfrage-Code von Till (danke!)
+  rki_json_link <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/RKI_COVID19/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json"
+  
+  # Muss in Stückchen gelesen werden, weil per JSON nicht mehr als 5000 Datensätze zurückgegeben werden
+  rekursiver_offset <- function(alte_faelle = NULL, offset = 0){
+    neuer_rki_link = str_c(rki_json_link, "&resultOffset=", offset)
+    neue_liste = read_json(neuer_rki_link, simplifyVector = TRUE)
+    neue_faelle = neue_liste$features$attributes
+  
+    if(is.null(alte_faelle)){
+      alle_faelle = neue_faelle
+    } else{
+      alle_faelle = bind_rows(alte_faelle, neue_faelle) 
+    }
+    
+    if(is.null(neue_faelle)){
+      return(alle_faelle)
+      
+    } else {
+      neuer_offset = as.integer(offset + nrow(neue_faelle)) # as.integer() vermeidet einen Bug, bei dem die Zahl 100000 als "1e+05" übergeben wird.
+      return(rekursiver_offset(alle_faelle, neuer_offset))        
+    }
+    
+  }
+  
+  rki_df <- rekursiver_offset()
+  
+  # Datumsspalten in solche umwandeln
+  # Die Spalten "Meldedatum" und "Refdatum" sind in UTC-Millisekunden(!) angegeben.
+  
+  rki_df <- rki_df %>%
+    mutate(Meldedatum = as_datetime(Meldedatum/1000, origin = lubridate::origin, tz = "UTC"),
+           Refdatum = as_datetime(Refdatum/1000, origin = lubridate::origin, tz = "UTC"))
+
+  rki_df$Datenstand <- as_date(dmy_hm(rki_df$Datenstand))
+
 } else {
   rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"  
   ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
@@ -120,7 +145,7 @@ if (use_json) {
   if (ncol(rki_df)> 17 & nrow(rki_df) > 100000) {
     msg("Daten erfolgreich vom RKI-CSV gelesen")
   } else {
-    rki_df <- read.csv(url(ndl_url))
+    rki_df <- read.csv(url(ndr_url))
     msg("Daten erfolgreich aus dem NDR Data Warehouse gelesen")
   }
   
@@ -133,8 +158,22 @@ rki_he_df <- rki_df %>%
   group_by(Meldedatum)
 
 # Der Datenstand ist bei allen Einträgen gleich; Format: "23.05.2020, 00:00 Uhr"
+# Gern aber auch mal: "2020-05-26"
 # Extrahiere Datum
-ts = max(as.Date(rki_he_df$Datenstand,format="%d.%m.%Y"))
+ts = rki_he_df$Datenstand[1]
+
+if (is.Date(ymd(ts))){
+  ts = max(ymd(rki_he_df$Datenstand))
+} else {
+  if(is.Date(as.Date(ts,format = "%d.%m.%Y"))) {
+    ts = (as.Date(ts,format = "%d.%m.%Y"))
+  } else {
+    if (is.Date(as.Date(ts,format = "%d.%m.%y"))) {
+      ts = as.Date(ts,format = "%d.%m.%y")
+    }
+  }
+}
+
 
 msg("RKI-Daten gelesen - ",nrow(rki_df)," Zeilen ",ncol(rki_df)," Spalten - ",ts)
 
@@ -199,38 +238,38 @@ msg("Basisdaten-Seite (Google) schreiben...","\n")
   
 datumsstring <- paste0(day(ts),".",month(ts),".",year(ts),", 00:00 Uhr")
 # Datumsstring schreiben (Zeile 2)
-sheets_edit(gsheet_id,as.data.frame(datumsstring),range="Basisdaten!A2",
+range_write(gsheet_id,as.data.frame(datumsstring),range="Basisdaten!A2",
             col_names = FALSE, reformat=FALSE)
 
 # Steigerung zum Vortag absolut und prozentual schreiben (Zeile 3)
-sheets_edit(gsheet_id,as.data.frame(
+range_write(gsheet_id,as.data.frame(
   paste0(faelle_neu," (+",
          round((faelle_gesamt/(faelle_gesamt-faelle_neu)-1)*100,1)," %)")),
   range="Basisdaten!B3", col_names = FALSE, reformat=FALSE)
 
 # Anzahl Fälle schreiben (Zeile 4)
-sheets_edit(gsheet_id,as.data.frame(faelle_gesamt),range="Basisdaten!B4",
+range_write(gsheet_id,as.data.frame(faelle_gesamt),range="Basisdaten!B4",
             col_names = FALSE, reformat=FALSE)
 
 # Steigerung Todesfälle zum Vortag absolut und prozentual schreiben (Zeile 5)
-sheets_edit(gsheet_id,as.data.frame(
+range_write(gsheet_id,as.data.frame(
   paste0(tote_neu," (+",
          round((tote_gesamt/(tote_gesamt-tote_neu)-1)*100,1)," %)")),
   range="Basisdaten!B5", col_names = FALSE, reformat=FALSE)
 
 # Gesamtzahl Tote schreiben (Zeile 6)
-sheets_edit(gsheet_id,as.data.frame(tote_gesamt),range="Basisdaten!B6",
+range_write(gsheet_id,as.data.frame(tote_gesamt),range="Basisdaten!B6",
             col_names = FALSE,reformat=FALSE)
 
 # Aktive Fälle (= Gesamt-Tote-Genesene), nur in Prozent (Zeile 7)
-sheets_edit(gsheet_id, as.data.frame(paste0(
+range_write(gsheet_id, as.data.frame(paste0(
   as.character(round((faelle_gesamt-genesen_gesamt-tote_gesamt) / faelle_gesamt * 100))," %")),
   range="Basisdaten!B7", col_names = FALSE, reformat=FALSE)
 
 # Genesene (laut RKI) (Zeile 8)
 # RKI-Daten zu Beginn in rki_df eingelesen - zeitaufwändig
 # Absolute Zahl und Anteil an den Fällen
-sheets_edit(gsheet_id, as.data.frame(paste0(
+range_write(gsheet_id, as.data.frame(paste0(
   as.character(round(genesen_gesamt / faelle_gesamt * 100))," %")),
   range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
 
@@ -271,8 +310,8 @@ fall4w_df <- fallzahl_df %>% mutate(neu7tagemittel = (lag(neu)+
 fall4w_df <- fall4w_df[(nrow(fall4w_df)-27):nrow(fall4w_df),]
 
 # Letzte 4 Wochen und Verlauf auf die Sheets
-sheets_write(fallzahl_df, ss=gsheet_id, sheet="FallzahlVerlauf")
-sheets_edit(fall4w_df,ss = gsheet_id, sheet = "Fallzahl4Wochen",reformat=FALSE)
+write_sheet(fallzahl_df, ss=gsheet_id, sheet="FallzahlVerlauf")
+range_write(fall4w_df,ss = gsheet_id, sheet = "Fallzahl4Wochen",reformat=FALSE)
 msg("FallzahlVerlauf (",fallzahl_ofs," Zeilen) -> Fallzahl4Wochen von ",
     fall4w_df$datum[1]," bis ",fall4w_df$datum[28])
 
@@ -284,13 +323,13 @@ msg("FallzahlVerlauf (",fallzahl_ofs," Zeilen) -> Fallzahl4Wochen von ",
 steigerung_prozent <- round(mean(fall4w_df$steigerung[22:28]) * 100,1)
 v_zeit <- round(log(2)/log(1+mean(fall4w_df$steigerung[22:28])),1)
 
-sheets_edit(gsheet_id,as.data.frame(str_replace(paste0(steigerung_prozent," %"),"\\.",",")),
+range_write(gsheet_id,as.data.frame(str_replace(paste0(steigerung_prozent," %"),"\\.",",")),
             range="Basisdaten!B10", col_names = FALSE, reformat=FALSE)
 
 # Neufälle/100.000 in letzten sieben Tagen
 steigerung_7t=sum(fall4w_df$neu[22:28])
 steigerung_7t_inzidenz <- round(steigerung_7t/sum(kreise$pop)*100000,1)
-sheets_edit(gsheet_id,as.data.frame(str_replace(paste0(steigerung_7t_inzidenz,
+range_write(gsheet_id,as.data.frame(str_replace(paste0(steigerung_7t_inzidenz,
                                                            " (",steigerung_7t," Fälle)"),"\\.",",")),
             range="Basisdaten!B11", col_names = FALSE, reformat=FALSE)
 
@@ -309,7 +348,7 @@ if (steigerung_prozent_vorwoche < -25) # stark gefallen
 if (steigerung_prozent_vorwoche > 25) # stark gestiegen
   trend_string <- "<b style='color:#cc1a14'>&#9650;&#9650;</b><!--stark gestiegen-->"
 
-sheets_edit(gsheet_id,as.data.frame(paste0(trend_string,
+range_write(gsheet_id,as.data.frame(paste0(trend_string,
                                                " (",ifelse(steigerung_7t-steigerung_7t_vorwoche > 0,"+",""),
                                                steigerung_7t - steigerung_7t_vorwoche," Fälle)")),
             range="Basisdaten!B12", col_names = FALSE, reformat=FALSE)
@@ -317,19 +356,19 @@ sheets_edit(gsheet_id,as.data.frame(paste0(trend_string,
 # ---- Aufbereitung nach Kreisen ----
 
 # Das letzte Kreis-Dokument ziehen und die Notizen isolieren
-notizen_df <- sheets_read(gsheet_id, sheet = "KreisdatenAktuell") %>% 
+notizen_df <- range_read(gsheet_id, sheet = "KreisdatenAktuell") %>% 
   select (AGS = ags_kreis, notizen)
 
 # für die Inzidenz: Letzte 7 Tage filtern
 f7tage_df <- rki_he_df %>%
   mutate(datum = as_date(Meldedatum)) %>%
-  filter(datum > heute-7) %>%
+  filter(datum > heute-8) %>%
   # Auf die Summen filtern?
   filter(NeuerFall %in% c(0,1)) %>%
   select(AGS = IdLandkreis,AnzahlFall) %>%
-  mutate(AGS = paste0(0,AGS)) %>%
   # Nach Kreis sortieren
   group_by(AGS) %>%
+#  pivot_wider(names_from = datum, values_from = AnzahlFall)
   # Summen für Fallzahl, Genesen, Todesfall bilden
   summarize(AnzahlFall = sum(AnzahlFall)) %>%
   select(AGS,neu7tage = AnzahlFall)
@@ -347,8 +386,7 @@ kreise_summe_df <- rki_he_df %>%
   # Aktive Fälle als übrige berechnen
   mutate(AnzahlAktiv = AnzahlFall - AnzahlTodesfall - AnzahlGenesen) %>%
   # Mit der Kreis-Tabelle zusammenlegen, um Namen und Bevölkerungszahl zu haben
-  mutate(AGS = paste0("0",as.character(AGS))) %>%
-  full_join(kreise, by = c ("AGS" = "AGS")) %>%
+  full_join(kreise, by = c ("AGS" = "AGS"))%>%
   mutate(inzidenz = AnzahlFall / pop * 100000) %>%
   mutate(TotProz = round(AnzahlTodesfall/AnzahlFall*100),
          GenesenProz = round(AnzahlGenesen/AnzahlFall*100),
@@ -378,34 +416,34 @@ kreise_summe_df <- rki_he_df %>%
          AktivProz)
          
   
-sheets_write(kreise_summe_df,ss=gsheet_id,sheet="KreisdatenAktuell")
+write_sheet(kreise_summe_df,ss=gsheet_id,sheet="KreisdatenAktuell")
 write_csv2(kreise_summe_df,"KreisdatenAktuell.csv")
 
 msg("Kreisdaten geschrieben.")         
 
-#Archive pflegen
+# ---- Archivdaten in die GSheets ArchivKreisFallzahl, (...Tote, ...Genesen) -----
 archiv_df <- kreise_summe_df %>% select(ags_kreis, gesamt) %>%
   rename(!!as.character(heute) := gesamt)
 
-archiv_fallzahl_df <- sheets_read(ss=gsheet_id,sheet="ArchivKreisFallzahl") %>%
+archiv_fallzahl_df <- range_read(ss=gsheet_id,sheet="ArchivKreisFallzahl") %>%
   full_join(archiv_df,by="ags_kreis")
-sheets_write(archiv_fallzahl_df,ss=gsheet_id,sheet="ArchivKreisFallzahl")
+write_sheet(archiv_fallzahl_df,ss=gsheet_id,sheet="ArchivKreisFallzahl")
 write_csv2(archiv_fallzahl_df,"ArchivKreisFallzahl.csv")
 
 archiv_df <- kreise_summe_df %>% select(ags_kreis, tote) %>%
   rename(!!as.character(heute) := tote)
 
-archiv_tote_df <- sheets_read(ss=gsheet_id,sheet="ArchivKreisTote") %>%
+archiv_tote_df <- range_read(ss=gsheet_id,sheet="ArchivKreisTote") %>%
   full_join(archiv_df,by="ags_kreis")
-sheets_write(archiv_tote_df,ss=gsheet_id,sheet="ArchivKreisTote")
+write_sheet(archiv_tote_df,ss=gsheet_id,sheet="ArchivKreisTote")
 write_csv2(archiv_tote_df,"ArchivKreisTote.csv")
 
 archiv_df <- kreise_summe_df %>% select(ags_kreis, AnzahlGenesen) %>%
   rename(!!as.character(heute) := AnzahlGenesen)
 
-archiv_genesen_df <- sheets_read(ss=gsheet_id,sheet="ArchivKreisGenesen") %>%
+archiv_genesen_df <- range_read(ss=gsheet_id,sheet="ArchivKreisGenesen") %>%
   full_join(archiv_df,by="ags_kreis")
-sheets_write(archiv_genesen_df,ss=gsheet_id,sheet="ArchivKreisGenesen")
+write_sheet(archiv_genesen_df,ss=gsheet_id,sheet="ArchivKreisGenesen")
 write_csv2(archiv_genesen_df,"ArchivKreisGenesen.csv")
 
 msg("Archivkopie Kreisdaten RKI ",heute," angelegt")
@@ -414,7 +452,7 @@ msg("Archivkopie Kreisdaten RKI ",heute," angelegt")
 
 # Tabelle Altersgruppen/Population einlesen
 
-altersgruppen_df <- sheets_read(gsheet_id,sheet="AltersgruppenPop") %>%
+altersgruppen_df <- range_read(gsheet_id,sheet="AltersgruppenPop") %>%
   mutate(Altersgruppe = as.factor(Altersgruppe))
 
 # Auf aktive Fälle filtern, nach Alter und Geschlecht anordnen
@@ -478,8 +516,8 @@ tote_df <- rki_df %>%
 
 msg("Daten Aktive/Tote nach Alter und Geschlecht ausgeben")
 
-sheets_write(aktive_df, ss = gsheet_id, sheet="AktiveAlter")
-sheets_write(tote_df,ss = gsheet_id, sheet="ToteAlter")
+write_sheet(aktive_df, ss = gsheet_id, sheet="AktiveAlter")
+write_sheet(tote_df,ss = gsheet_id, sheet="ToteAlter")
 
 
 options(scipen=100,           # Immer normale Kommazahlen ausgeben, Keine wissenschaftlichen Zahlen
@@ -495,15 +533,15 @@ write_csv2(tote_df,"rki-tote.csv")
 # sheets_append(laender_tote_df,rki_alter_id,sheet ="tote")
 
 # Zeitstempel 
-sheets_edit(gsheet_id,as.data.frame(as.character(heute)),sheet="AktiveAlter",range= "A1",col_names = FALSE)
-sheets_edit(gsheet_id,as.data.frame(as.character(heute)),sheet="ToteAlter",range= "A1",col_names = FALSE)
+range_write(gsheet_id,as.data.frame(as.character(heute)),sheet="AktiveAlter",range= "A1",col_names = FALSE)
+range_write(gsheet_id,as.data.frame(as.character(heute)),sheet="ToteAlter",range= "A1",col_names = FALSE)
 
 
 # ---- Aufräumarbeiten, Grafiken pingen ---- 
 
-basisdaten <- sheets_read(ss=gsheet_id,sheet="Basisdaten")
+basisdaten <- range_read(ss=gsheet_id,sheet="Basisdaten")
 alte_basisdaten_id = "1m6hK7s1AnDbeAJ68GSSMH24z4lL7_23RHEI8TID24R8"
-sheets_write(basisdaten, ss=alte_basisdaten_id,sheet="LIVEDATEN")
+write_sheet(basisdaten, ss=alte_basisdaten_id,sheet="LIVEDATEN")
 basisdaten <- basisdaten %>%
   select(1,Messzahl = 2) %>%
   mutate(Messzahl = as.character(Messzahl)) %>%
@@ -513,7 +551,7 @@ write_csv2(basisdaten,"Basisdaten.csv",quote_escape="double")
 msg("Daten auf alte Basisdaten-Seite kopiert")
 
 
-msg("Daten auf alte Basisdaten-Seite kopiert")
+#msg("Daten auf alte Basisdaten-Seite kopiert")
 
 msg(as.character(now()),"Datawrapper-Grafiken pingen...","\n")
 
@@ -535,5 +573,4 @@ dw_publish_chart(chart_id = "JQobx") # Todesfälle nach Alter und Geschlecht
 # dw_publish_chart(chart_id = "82BUn") # Helmholtz-R-Kurve -> scrape-helmholtz.R
 
 #
-msg(as.character(now()),"---- FERTIG ----","\n")
 msg("OK!")

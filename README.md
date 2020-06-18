@@ -57,6 +57,7 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 18.6.: Anpassung des DIVI-Scrapers an eine statische URL für das tagesaktuelle Daten-CSV; kleinerer Bug beim Timeout
 * 10.6.: Nachdem fast alles fast drei Wochen fast störungsfrei lief, sind Reparaturen nötig - v.a. durch Umstellung auf RKI-JSON via API
 * 10.6.: Update auf googlesheets4-Library v0.2.0, die fast alle Funktionen umbenannt hat
 * 10.6.: URL des DIVI-Tagesreports muss aus Seite gescraped werden, da er jetzt eine laufende Nummer enthält

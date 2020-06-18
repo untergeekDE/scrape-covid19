@@ -4,7 +4,7 @@
 # Erfahrungsgemäß dauert es ein oder zwei Stunden länger. 
 # 
 # 23.3. Till Hafermann, hr-Datenteam
-# zuletzt bearbeitet: 09.06.je
+# zuletzt bearbeitet: 18.06.je
 
 #------------------------------------------#
 #       Load required packages             #
@@ -106,15 +106,17 @@ if (ncol(d_tbl) != 13) simpleError("Formatänderung!")
 divi_table_url <- "https://www.divi.de"
 
 ts <- today()-1
-starttime <- now()+7200
+starttime <- now()
 while(ts < today()) {
   # Suche nach einem aktuellen Datum
   msg("Versuche CSV-Datei von heute zu lesen...")
-  tryCatch(webpage <- read_html("https://www.divi.de/register/tagesreport")) # Seite einlesen. Versuchs halt. 
-  nodes <- html_nodes(webpage,"a.doclink.docman_track_download.k-ui-namespace") # Alle Links von der Seite holen.
-  # Gehe davon aus, dass der 2. Link zum CSV führt
-  divi_table_file <- html_attr(nodes[2],"href") # Link lesen
-  ts <- ymd(html_attr(nodes[2],"data-title")) # Dateinamen lesen, Datum greppen
+  # tryCatch(webpage <- read_html("https://www.divi.de/register/tagesreport")) # Seite einlesen. Versuchs halt. 
+  # nodes <- html_nodes(webpage,"a.doclink.docman_track_download.k-ui-namespace") # Alle Links von der Seite holen.
+  # # Gehe davon aus, dass der 2. Link zum CSV führt
+  # divi_table_file <- html_attr(nodes[2],"href") # Link lesen
+  # ts <- ymd(html_attr(nodes[2],"data-title")) # Dateinamen lesen, Datum greppen
+  d_kreise <- read.csv("http://www.divi.de/DIVI-Intensivregister-Tagesreport.csv",sep=",",dec = ".")
+  ts <- as.Date(d_kreise$daten_stand[1])
   if (ts < today())
   {
     if (now() > starttime+7200) {
@@ -127,13 +129,13 @@ while(ts < today()) {
   }
 }
 
-d_kreise <- read.csv(paste0(divi_table_url,divi_table_file),sep=",",dec = ".")
+# d_kreise <- read.csv(paste0(divi_table_url,divi_table_file),sep=",",dec = ".")
 d_kreise <- d_kreise %>%
   mutate(faelle_covid_aktuell = ifelse(faelle_covid_aktuell < faelle_covid_aktuell_beatmet,
                                        faelle_covid_aktuell_beatmet,
                                        faelle_covid_aktuell))
 
-msg("Gelesen: DIVI-Tagesreport ",divi_table_file,"\n")
+msg("Gelesen: DIVI-Tagesreport ",d_kreise$daten_stand[1],"\n")
 
 # Um Tills Code weiter benutzen zu können, müssen die Fälle
 # (a) genauso sortiert sein (Deutschland, dann Länder alphabetisch)

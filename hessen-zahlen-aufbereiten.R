@@ -100,7 +100,7 @@ kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
 use_json <- TRUE
 
 if (use_json) {
-  msg("Achtung, experimenteller JSON-Datenzugang aktiv")
+  msg("JSON-Abfrage des RKI-Servers...")
   
   # JSON-Abfrage-Code von Till (danke!)
   rki_json_link <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/RKI_COVID19/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json"
@@ -316,28 +316,6 @@ range_write(gsheet_id,as.data.frame(paste0(trend_string,
             range="Basisdaten!B5", col_names = FALSE, reformat=FALSE)
 
 
-# Gesamt (Zeile 7)
-#range_write(gsheet_id,as.data.frame("Fälle gesamt"),range="Basisdaten!A6")
-range_write(gsheet_id,as.data.frame(faelle_gesamt),
-            range="Basisdaten!B7", col_names = FALSE, reformat=FALSE)
-
-# Todesfälle heute (Zeile 9)
-#range_write(gsheet_id,as.data.frame("neue Todesfälle"),range="Basisdaten!A7")
-range_write(gsheet_id,as.data.frame(tote_neu),
-            range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
-
-# Todesfälle gesamt (Zeile 10)
-#range_write(gsheet_id,as.data.frame("Todesfälle gesamt"),range="Basisdaten!A9")
-range_write(gsheet_id,as.data.frame(tote_gesamt),
-            range="Basisdaten!B10",
-            col_names = FALSE,reformat=FALSE)
-
-# Aktive Fälle (= Gesamt-Tote-Genesene), nur in Prozent (Zeile 8)
-#range_write(gsheet_id,as.data.frame("Aktive Fälle"),range="Basisdaten!A8")
-range_write(gsheet_id, as.data.frame(paste0(
-  as.character(round((faelle_gesamt-genesen_gesamt-tote_gesamt) / faelle_gesamt * 100))," %")),
-  range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
-
 # Wachstumsrate (Zeile 6)
 # Durchschnitt der letzten 7 Steigerungsraten (in fall4w_df sind die letzten 4 Wochen)
 steigerung_prozent <- round(mean(fall4w_df$steigerung[22:28]) * 100,1)
@@ -345,6 +323,35 @@ v_zeit <- round(log(2)/log(1+mean(fall4w_df$steigerung[22:28])),1)
 
 range_write(gsheet_id,as.data.frame(str_replace(paste0(steigerung_prozent," %"),"\\.",",")),
             range="Basisdaten!B6", col_names = FALSE, reformat=FALSE)
+
+# Gesamt (Zeile 7)
+#range_write(gsheet_id,as.data.frame("Fälle gesamt"),range="Basisdaten!A7")
+range_write(gsheet_id,as.data.frame(faelle_gesamt),
+            range="Basisdaten!B7", col_names = FALSE, reformat=FALSE)
+
+# Genesen gerundet auf 100 (Zeile 8)
+#range_write(gsheet_id,as.data.frame("Fälle gesamt"),range="Basisdaten!A8")
+genesen_str <- paste0(genesen_gesamt%/%1000,".",(genesen_gesamt %% 1000) %/%100,"00")
+range_write(gsheet_id,as.data.frame(paste0("ca. ",genesen_str)),
+            range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
+
+
+# Aktive Fälle (= Gesamt-Tote-Genesene), nur in Prozent (Zeile 9)
+#range_write(gsheet_id,as.data.frame("Aktive Fälle"),range="Basisdaten!A9")
+range_write(gsheet_id, as.data.frame(paste0(
+  as.character(round((faelle_gesamt-genesen_gesamt-tote_gesamt) / faelle_gesamt * 100))," %")),
+  range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
+
+# Todesfälle heute (Zeile 10)
+#range_write(gsheet_id,as.data.frame("neue Todesfälle"),range="Basisdaten!A10")
+range_write(gsheet_id,as.data.frame(tote_neu),
+            range="Basisdaten!B10",col_names = FALSE, reformat=FALSE)
+
+# Todesfälle gesamt (Zeile 11)
+#range_write(gsheet_id,as.data.frame("Todesfälle gesamt"),range="Basisdaten!A11")
+range_write(gsheet_id,as.data.frame(tote_gesamt),
+            range="Basisdaten!B11",
+            col_names = FALSE,reformat=FALSE)
 
 # ---- Aufbereitung nach Kreisen ----
 
@@ -407,8 +414,69 @@ kreise_summe_df <- rki_he_df %>%
          TotProz,
          GenesenProz,
          AktivProz)
-         
-  
+
+# --- Neufälle letzte vier Wochen, SVG-Grafik ---
+
+f28_21_df <- rki_he_df %>%
+  mutate(datum = as_date(Meldedatum)) %>%
+  filter((datum > heute-29) & (datum < heute-21)) %>%
+  # Auf die Summen filtern?
+  filter(NeuerFall %in% c(0,1)) %>%
+  select(AGS = IdLandkreis,AnzahlFall) %>%
+  # Nach Kreis sortieren
+  group_by(AGS) %>%
+  # Summen für Fallzahl, Genesen, Todesfall bilden
+  summarize(AnzahlFall = sum(AnzahlFall)) %>%
+  select(AGS,f28_21 = AnzahlFall) %>%
+  # NA-Werte auf 0 setzen
+  mutate(f28_21 = ifelse(is.na(f28_21),0,f28_21))
+
+
+f21_14_df <- rki_he_df %>%
+  mutate(datum = as_date(Meldedatum)) %>%
+  filter((datum > heute-22) & (datum < heute-14)) %>%
+  # Auf die Summen filtern?
+  filter(NeuerFall %in% c(0,1)) %>%
+  select(AGS = IdLandkreis,AnzahlFall) %>%
+  # Nach Kreis sortieren
+  group_by(AGS) %>%
+  # Summen für Fallzahl, Genesen, Todesfall bilden
+  summarize(AnzahlFall = sum(AnzahlFall)) %>%
+  select(AGS,f21_14 = AnzahlFall)
+
+
+f14_7_df <- rki_he_df %>%
+  mutate(datum = as_date(Meldedatum)) %>%
+  filter((datum > heute-15) & (datum < heute-7)) %>%
+  # Auf die Summen filtern?
+  filter(NeuerFall %in% c(0,1)) %>%
+  select(AGS = IdLandkreis,AnzahlFall) %>%
+  # Nach Kreis sortieren
+  group_by(AGS) %>%
+  # Summen für Fallzahl, Genesen, Todesfall bilden
+  summarize(AnzahlFall = sum(AnzahlFall)) %>%
+  select(AGS,f14_7 = AnzahlFall)
+
+# Grafik vorbereiten: Maximalwert und Skalierung. 
+
+skalierung <- 30 / max(f28_21_df$f28_21,f21_14_df$f21_14,f14_7_df$f14_7)
+
+# Die Wochensummen nach Kreis mit in die große Tabelle...
+# ...und die SVG-Daten erzeugen. 
+kreise_summe_df <- kreise_summe_df %>%
+  left_join(f28_21_df, by = c("ags_kreis" = "AGS")) %>%
+  left_join(f21_14_df, by = c("ags_kreis" = "AGS")) %>%
+  left_join(f14_7_df, by = c("ags_kreis" = "AGS")) %>%
+  # NA-Werte auf 0 setzen
+  mutate(f14_7 = ifelse(is.na(f14_7),0,f14_7),
+        f21_14 = ifelse(is.na(f21_14),0,f21_14),
+        f28_21 = ifelse(is.na(f28_21),0,f28_21)) %>%
+  mutate(w1 = floor(f28_21*skalierung),
+         w2 = floor(f21_14*skalierung),
+         w3 = floor(f14_7*skalierung),
+         w4 = floor(neu7tage*skalierung))
+
+
 write_sheet(kreise_summe_df,ss=gsheet_id,sheet="KreisdatenAktuell")
 write_csv2(kreise_summe_df,"KreisdatenAktuell.csv")
 

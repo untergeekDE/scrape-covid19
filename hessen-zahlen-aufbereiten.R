@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 10.6.2020
+# Stand: 22.6.2020
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -229,51 +229,6 @@ tote_neu <- sum(heute_df$AnzahlTodesfall)
 
 aktiv_gesamt <- faelle_gesamt - genesen_gesamt  - tote_gesamt
 
-# ---- Basisdaten ----
-
-msg("Basisdaten-Seite (Google) schreiben...","\n")
-
- 
-#      filter(ymd(Meldedatum) == ymd(Datenstand)-1)  %>%
-  
-datumsstring <- paste0(day(ts),".",month(ts),".",year(ts),", 00:00 Uhr")
-# Datumsstring schreiben (Zeile 2)
-range_write(gsheet_id,as.data.frame(datumsstring),range="Basisdaten!A2",
-            col_names = FALSE, reformat=FALSE)
-
-# Steigerung zum Vortag absolut und prozentual schreiben (Zeile 3)
-range_write(gsheet_id,as.data.frame(
-  paste0(faelle_neu," (+",
-         round((faelle_gesamt/(faelle_gesamt-faelle_neu)-1)*100,1)," %)")),
-  range="Basisdaten!B3", col_names = FALSE, reformat=FALSE)
-
-# Anzahl Fälle schreiben (Zeile 4)
-range_write(gsheet_id,as.data.frame(faelle_gesamt),range="Basisdaten!B4",
-            col_names = FALSE, reformat=FALSE)
-
-# Steigerung Todesfälle zum Vortag absolut und prozentual schreiben (Zeile 5)
-range_write(gsheet_id,as.data.frame(
-  paste0(tote_neu," (+",
-         round((tote_gesamt/(tote_gesamt-tote_neu)-1)*100,1)," %)")),
-  range="Basisdaten!B5", col_names = FALSE, reformat=FALSE)
-
-# Gesamtzahl Tote schreiben (Zeile 6)
-range_write(gsheet_id,as.data.frame(tote_gesamt),range="Basisdaten!B6",
-            col_names = FALSE,reformat=FALSE)
-
-# Aktive Fälle (= Gesamt-Tote-Genesene), nur in Prozent (Zeile 7)
-range_write(gsheet_id, as.data.frame(paste0(
-  as.character(round((faelle_gesamt-genesen_gesamt-tote_gesamt) / faelle_gesamt * 100))," %")),
-  range="Basisdaten!B7", col_names = FALSE, reformat=FALSE)
-
-# Genesene (laut RKI) (Zeile 8)
-# RKI-Daten zu Beginn in rki_df eingelesen - zeitaufwändig
-# Absolute Zahl und Anteil an den Fällen
-range_write(gsheet_id, as.data.frame(paste0(
-  as.character(round(genesen_gesamt / faelle_gesamt * 100))," %")),
-  range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
-
-
 # ---- Verlauf Fallzahl ergänzen, letzte 4 Wochen berechnen ----
 
 fallzahl_df <- read_sheet(gsheet_id,sheet="FallzahlVerlauf")
@@ -315,26 +270,33 @@ range_write(fall4w_df,ss = gsheet_id, sheet = "Fallzahl4Wochen",reformat=FALSE)
 msg("FallzahlVerlauf (",fallzahl_ofs," Zeilen) -> Fallzahl4Wochen von ",
     fall4w_df$datum[1]," bis ",fall4w_df$datum[28])
 
+# ---- Basisdaten schreiben ----
 
-# ---- Basisdaten 7-Tage-Werte und Trend Woche zu Woche ----
+msg("Basisdaten-Seite (Google) schreiben...","\n")
 
-# Wachstumsrate (Zeile 10)
-# Durchschnitt der letzten 7 Steigerungsraten (in fall4w_df sind die letzten 4 Wochen)
-steigerung_prozent <- round(mean(fall4w_df$steigerung[22:28]) * 100,1)
-v_zeit <- round(log(2)/log(1+mean(fall4w_df$steigerung[22:28])),1)
+#      filter(ymd(Meldedatum) == ymd(Datenstand)-1)  %>%
 
-range_write(gsheet_id,as.data.frame(str_replace(paste0(steigerung_prozent," %"),"\\.",",")),
-            range="Basisdaten!B10", col_names = FALSE, reformat=FALSE)
+datumsstring <- paste0(day(ts),".",month(ts),".",year(ts),", 00:00 Uhr")
 
-# Neufälle/100.000 in letzten sieben Tagen
+# Datumsstring schreiben (Zeile 2)
+range_write(gsheet_id,as.data.frame(datumsstring),range="Basisdaten!A2",
+            col_names = FALSE, reformat=FALSE)
+
+# Neufälle heute (Zeile 3)
+#range_write(gsheet_id,as.data.frame('neue Fälle'),range="Basisdaten!A3")
+range_write(gsheet_id,as.data.frame(faelle_neu),
+            range="Basisdaten!B3", col_names = FALSE, reformat=FALSE)
+
+# 7 Tage/Inzidenz - (Zeile 4)
+#range_write(gsheet_id,as.data.frame("letzte 7 Tage (pro 100.000)"),range="Basisdaten!A4")
 steigerung_7t=sum(fall4w_df$neu[22:28])
 steigerung_7t_inzidenz <- round(steigerung_7t/sum(kreise$pop)*100000,1)
-range_write(gsheet_id,as.data.frame(str_replace(paste0(steigerung_7t_inzidenz,
-                                                           " (",steigerung_7t," Fälle)"),"\\.",",")),
-            range="Basisdaten!B11", col_names = FALSE, reformat=FALSE)
+range_write(gsheet_id,as.data.frame(str_replace(paste0(steigerung_7t,
+                                                       " (",steigerung_7t_inzidenz,")"),"\\.",",")),
+            range="Basisdaten!B4", col_names = FALSE, reformat=FALSE)
 
-# Tendenz Woche zu Woche mit Fallzahl (Zeile 12)
-# Neufälle vorige Woche zu vergangener Woche
+# Vergleich Vorwoche (Zeile 5)
+#range_write(gsheet_id,as.data.frame("Vergleich Vorwoche"),range="Basisdaten!A5")
 steigerung_7t_vorwoche <- sum(fall4w_df$neu[15:21])
 steigerung_prozent_vorwoche <- (steigerung_7t/steigerung_7t_vorwoche*100)-100
 
@@ -343,15 +305,46 @@ if (steigerung_prozent_vorwoche < -10) # gefallen
   trend_string <- "<b style='color:#019b72'>&#9660;</b><!--gefallen-->"
 if (steigerung_prozent_vorwoche > 10) # gestiegen
   trend_string <- "<b style='color:#cc1a14'>&#9650;</b><!--gestiegen-->"
-if (steigerung_prozent_vorwoche < -25) # stark gefallen
+if (steigerung_prozent_vorwoche < -33) # stark gefallen
   trend_string <- "<b style='color:#019b72'>&#9660;&#9660;</b><!--stark gefallen-->"
-if (steigerung_prozent_vorwoche > 25) # stark gestiegen
+if (steigerung_prozent_vorwoche > 33) # stark gestiegen
   trend_string <- "<b style='color:#cc1a14'>&#9650;&#9650;</b><!--stark gestiegen-->"
 
 range_write(gsheet_id,as.data.frame(paste0(trend_string,
-                                               " (",ifelse(steigerung_7t-steigerung_7t_vorwoche > 0,"+",""),
-                                               steigerung_7t - steigerung_7t_vorwoche," Fälle)")),
-            range="Basisdaten!B12", col_names = FALSE, reformat=FALSE)
+                                           " (",ifelse(steigerung_7t-steigerung_7t_vorwoche > 0,"+",""),
+                                           steigerung_7t - steigerung_7t_vorwoche,")")),
+            range="Basisdaten!B5", col_names = FALSE, reformat=FALSE)
+
+
+# Gesamt (Zeile 7)
+#range_write(gsheet_id,as.data.frame("Fälle gesamt"),range="Basisdaten!A6")
+range_write(gsheet_id,as.data.frame(faelle_gesamt),
+            range="Basisdaten!B7", col_names = FALSE, reformat=FALSE)
+
+# Todesfälle heute (Zeile 9)
+#range_write(gsheet_id,as.data.frame("neue Todesfälle"),range="Basisdaten!A7")
+range_write(gsheet_id,as.data.frame(tote_neu),
+            range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
+
+# Todesfälle gesamt (Zeile 10)
+#range_write(gsheet_id,as.data.frame("Todesfälle gesamt"),range="Basisdaten!A9")
+range_write(gsheet_id,as.data.frame(tote_gesamt),
+            range="Basisdaten!B10",
+            col_names = FALSE,reformat=FALSE)
+
+# Aktive Fälle (= Gesamt-Tote-Genesene), nur in Prozent (Zeile 8)
+#range_write(gsheet_id,as.data.frame("Aktive Fälle"),range="Basisdaten!A8")
+range_write(gsheet_id, as.data.frame(paste0(
+  as.character(round((faelle_gesamt-genesen_gesamt-tote_gesamt) / faelle_gesamt * 100))," %")),
+  range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
+
+# Wachstumsrate (Zeile 6)
+# Durchschnitt der letzten 7 Steigerungsraten (in fall4w_df sind die letzten 4 Wochen)
+steigerung_prozent <- round(mean(fall4w_df$steigerung[22:28]) * 100,1)
+v_zeit <- round(log(2)/log(1+mean(fall4w_df$steigerung[22:28])),1)
+
+range_write(gsheet_id,as.data.frame(str_replace(paste0(steigerung_prozent," %"),"\\.",",")),
+            range="Basisdaten!B6", col_names = FALSE, reformat=FALSE)
 
 # ---- Aufbereitung nach Kreisen ----
 
@@ -459,6 +452,7 @@ altersgruppen_df <- range_read(gsheet_id,sheet="AltersgruppenPop") %>%
 
 aktive_df <- rki_df %>%
   filter(Bundesland == "Hessen") %>%
+  filter(IdLandkreis == "6632") %>%
   filter(NeuerFall %in% c(0,1)) %>%
   # filter(NeuGenesen %in% c(0,1)) %>%
   # Alter unbekannt? Ausfiltern. 
@@ -479,6 +473,7 @@ aktive_df <- rki_df %>%
 aktive_df <- aktive_df %>%
   right_join(altersgruppen_df, by= c("Altersgruppe"="Altersgruppe")) %>%
   mutate(Inzidenz = (männlich+weiblich)/pop*100000) %>%
+  mutate(Altersgruppe = paste0(str_replace_all(Altersgruppe,"A","")," Jahre")) %>%
   select(Altersgruppe, männlich, weiblich, Inzidenz) # Spalte pop wieder rausnehmen
 
 

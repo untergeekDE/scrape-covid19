@@ -331,7 +331,8 @@ range_write(gsheet_id,as.data.frame(faelle_gesamt),
 
 # Genesen gerundet auf 100 (Zeile 8)
 #range_write(gsheet_id,as.data.frame("Fälle gesamt"),range="Basisdaten!A8")
-genesen_str <- paste0(genesen_gesamt%/%1000,".",(genesen_gesamt %% 1000) %/%100,"00")
+genesen_gerundet <- round(genesen_gesamt / 100)*100
+genesen_str <- paste0(genesen_gerundet %/% 1000,".",(genesen_gerundet %% 1000))
 range_write(gsheet_id,as.data.frame(paste0("ca. ",genesen_str)),
             range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
 
@@ -520,7 +521,6 @@ altersgruppen_df <- range_read(gsheet_id,sheet="AltersgruppenPop") %>%
 
 aktive_df <- rki_df %>%
   filter(Bundesland == "Hessen") %>%
-  filter(IdLandkreis == "6632") %>%
   filter(NeuerFall %in% c(0,1)) %>%
   # filter(NeuGenesen %in% c(0,1)) %>%
   # Alter unbekannt? Ausfiltern. 
@@ -599,6 +599,51 @@ write_csv2(tote_df,"rki-tote.csv")
 range_write(gsheet_id,as.data.frame(as.character(heute)),sheet="AktiveAlter",range= "A1",col_names = FALSE)
 range_write(gsheet_id,as.data.frame(as.character(heute)),sheet="ToteAlter",range= "A1",col_names = FALSE)
 
+# ---- Anteile der Altersgruppen im zeitlichen Verlauf ----
+# Wochensummen der Neufälle (gruppiert nach Meldedatum), aufgeschlüsselt nach Altersgruppe
+# Daraus errechnet: die prozentualen Anteile an den Neufä
+
+
+# Der Tag, an dem die KW-Zählung begann
+# Das wird ab Dezember 2020 natürlich zum Problem!
+
+tag0 <- ymd("2019-12-30")
+
+
+alter_woche_df <- rki_df %>%
+  filter(Bundesland=="Hessen") %>%
+  select(Meldedatum, AnzahlFall,Altersgruppe) %>%
+  # "A00-04" etc. umbenennen in "00-04 Jahre"
+  mutate(Altersgruppe = 
+           ifelse(Altersgruppe == 'unbekannt',
+                  'unbekannt',
+                  paste0(str_replace_all(Altersgruppe,"A","")," Jahre"))) %>%
+  mutate(Meldedatum = as_date(Meldedatum)) %>%
+  mutate(A_KW = as.integer(floor((Meldedatum-tag0) / 7))) %>%
+  group_by(A_KW,Altersgruppe) %>%
+  summarize(AnzahlFall = sum(AnzahlFall)) %>%
+  pivot_wider(names_from = Altersgruppe, values_from = AnzahlFall, values_fill=0) %>%
+  select(sort(names(.))) %>%
+  rename(KW = A_KW) %>%
+  mutate(Stichtag = ymd(tag0+6+(KW*7))) %>%
+  # Stichtag: 11. März - erst danach zählen
+  filter(Stichtag > ymd("2020-03-11")) %>%
+  # Stichtag: angefangene Woche?
+  filter(Stichtag <= ymd(today())) %>%
+  # Prozentzahlen erzeugen 
+  mutate(summe = `00-04 Jahre`+`05-14 Jahre`+`15-34 Jahre`+`35-59 Jahre`+`60-79 Jahre`+`80+ Jahre`+unbekannt) %>%
+  mutate( `00-04 Jahre` = `00-04 Jahre`/summe,
+          `05-14 Jahre` = `05-14 Jahre`/summe,
+          `15-34 Jahre` = `15-34 Jahre`/summe,
+          `35-59 Jahre` = `35-59 Jahre`/summe,
+          `60-79 Jahre` = `60-79 Jahre`/summe,
+          `80+ Jahre` = `80+ Jahre`/summe)
+
+# 
+range_write(alter_woche_df,ss=gsheet_id,sheet="NeufaelleAlterProzentWoche", reformat=FALSE)
+write_csv2(alter_woche_df,"alter-woche.csv")
+
+msg("Prozentuale Verhältnisse Altersgruppen geschrieben")
 
 # ---- Aufräumarbeiten, Grafiken pingen ---- 
 
@@ -628,6 +673,7 @@ dw_publish_chart(chart_id = "ALaUp") # Choropleth-Karte Fallinzidenz
 dw_publish_chart(chart_id = "nQY0P") # Choropleth 7-Tage-Dynamik
 dw_publish_chart(chart_id = "XpbpH") # Aktive Fälle nach Alter und Geschlecht
 dw_publish_chart(chart_id = "JQobx") # Todesfälle nach Alter und Geschlecht
+dw_publish_chart(chart_id = "JQiOo") # Anteil der Altersgruppen an den Neufällen
 
 
 # Kein Update DIVI-Scraper

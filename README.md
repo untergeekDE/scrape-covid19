@@ -57,6 +57,7 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 24.6.: Altersstruktur; Anteile der Altersgruppen an den Neufällen pro Woche, seit 11. März
 * 22.6.: Im Tooltipp der Datawrapper-Choropleth-Karte zu den 7-Tage-Neufällen nach Kreis eine kleine Verlaufsgrafik integriert
 * 22.6.: Basisdaten angepasst; Fokussierung auf 7-Tage-Neufälle und Wochenvergleich
 * 18.6.: Anpassung des DIVI-Scrapers an eine statische URL für das tagesaktuelle Daten-CSV; kleinerer Bug beim Timeout

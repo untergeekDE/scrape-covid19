@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 22.6.2020
+# Stand: 2.7.2020
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -91,6 +91,7 @@ msg("\n\n-- START ",as.character(today())," --")
 
 # Vorbereitung: Index-Datei einlesen; enthält Kreise/AGS und Bevölkerungszahlen
 msg("Lies index/kreise-index-pop.xlsx","\n")
+# Jeweils aktuelle Bevölkerungszahlen; zuletzt aktualisiert Juli 2020
 kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
   mutate(AGS = paste0("06",str_replace(AGS,"000","")))
 
@@ -305,9 +306,9 @@ if (steigerung_prozent_vorwoche < -10) # gefallen
   trend_string <- "<b style='color:#019b72'>&#9660;</b><!--gefallen-->"
 if (steigerung_prozent_vorwoche > 10) # gestiegen
   trend_string <- "<b style='color:#cc1a14'>&#9650;</b><!--gestiegen-->"
-if (steigerung_prozent_vorwoche < -33) # stark gefallen
+if (steigerung_prozent_vorwoche < -50) # stark gefallen
   trend_string <- "<b style='color:#019b72'>&#9660;&#9660;</b><!--stark gefallen-->"
-if (steigerung_prozent_vorwoche > 33) # stark gestiegen
+if (steigerung_prozent_vorwoche > 50) # stark gestiegen
   trend_string <- "<b style='color:#cc1a14'>&#9650;&#9650;</b><!--stark gestiegen-->"
 
 range_write(gsheet_id,as.data.frame(paste0(trend_string,
@@ -332,7 +333,7 @@ range_write(gsheet_id,as.data.frame(faelle_gesamt),
 # Genesen gerundet auf 100 (Zeile 8)
 #range_write(gsheet_id,as.data.frame("Fälle gesamt"),range="Basisdaten!A8")
 genesen_gerundet <- round(genesen_gesamt / 100)*100
-genesen_str <- paste0(genesen_gerundet %/% 1000,".",(genesen_gerundet %% 1000))
+genesen_str <- format(genesen_gerundet,big.mark = ".", nsmall =0)
 range_write(gsheet_id,as.data.frame(paste0("ca. ",genesen_str)),
             range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
 
@@ -612,6 +613,8 @@ tag0 <- ymd("2019-12-30")
 
 alter_woche_df <- rki_df %>%
   filter(Bundesland=="Hessen") %>%
+  # Zählung der neuen Fälle
+  filter(NeuerFall %in% c(0,1)) %>%
   select(Meldedatum, AnzahlFall,Altersgruppe) %>%
   # "A00-04" etc. umbenennen in "00-04 Jahre"
   mutate(Altersgruppe = 
@@ -619,13 +622,15 @@ alter_woche_df <- rki_df %>%
                   'unbekannt',
                   paste0(str_replace_all(Altersgruppe,"A","")," Jahre"))) %>%
   mutate(Meldedatum = as_date(Meldedatum)) %>%
-  mutate(A_KW = as.integer(floor((Meldedatum-tag0) / 7))) %>%
+  # Kalenderwoche berechnen; tag0 war der 1. Tag der KW1/2020
+  # Das müssen wir 2021 umschreiben. 
+  mutate(A_KW = 1 + as.integer(Meldedatum-tag0) %/% 7) %>%
   group_by(A_KW,Altersgruppe) %>%
   summarize(AnzahlFall = sum(AnzahlFall)) %>%
   pivot_wider(names_from = Altersgruppe, values_from = AnzahlFall, values_fill=0) %>%
   select(sort(names(.))) %>%
   rename(KW = A_KW) %>%
-  mutate(Stichtag = ymd(tag0+6+(KW*7))) %>%
+  mutate(Stichtag = ymd(tag0+6+((KW-1)*7))) %>%
   # Stichtag: 11. März - erst danach zählen
   filter(Stichtag > ymd("2020-03-11")) %>%
   # Stichtag: angefangene Woche?
@@ -654,7 +659,8 @@ basisdaten <- basisdaten %>%
   select(1,Messzahl = 2) %>%
   mutate(Messzahl = as.character(Messzahl)) %>%
   mutate(Messzahl = str_replace(Messzahl,"NULL"," "))
-basisdaten$Messzahl[11] <- as.character(steigerung_prozent_vorwoche)
+# Den ganzen HTML-Kram aus der Steigerung zur Vorwoche verschwinden lassen
+basisdaten$Messzahl[4] <- as.character(steigerung_prozent_vorwoche)
 write_csv2(basisdaten,"Basisdaten.csv",quote_escape="double")
 msg("Daten auf alte Basisdaten-Seite kopiert")
 
@@ -668,6 +674,7 @@ msg(as.character(now()),"Datawrapper-Grafiken pingen...","\n")
 
 dw_publish_chart(chart_id = "OXn7r") # Basisdaten
 dw_publish_chart(chart_id = "NrBYs") # Neufälle und Trend letzte 4 Wochen
+dw_publish_chart(chart_id = "jLkVj") # Neufälle je Woche seit März
 dw_publish_chart(chart_id = "k8nUv") # Flächengrafik
 dw_publish_chart(chart_id = "ALaUp") # Choropleth-Karte Fallinzidenz
 dw_publish_chart(chart_id = "nQY0P") # Choropleth 7-Tage-Dynamik

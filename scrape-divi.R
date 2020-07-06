@@ -4,7 +4,7 @@
 # Erfahrungsgemäß dauert es ein oder zwei Stunden länger. 
 # 
 # 23.3. Till Hafermann, hr-Datenteam
-# zuletzt bearbeitet: 18.06.je
+# zuletzt bearbeitet: 06.07.je
 
 #------------------------------------------#
 #       Load required packages             #
@@ -71,7 +71,7 @@ msg("Starte DIVI-Scraper... \n")
 # ---- JSON-Daten über die REST-API ziehen ----
 
 msg("Lese intensivregister.de via JSON\n")
-d_json <- read_json("https://www.intensivregister.de/api/public/intensivregister?page=0", simplifyVector = T)
+d_json <- read_json("https://www.intensivregister.de/api/public/intensivregister", simplifyVector = T)
 
 d_tbl <- tibble(
     id = d_json[["data"]]$id,
@@ -92,6 +92,10 @@ d_tbl <- tibble(
     scraped = ts(now(tzone = "CET"))
 )
 
+# different format for table-display in datawrapper
+dw_timestamp = str_c("zuletzt abgerufen: ", day(now()), ". ", month(now(), label = T), " ", year(now()),
+                     ", ", hour(now()), ":", str_pad(minute(now()), width = 2, pad = "0"), " Uhr")
+
 # Sicherheitsabfrage
 if (ncol(d_tbl) != 13) simpleError("Formatänderung!")
 
@@ -110,18 +114,23 @@ starttime <- now()
 while(ts < today()) {
   # Suche nach einem aktuellen Datum
   msg("Versuche CSV-Datei von heute zu lesen...")
-  # tryCatch(webpage <- read_html("https://www.divi.de/register/tagesreport")) # Seite einlesen. Versuchs halt. 
-  # nodes <- html_nodes(webpage,"a.doclink.docman_track_download.k-ui-namespace") # Alle Links von der Seite holen.
-  # # Gehe davon aus, dass der 2. Link zum CSV führt
-  # divi_table_file <- html_attr(nodes[2],"href") # Link lesen
-  # ts <- ymd(html_attr(nodes[2],"data-title")) # Dateinamen lesen, Datum greppen
-  d_kreise <- read.csv("http://www.divi.de/DIVI-Intensivregister-Tagesreport.csv",sep=",",dec = ".")
+  # Stabile URL abfragen
+  d_kreise <- read.csv(url("http://www.divi.de/DIVI-Intensivregister-Tagesreport.csv"),sep=",",dec = ".")
   ts <- as.Date(d_kreise$daten_stand[1])
   if (ts < today())
   {
     if (now() > starttime+7200) {
       msg("--TIMEOUT--")
-      simpleError("Keine tagesaktuelle CSV auf der Seite in 2 Stunden")
+      # Letzter Versuch nach 2 Stunden: 
+      # Alternativ: versuche Link auf der Tagesreport-Seite zu finden und dem zu folgen
+      tryCatch(webpage <- read_html("https://www.divi.de/register/tagesreport")) # Seite einlesen. Versuchs halt. 
+      nodes <- html_nodes(webpage,"a.doclink.docman_track_download.k-ui-namespace") # Alle Links von der Seite holen.
+      # Gehe davon aus, dass der 2. Link zum CSV führt
+      divi_table_file <- html_attr(nodes[2],"href") # Link lesen
+      ts <- ymd(html_attr(nodes[2],"data-title")) # Dateinamen lesen, Datum greppen
+      d_kreise <- read.csv(url(paste0(divi_table_url,divi_table_file)),sep=",",dec = ".")
+      if (ts < today()) simpleError("Keine tagesaktuelle CSV auf der Seite in 2 Stunden")
+      msg("Alternative Lesemethode erfolgreich")
     } else {
       Sys.sleep(120)
     }
@@ -129,7 +138,6 @@ while(ts < today()) {
   }
 }
 
-# d_kreise <- read.csv(paste0(divi_table_url,divi_table_file),sep=",",dec = ".")
 d_kreise <- d_kreise %>%
   mutate(faelle_covid_aktuell = ifelse(faelle_covid_aktuell < faelle_covid_aktuell_beatmet,
                                        faelle_covid_aktuell_beatmet,
@@ -211,9 +219,6 @@ h_beds <- d_beds %>%
 
 
 
-# different format for table-display in datawrapper
-dw_timestamp = str_c("zuletzt abgerufen: ", day(now()), ". ", month(now(), label = T), " ", year(now()),
-                     ", ", hour(now()), ":", str_pad(minute(now()), width = 2, pad = "0"), " Uhr")
 
 # format for dw table (https://datawrapper.dwcdn.net/7VKZD/3/)
 h_beds_dw <- tibble(text = c("Covid-19-Fälle in Behandlung", "davon beatmet", "betreibbare Intensivbetten", "davon belegte", "Anteil belegter Betten", dw_timestamp),
@@ -254,7 +259,7 @@ h_kreise_dw4 <- d_kreise %>%
   mutate(resp_rel = round(resp / cases * 100,0),
          beds_total = beds_occ + beds_free,
          beds_rel = round(beds_occ/beds_total*100,0)) %>%
-  mutate(scraped = ts(now())) %>%
+  mutate(scraped = ymd(today())) %>%
   mutate(AGS = paste0("0",as.character(AGS))) %>%
   left_join(kreise,by = c("AGS" = "AGS"))
   
@@ -288,6 +293,8 @@ sheet_append(h_beds, ss=sheet_id, sheet = "beds_hessen_archive")
 
 dw_publish_chart(chart_id = "UI83t") # die Choropleth-Karte
 dw_publish_chart(chart_id = "JmqFL") # die Symbol-Karte
+dw_publish_chart(chart_id = "t1rGf") # die Tabelle Anzahl Intensivfälle (neu)
+dw_publish_chart(chart_id = "tYJGs") # die Tabelle Auslastung Deutschland/Hessen mit Barchart
 
 
 

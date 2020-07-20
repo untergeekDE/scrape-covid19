@@ -3,7 +3,8 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des hessischen So
 
 ## Die Daten
 
-- Quelle RKI: https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0 und API
+- Quelle RKI (Aktuelle Fallzahlen): https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0 und API
+- Quelle RKI (für den R-Wert): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Projekte_RKI/Nowcasting_Zahlen.xlsx?__blob=publicationFile
 - Quelle DIVI: https://www.divi.de/register/tagesreport und API
 - Quelle Helmholtz: https://gitlab.com/simm/covid19/secir/-/tree/master/img/dynamic/Rt_rawData
 - Quelle JHU: https://gitlab.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/

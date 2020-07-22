@@ -4,7 +4,7 @@
 # Erfahrungsgemäß dauert es ein oder zwei Stunden länger. 
 # 
 # 23.3. Till Hafermann, hr-Datenteam
-# zuletzt bearbeitet: 06.07.je
+# zuletzt bearbeitet: 22.07.je
 
 #------------------------------------------#
 #       Load required packages             #
@@ -275,6 +275,14 @@ write.csv(d_beds, format(Sys.time(), "archiv/divi_beds_%Y%m%d_%H%M.csv"), fileEn
 write.csv(h_tbl, format(Sys.time(), "archiv/divi_he_%Y%m%d_%H%M.csv"), fileEncoding = "UTF-8", row.names = F)
 write.csv(h_beds, format(Sys.time(), "archiv/divi_he_beds_%Y%m%d_%H%M.csv"), fileEncoding = "UTF-8", row.names = F)
 
+# ins Arbeitsverzeichnis schreibne und auf den Google Bucket
+write.csv(d_tbl, "./divi.csv", fileEncoding = "UTF-8", row.names = F)
+write.csv(d_beds, "./divi_beds.csv", fileEncoding = "UTF-8", row.names = F)
+write.csv(h_tbl, "./divi_he.csv", fileEncoding = "UTF-8", row.names = F)
+write.csv(h_beds, "./divi_he_beds.csv"), fileEncoding = "UTF-8", row.names = F)
+
+
+
 msg("Daten im Google-Sheet sichern...")
 sheet_write(d_tbl, ss = sheet_id, sheet = "current")
 sheet_write(d_beds, ss = sheet_id, sheet = "beds_current")
@@ -296,7 +304,13 @@ dw_publish_chart(chart_id = "JmqFL") # die Symbol-Karte
 dw_publish_chart(chart_id = "t1rGf") # die Tabelle Anzahl Intensivfälle (neu)
 dw_publish_chart(chart_id = "tYJGs") # die Tabelle Auslastung Deutschland/Hessen mit Barchart
 
-
+if (server) {
+  # Google-Bucket befüllen
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./divi.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./divi_he.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./divi_beds.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./divi_he_beds.csv gs://d.data.gcp.cloud.hr.de/')
+}  
 
 # ---- Alles OK, melde dich ab ----
 msg("OK!")

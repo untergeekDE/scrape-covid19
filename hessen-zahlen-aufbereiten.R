@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 2.7.2020
+# Stand: 22.7.2020
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -98,85 +98,109 @@ kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
 # RKI-Daten lesen und auf Hessen filtern
 # Wird vom RKI-Scraper hier abgelegt. 
 
-use_json <- TRUE
+# rki_df anlegen, damit er sie als globale Variable kennt
+rki_df <- data.frame(2,2)
 
-if (use_json) {
-  msg("JSON-Abfrage des RKI-Servers...")
-  
+read_rki_data <- function(use_json = TRUE) {
+  if (use_json) {
+
   # JSON-Abfrage-Code von Till (danke!)
   rki_json_link <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/RKI_COVID19/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json"
   
   # Muss in Stückchen gelesen werden, weil per JSON nicht mehr als 5000 Datensätze zurückgegeben werden
-  rekursiver_offset <- function(alte_faelle = NULL, offset = 0){
-    neuer_rki_link = str_c(rki_json_link, "&resultOffset=", offset)
-    neue_liste = read_json(neuer_rki_link, simplifyVector = TRUE)
-    neue_faelle = neue_liste$features$attributes
+    rekursiver_offset <- function(alte_faelle = NULL, offset = 0){
+      neuer_rki_link = str_c(rki_json_link, "&resultOffset=", offset)
+      neue_liste = read_json(neuer_rki_link, simplifyVector = TRUE)
+      neue_faelle = neue_liste$features$attributes
   
-    if(is.null(alte_faelle)){
-      alle_faelle = neue_faelle
-    } else{
-      alle_faelle = bind_rows(alte_faelle, neue_faelle) 
-    }
+      if(is.null(alte_faelle)){
+        alle_faelle = neue_faelle
+      } else{
+        alle_faelle = bind_rows(alte_faelle, neue_faelle) 
+      }
     
-    if(is.null(neue_faelle)){
-      return(alle_faelle)
+      if(is.null(neue_faelle)){
+        return(alle_faelle)
       
-    } else {
-      neuer_offset = as.integer(offset + nrow(neue_faelle)) # as.integer() vermeidet einen Bug, bei dem die Zahl 100000 als "1e+05" übergeben wird.
-      return(rekursiver_offset(alle_faelle, neuer_offset))        
-    }
+      } else {
+        neuer_offset = as.integer(offset + nrow(neue_faelle)) # as.integer() vermeidet einen Bug, bei dem die Zahl 100000 als "1e+05" übergeben wird.
+        return(rekursiver_offset(alle_faelle, neuer_offset))        
+      }
     
-  }
+    } # function rekursiver_offset
   
-  rki_df <- rekursiver_offset()
+    rki_ = rekursiver_offset()
   
   # Datumsspalten in solche umwandeln
   # Die Spalten "Meldedatum" und "Refdatum" sind in UTC-Millisekunden(!) angegeben.
   
-  rki_df <- rki_df %>%
-    mutate(Meldedatum = as_datetime(Meldedatum/1000, origin = lubridate::origin, tz = "UTC"),
-           Refdatum = as_datetime(Refdatum/1000, origin = lubridate::origin, tz = "UTC"))
+    rki_ <- rki_ %>%
+      mutate(Meldedatum = as_datetime(Meldedatum/1000, origin = lubridate::origin, tz = "UTC"),
+             Refdatum = as_datetime(Refdatum/1000, origin = lubridate::origin, tz = "UTC"))
 
-  rki_df$Datenstand <- as_date(dmy_hm(rki_df$Datenstand))
+    rki_$Datenstand <- as_date(dmy_hm(rki_$Datenstand))
 
-} else {
-  rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"  
-  ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
-  rki_df <- read.csv(url(rki_url)) 
-  if (ncol(rki_df)> 17 & nrow(rki_df) > 100000) {
-    msg("Daten erfolgreich vom RKI-CSV gelesen")
   } else {
-    rki_df <- read.csv(url(ndr_url))
+  # use_json == FALSE
+    rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"  
+    ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
+    rki_ = read.csv(url(rki_url)) 
+    if (ncol(rki_)> 17 & nrow(rki_) > 100000) {
+      msg("Daten erfolgreich vom RKI-CSV gelesen")
+    } else {
+    # Rückfall: Aus dem NDR-Data-Warehouse holen
+      rki_ = read.csv(url(ndr_url))
     msg("Daten erfolgreich aus dem NDR Data Warehouse gelesen")
+    }
   }
-  
+  # Sollte die Spalte mit der Landkreis kein String sein, umwandeln und mit führender 0 versehen
+  if(class(rki_$IdLandkreis) != "character") {
+    rki_$IdLandkreis <- paste0("0",rki_$IdLandkreis)
+  }
+  # Wenn 'Datenstand' ein String ist, in ein Datum umwandeln. Sonst das Datum nutzen. 
+  if (class(rki_$Datenstand) == "character") {
+    rki_$Datenstand <- parse_date(rki_$Datenstand[1],format = "%d.%m.%y%H, %M:%S Uhr")
+  }
+  return(rki_)
 }
+
+# Daten lesen; wenn noch Daten von gestern, warten. 
+use_json <- TRUE
+if (use_json) msg("Daten vom RKI via JSON anfordern") else msg("RKI-CSV lesen")
+
+rki_df <- read_rki_data(use_json)
+# msg("Daten vom RKI als CSV anfordern")
+# read_rki_data(use_json = FALSE)
+
+ts <- rki_df$Datenstand[1]
+
+starttime <- now()
+while (ts < today()) {
+  Sys.sleep(60)   # Warte eine Minute
+  if (now() > starttime+7200) {
+    msg("--- TIMEOUT ---")
+    simpleError("Timeout, keine aktuellen RKI-Daten nach 2 Stunden")
+  }
+  msg("!!!RKI-Daten sind Stand ",ts)
+  rki_df <- read_rki_data(use_json)
+  ts <- parse_date(rki_df$Datenstand[1],format = "%d.%m.%y%H, %M:%S Uhr")
+    
+}
+
+# TODO ##################
+# Plausibilitätsprüfung
+# Lesestrategie anpassen: Wenn CSV nicht geht, dann JSON-Zugang nutzen 
+
+
+
+msg("RKI-Daten gelesen - ",nrow(rki_df)," Zeilen ",ncol(rki_df)," Spalten - ",ts)
 
 # Daten für Hessen filtern; tagesaktuelle Kopie lokal ablegen
 
 rki_he_df <- rki_df %>%
   filter(Bundesland == "Hessen") %>% 
+  # wenn die AGS-Spalte eine Zahl ist, mit führender Null versehen
   group_by(Meldedatum)
-
-# Der Datenstand ist bei allen Einträgen gleich; Format: "23.05.2020, 00:00 Uhr"
-# Gern aber auch mal: "2020-05-26"
-# Extrahiere Datum
-ts = rki_he_df$Datenstand[1]
-
-if (is.Date(ymd(ts))){
-  ts = max(ymd(rki_he_df$Datenstand))
-} else {
-  if(is.Date(as.Date(ts,format = "%d.%m.%Y"))) {
-    ts = (as.Date(ts,format = "%d.%m.%Y"))
-  } else {
-    if (is.Date(as.Date(ts,format = "%d.%m.%y"))) {
-      ts = as.Date(ts,format = "%d.%m.%y")
-    }
-  }
-}
-
-
-msg("RKI-Daten gelesen - ",nrow(rki_df)," Zeilen ",ncol(rki_df)," Spalten - ",ts)
 
 write_csv2(rki_he_df,"hessen_rki_df.csv")
 
@@ -532,7 +556,8 @@ aktive_df <- rki_df %>%
   group_by(Altersgruppe, Geschlecht) %>%
   summarize(AnzahlFall = sum(AnzahlFall)) %>%
   pivot_wider(names_from = Geschlecht, values_from = AnzahlFall) %>%
-  select(Altersgruppe, männlich = M, weiblich = W) 
+  select(Altersgruppe, männlich = M, weiblich = W) %>%
+  ungroup()
 
 # Berechne Inzidenzen für die Altersgruppen
 # Quelle Bevölkerungsstatistik Hessen statistik.hessen.de
@@ -688,5 +713,25 @@ dw_publish_chart(chart_id = "JQiOo") # Anteil der Altersgruppen an den Neufälle
 # dw_publish_chart(chart_id = "KP1H3") # Trendlinien-Grafik -> scrape-jhu.R
 # dw_publish_chart(chart_id = "82BUn") # Helmholtz-R-Kurve -> scrape-helmholtz.R
 
-#
+# ---- Archivkopien der Dateien anlegen ----
+# Nur auf dem Server ausführen
+
+if (server) {
+  # Google-Bucket befüllen
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/scrape-hsm.csv')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./Basisdaten.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./rki-alter.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./rki-tote.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./hessen_rki_df.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisFallzahl.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisGenesen.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisTote.csv gs://d.data.gcp.cloud.hr.de/')
+}
+
+# CSV-Archivkopien von rki_he_df und kreise_summe_df anlegen
+
+write_csv2(rki_he_df,paste0("archiv/rki-",heute,".csv"))
+write_csv2(kreise_summe_df,paste0("archiv/kreis-",heute,".csv"))
+  
 msg("OK!")

@@ -176,15 +176,16 @@ ts <- rki_df$Datenstand[1]
 
 starttime <- now()
 while (ts < today()) {
+  msg("!!!RKI-Daten sind Stand ",ts)
   Sys.sleep(60)   # Warte eine Minute
   if (now() > starttime+7200) {
     msg("--- TIMEOUT ---")
     simpleError("Timeout, keine aktuellen RKI-Daten nach 2 Stunden")
   }
-  msg("!!!RKI-Daten sind Stand ",ts)
   rki_df <- read_rki_data(use_json)
-  ts <- parse_date(rki_df$Datenstand[1],format = "%d.%m.%y%H, %M:%S Uhr")
-    
+  # alternierend versuchen, das CSV zu lesen
+  use_json <- !use_json
+  ts <- rki_df$Datenstand[1]
 }
 
 # TODO ##################

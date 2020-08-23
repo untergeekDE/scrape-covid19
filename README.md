@@ -58,6 +58,7 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 23.8.: Datenbasis für Inzidenzberechnung jetzt Bevölkerungsstatistik Stand Q1/2020; Berechnung der 7-Tage-Inzidenz nach Falldatenbank, nicht nach Meldungshistorie
 * 13.7.: Bis jetzt erfolgte der Aufruf über ein Shellskript; die Kopier-Befehle wurden jetzt in das Hauptskript übernommen und das Shellskript abgeschaltet. 
 * 6.7.: Zahl der Genesenen korrekt formatieren; DIVI-Daten in eine andere Tabelle einfließen lassen und korrekte Zeitstempel angeben. 
 * 24.6.: Altersstruktur; Anteile der Altersgruppen an den Neufällen pro Woche, seit 11. März

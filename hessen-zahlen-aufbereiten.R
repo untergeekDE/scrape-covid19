@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 22.7.2020
+# Stand: 23.8.2020
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -92,7 +92,7 @@ msg("\n\n-- START ",as.character(today())," --")
 # Vorbereitung: Index-Datei einlesen; enthält Kreise/AGS und Bevölkerungszahlen
 msg("Lies index/kreise-index-pop.xlsx","\n")
 # Jeweils aktuelle Bevölkerungszahlen; zuletzt aktualisiert Juli 2020
-kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
+kreise <- read.xlsx("index/kreise-index-pop-q1-2020.xlsx") %>%
   mutate(AGS = paste0("06",str_replace(AGS,"000","")))
 
 # RKI-Daten lesen und auf Hessen filtern
@@ -178,9 +178,10 @@ starttime <- now()
 while (ts < today()) {
   msg("!!!RKI-Daten sind Stand ",ts)
   Sys.sleep(60)   # Warte eine Minute
-  if (now() > starttime+7200) {
+  if (now() > starttime+36000) {
     msg("--- TIMEOUT ---")
-    simpleError("Timeout, keine aktuellen RKI-Daten nach 2 Stunden")
+    simpleError("Timeout, keine aktuellen RKI-Daten nach 10 Stunden")
+    quit()
   }
   rki_df <- read_rki_data(use_json)
   # alternierend versuchen, das CSV zu lesen
@@ -232,12 +233,13 @@ if (daten_liste$features$attributes$LAN_ew_GEN[7] != "Hessen") {
   simpleError("Kein Hessen im JSON!")
 }
 
-faelle_gesamt <- daten_liste$features$attributes$value[7]
+faelle_gesamt_direkt <- daten_liste$features$attributes$value[7]
 
 # Paranoia-Polizei 22
 heute_df <- rki_he_df %>%
   filter(NeuerFall %in% c(0,1))
-if (faelle_gesamt != sum(heute_df$AnzahlFall)) simpleError("JSON-Summe != CSV-Summe")
+faelle_gesamt <- sum(heute_df$AnzahlFall)
+if (faelle_gesamt !=faelle_gesamt_direkt)  simpleError("JSON-Summe != CSV-Summe")
 
 heute_df <- rki_he_df %>% 
   filter(NeuerFall %in% c(-1,1))    # so zählt man laut RKI die Summe der Fälle
@@ -278,6 +280,23 @@ fallzahl_df$aktiv[fallzahl_ofs] <- faelle_gesamt-genesen_gesamt-tote_gesamt
 fallzahl_df$neu[fallzahl_ofs] <- faelle_neu
 fallzahl_df$aktiv_ohne_neu[fallzahl_ofs] <- faelle_gesamt-genesen_gesamt-tote_gesamt-faelle_neu
 
+# Neumeldungen letzte 4 Wochen; jeweils aktueller (also korrigierter) Stand. 
+# Weicht fatalerweise von den fall4w_df-Meldungsdaten leicht ab. 
+# Heutiges Datum => Meldedatum bis gestern. 
+f28_df <- rki_he_df %>%
+  mutate(datum = as_date(Meldedatum)) %>%
+  filter(datum > heute-29) %>%
+  # Auf die Summen filtern?
+  filter(NeuerFall %in% c(0,1)) %>%
+  select(Meldedatum,AnzahlFall) %>%
+  # Nach Kreis sortieren
+  group_by(Meldedatum) %>%
+  #  pivot_wider(names_from = datum, values_from = AnzahlFall)
+  # Summen für Fallzahl, Genesen, Todesfall bilden
+  summarize(AnzahlFall = sum(AnzahlFall)) %>%
+  select(Meldedatum,AnzahlFall)
+
+
 
 #7-Tage-Trend der Neuinfektionen
 fall4w_df <- fallzahl_df %>% mutate(neu7tagemittel = (lag(neu)+
@@ -313,9 +332,15 @@ range_write(gsheet_id,as.data.frame(datumsstring),range="Basisdaten!A2",
 range_write(gsheet_id,as.data.frame(faelle_neu),
             range="Basisdaten!B3", col_names = FALSE, reformat=FALSE)
 
+
+## ACHTUNG: ##
+# Seit 23.8. machen wir es wie das RKI und berechnen 7-Tage-Inzidenz und Vergleich
+# zu den 7 Tagen davor aus den korrigierten Daten nach Meldedatum. 
+
+
 # 7 Tage/Inzidenz - (Zeile 4)
 #range_write(gsheet_id,as.data.frame("letzte 7 Tage (pro 100.000)"),range="Basisdaten!A4")
-steigerung_7t=sum(fall4w_df$neu[22:28])
+steigerung_7t=sum(f28_df$AnzahlFall[22:28])
 steigerung_7t_inzidenz <- round(steigerung_7t/sum(kreise$pop)*100000,1)
 range_write(gsheet_id,as.data.frame(str_replace(paste0(steigerung_7t,
                                                        " (",steigerung_7t_inzidenz,")"),"\\.",",")),
@@ -323,7 +348,7 @@ range_write(gsheet_id,as.data.frame(str_replace(paste0(steigerung_7t,
 
 # Vergleich Vorwoche (Zeile 5)
 #range_write(gsheet_id,as.data.frame("Vergleich Vorwoche"),range="Basisdaten!A5")
-steigerung_7t_vorwoche <- sum(fall4w_df$neu[15:21])
+steigerung_7t_vorwoche <- sum(f28_df$AnzahlFall[15:21])
 steigerung_prozent_vorwoche <- (steigerung_7t/steigerung_7t_vorwoche*100)-100
 
 trend_string <- "&#9632;"
@@ -365,8 +390,8 @@ range_write(gsheet_id,as.data.frame(paste0("ca. ",genesen_str)),
 
 # Aktive Fälle (= Gesamt-Tote-Genesene), nur in Prozent (Zeile 9)
 #range_write(gsheet_id,as.data.frame("Aktive Fälle"),range="Basisdaten!A9")
-range_write(gsheet_id, as.data.frame(paste0(
-  as.character(round((faelle_gesamt-genesen_gesamt-tote_gesamt) / faelle_gesamt * 100))," %")),
+range_write(gsheet_id, as.data.frame(paste0("ca. ", 
+  as.character(round((faelle_gesamt-genesen_gesamt-tote_gesamt)/100) * 100))),
   range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
 
 # Todesfälle heute (Zeile 10)

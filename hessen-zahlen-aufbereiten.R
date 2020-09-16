@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 23.8.2020
+# Stand: 15.9.2020
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -70,20 +70,39 @@ if (length(args)!=0) {
   if(args[1] == "logfile") logfile <- "./logs/hessen.log"
 } 
 
-sheets_email <- "googlesheets4@scrapers-272317.iam.gserviceaccount.com"
-sheets_keypath <- "C:/Users/Jan/Documents/PythonScripts/creds/scrapers-272317-4a60db8e6863.json"
+sheets_email <- "corona-rki-hmsi-googlesheets@corona-rki-hmsi-2727248702.iam.gserviceaccount.com"
+sheets_filename <- "corona-rki-hmsi-2727248702-d35af1e1baab.json"
   
 # VERSION FÜR DEN SERVER 
 if (server) {
   # Arbeitsverzeichnis, Logdatei beschreiben
   setwd("/home/jan_eggers_hr_de/rscripts/")
   # Authentifizierung Google-Docs umbiegen
-  sheets_keypath <- "/home/jan_eggers_hr_de/key/scrapers-272317-4a60db8e6863.json"
-} 
+  sheets_keypath <- "/home/jan_eggers_hr_de/key/"
+} else {
+  # Etwas umständlich: Die Pfade zu den beiden Entwicklungs-Rechnern...
+  
+  # ...mein privater Laptop: 
+  if (dir.exists("D:/Nextcloud/hr-DDJ/projekte/covid-19")) {
+    setwd("D:/Nextcloud/hr-DDJ/projekte/covid-19")
+    sheets_keypath <- "D:/key/"
+  }  
+  
+  # ...mein Datenteam-Laptop im Sender: 
+  if (dir.exists("F:/projekte/covid-19")) {
+    setwd("F:/projekte/covid-19")
+    sheets_keypath <- "F:/creds/"
+  }  
+  
+    # Gibt es die Datei? 
+  if (!file.exists(paste0(sheets_keypath,sheets_filename))) { 
+    simpleError("Kein Keyfile!")
+  }
+}
 
 
 gs4_deauth() # Authentifizierung löschen
-gs4_auth(email=sheets_email,path=sheets_keypath)
+gs4_auth(email=sheets_email,path=paste0(sheets_keypath,sheets_filename))
 
 # ---- Start, RKI-Daten lesen, Hessen-Fälle filtern, Kopie schreiben ----
 
@@ -92,7 +111,7 @@ msg("\n\n-- START ",as.character(today())," --")
 # Vorbereitung: Index-Datei einlesen; enthält Kreise/AGS und Bevölkerungszahlen
 msg("Lies index/kreise-index-pop.xlsx","\n")
 # Jeweils aktuelle Bevölkerungszahlen; zuletzt aktualisiert Juli 2020
-kreise <- read.xlsx("index/kreise-index-pop-q1-2020.xlsx") %>%
+kreise <- read.xlsx("index/kreise-index-pop-2018.xlsx") %>%
   mutate(AGS = paste0("06",str_replace(AGS,"000","")))
 
 # RKI-Daten lesen und auf Hessen filtern
@@ -338,12 +357,12 @@ range_write(gsheet_id,as.data.frame(faelle_neu),
 # zu den 7 Tagen davor aus den korrigierten Daten nach Meldedatum. 
 
 
-# 7 Tage/Inzidenz - (Zeile 4)
+# Neufälle letzte 7 Tage - (Zeile 4)
+# **ACHTUNG** Berechnung nach Meldedatum, nicht aus den gemeldeten "Briefkastendaten" der Neufälle
 #range_write(gsheet_id,as.data.frame("letzte 7 Tage (pro 100.000)"),range="Basisdaten!A4")
 steigerung_7t=sum(f28_df$AnzahlFall[22:28])
 steigerung_7t_inzidenz <- round(steigerung_7t/sum(kreise$pop)*100000,1)
-range_write(gsheet_id,as.data.frame(str_replace(paste0(steigerung_7t,
-                                                       " (",steigerung_7t_inzidenz,")"),"\\.",",")),
+range_write(gsheet_id,as.data.frame(steigerung_7t),
             range="Basisdaten!B4", col_names = FALSE, reformat=FALSE)
 
 # Vergleich Vorwoche (Zeile 5)
@@ -361,18 +380,20 @@ if (steigerung_prozent_vorwoche < -50) # stark gefallen
 if (steigerung_prozent_vorwoche > 50) # stark gestiegen
   trend_string <- "<b style='color:#cc1a14'>&#9650;&#9650;</b><!--stark gestiegen-->"
 
-range_write(gsheet_id,as.data.frame(paste0(trend_string,
+range_write(gsheet_id,as.data.frame(paste0(steigerung_7t_vorwoche,
                                            " (",ifelse(steigerung_7t-steigerung_7t_vorwoche > 0,"+",""),
-                                           steigerung_7t - steigerung_7t_vorwoche,")")),
+                                           steigerung_7t - steigerung_7t_vorwoche,trend_string,")")),
             range="Basisdaten!B5", col_names = FALSE, reformat=FALSE)
 
 
-# Wachstumsrate (Zeile 6)
+# Wachstumsrate durch Inzidenz ersetzt
 # Durchschnitt der letzten 7 Steigerungsraten (in fall4w_df sind die letzten 4 Wochen)
-steigerung_prozent <- round(mean(fall4w_df$steigerung[22:28]) * 100,1)
-v_zeit <- round(log(2)/log(1+mean(fall4w_df$steigerung[22:28])),1)
+#steigerung_prozent <- round(mean(fall4w_df$steigerung[22:28]) * 100,1)
+#v_zeit <- round(log(2)/log(1+mean(fall4w_df$steigerung[22:28])),1)
 
-range_write(gsheet_id,as.data.frame(str_replace(paste0(steigerung_prozent," %"),"\\.",",")),
+# Inzidenz (Zeile 6)
+
+range_write(gsheet_id,as.data.frame(format(steigerung_7t_inzidenz,big.mark = ".",decimal.mark=",",nsmall=1)),
             range="Basisdaten!B6", col_names = FALSE, reformat=FALSE)
 
 # Gesamt (Zeile 7)
@@ -651,9 +672,9 @@ write_csv2(tote_df,"rki-tote.csv")
 range_write(gsheet_id,as.data.frame(as.character(heute)),sheet="AktiveAlter",range= "A1",col_names = FALSE)
 range_write(gsheet_id,as.data.frame(as.character(heute)),sheet="ToteAlter",range= "A1",col_names = FALSE)
 
-# ---- Anteile der Altersgruppen im zeitlichen Verlauf ----
+# ---- Wochensummen, Anteile der Altersgruppen im zeitlichen Verlauf ----
 # Wochensummen der Neufälle (gruppiert nach Meldedatum), aufgeschlüsselt nach Altersgruppe
-# Daraus errechnet: die prozentualen Anteile an den Neufä
+# Daraus errechnet: die prozentualen Anteile an den Neufällen
 
 
 # Der Tag, an dem die KW-Zählung begann

@@ -4,7 +4,7 @@
 # Erfahrungsgemäß dauert es ein oder zwei Stunden länger. 
 # 
 # 23.3. Till Hafermann, hr-Datenteam
-# zuletzt bearbeitet: 22.07.je
+# zuletzt bearbeitet: 15.09.je
 
 #------------------------------------------#
 #       Load required packages             #
@@ -48,17 +48,35 @@ if (length(args)!=0) {
   if(args[1] == "logfile") logfile <- "./logs/scrape-hsm.log"
 } 
 
-gs4_deauth() # Authentifizierung löschen
 
-###### VERSION FÜR DEN SERVER #####
+sheets_email <- "corona-rki-hmsi-googlesheets@corona-rki-hmsi-2727248702.iam.gserviceaccount.com"
+sheets_filename <- "corona-rki-hmsi-2727248702-d35af1e1baab.json"
+
+# VERSION FÜR DEN SERVER 
 if (server) {
-  setwd("/home/jan_eggers_hr_de/rscripts/") 
-  gs4_auth(email="googlesheets4@scrapers-272317.iam.gserviceaccount.com", 
-              path = "/home/jan_eggers_hr_de/key/scrapers-272317-4a60db8e6863.json")
+  # Arbeitsverzeichnis, Logdatei beschreiben
+  setwd("/home/jan_eggers_hr_de/rscripts/")
+  # Authentifizierung Google-Docs umbiegen
+  sheets_keypath <- "/home/jan_eggers_hr_de/key/"
 } else {
-  gs4_auth(email="googlesheets4@scrapers-272317.iam.gserviceaccount.com", 
-              path = "C:/Users/Jan/Documents/PythonScripts/creds/scrapers-272317-4a60db8e6863.json")
+  if (dir.exists("D:/Nextcloud/hr-DDJ/projekte/covid-19")) {
+    setwd("D:/Nextcloud/hr-DDJ/projekte/covid-19")
+    sheets_keypath <- "D:/key/"
+  }  
+  if (dir.exists("F:/projekte/covid-19")) {
+    setwd("F:/projekte/covid-19")
+    sheets_keypath <- "F:/creds/"
+  }  
+  
+  # Gibt es die Datei? 
+  if (!file.exists(paste0(sheets_keypath,sheets_filename))) { 
+    simpleError("Kein Keyfile!")
+  }
 }
+
+gs4_deauth() # Authentifizierung löschen
+gs4_auth(email=sheets_email,path=paste0(sheets_keypath,sheets_filename))
+
 msg("Google Credentials erfolgreich gesetzt\n")
 
 sheet_id <- "15hhqkeyKkwEXsd7qlt90QOfsxlQFUdoJbpT18EMlHo8"
@@ -138,10 +156,11 @@ while(ts < today()) {
   }
 }
 
-d_kreise <- d_kreise %>%
-  mutate(faelle_covid_aktuell = ifelse(faelle_covid_aktuell < faelle_covid_aktuell_beatmet,
-                                       faelle_covid_aktuell_beatmet,
-                                       faelle_covid_aktuell))
+# Ab und zu: Fehler in den Daten; mehr beatmete als Fälle. Korrekturanweisung. 
+# d_kreise <- d_kreise %>%
+#   mutate(faelle_covid_aktuell = ifelse(faelle_covid_aktuell < faelle_covid_aktuell_beatmet,
+#                                        faelle_covid_aktuell_beatmet,
+#                                        faelle_covid_aktuell))
 
 msg("Gelesen: DIVI-Tagesreport ",d_kreise$daten_stand[1],"\n")
 
@@ -158,29 +177,29 @@ states <- c("Schleswig-Holstein", "Hamburg", "Niedersachsen", "Bremen",
 
 d_beds <- d_kreise %>%
   # Prozentanteile Beatmete, Betten gesamt eintragen eintragen
-  mutate(resp_rel = 0, beds_total = 0) %>%
-  mutate(state = states[bundesland]) %>%
-  select(state, cases = 3, resp = 4, resp_rel, beds_occ="betten_belegt", 
-         beds_free = "betten_frei", beds_total) %>%
+  mutate(beatmet_anteil = 0, betten_gesamt = 0) %>%
+  mutate(bundesland = states[bundesland]) %>%
+  select(bundesland, faelle_covid_aktuell, beatmet = faelle_covid_aktuell_beatmet, beatmet_anteil, betten_belegt, 
+         betten_frei) %>%
   mutate(scraped = ts(now())) %>%
   # Nach Ländern aufsummieren
-  group_by(state) %>%
-  summarize(cases = sum(cases), 
-         resp = sum(resp),
-         resp_rel = round(sum(resp)/sum(cases)*100,1),
-         beds_occ = sum(beds_occ),
-         beds_free = sum(beds_free),
-         beds_total = sum(beds_occ+beds_free))
+  group_by(bundesland) %>%
+  summarize(faelle_covid_aktuell = sum(faelle_covid_aktuell), 
+         beatmet = sum(beatmet),
+         beatmet_anteil = ifelse(faelle_covid_aktuell > 0,round(sum(beatmet)/sum(faelle_covid_aktuell)*100,1),0),
+         betten_belegt = sum(betten_belegt),
+         betten_frei = sum(betten_frei),
+         betten_gesamt = sum(betten_belegt+betten_frei))
   
 # Summe berechnen, vornedranstellen, Länder (alphabetisch sortiert) hintendran klatschen
 d_beds <- rbind(
-  tibble(state="Deutschland",
-                 cases=sum(d_beds$cases),
-                 resp=sum(d_beds$resp),
-                 resp_rel = round(sum(d_beds$resp)/sum(d_beds$cases)*100,1),
-                 beds_occ = sum(d_beds$beds_occ),
-                 beds_free = sum(d_beds$beds_free),
-                 beds_total = sum(d_beds$beds_total)),
+  tibble(bundesland="Deutschland",
+                 faelle_covid_aktuell=sum(d_beds$faelle_covid_aktuell),
+                 beatmet=sum(d_beds$beatmet),
+                 beatmet_anteil = round(sum(d_beds$beatmet)/sum(d_beds$faelle_covid_aktuell)*100,1),
+                 betten_belegt = sum(d_beds$betten_belegt),
+                 betten_frei = sum(d_beds$betten_frei),
+                 betten_gesamt = sum(d_beds$betten_gesamt)),
               d_beds)
 
 
@@ -215,32 +234,28 @@ h_tbl <- d_tbl %>%
     filter(state == "Hessen")
 
 h_beds <- d_beds %>%
-    filter(state == "Hessen")
+    filter(bundesland == "Hessen")
 
 
 
 
 # format for dw table (https://datawrapper.dwcdn.net/7VKZD/3/)
 h_beds_dw <- tibble(text = c("Covid-19-Fälle in Behandlung", "davon beatmet", "betreibbare Intensivbetten", "davon belegte", "Anteil belegter Betten", dw_timestamp),
-                  zahlen = c(h_beds$cases, h_beds$resp, h_beds$beds_total, h_beds$beds_occ, round(h_beds$beds_occ/h_beds$beds_total * 100, 1), NA))
+                  zahlen = c(h_beds$faelle_covid_aktuell, h_beds$beatmet, h_beds$betten_gesamt, h_beds$betten_belegt, round(h_beds$betten_belegt/h_beds$betten_gesamt * 100, 1), NA))
 
 # format for pie or stacked bar chart (https://datawrapper.dwcdn.net/qHKhR/4/, https://datawrapper.dwcdn.net/cwnbs/1/)
 h_beds_dw2 <- tibble(Betten = c("frei", "belegt"),
-                     Deutschland = c(filter(d_beds, state == "Deutschland")$beds_free, filter(d_beds, state == "Deutschland")$beds_occ),
-                     Hessen = c(filter(d_beds, state == "Hessen")$beds_free, filter(d_beds, state == "Hessen")$beds_occ))
-
-# format for pie or stacked bar chart (https://datawrapper.dwcdn.net/qHKhR/4/, https://datawrapper.dwcdn.net/cwnbs/1/)
-h_beds_dw2 <- tibble(Betten = c("frei", "belegt"),
-                     Deutschland = c(filter(d_beds, state == "Deutschland")$beds_free, filter(d_beds, state == "Deutschland")$beds_occ),
-                     Hessen = c(filter(d_beds, state == "Hessen")$beds_free, filter(d_beds, state == "Hessen")$beds_occ))
+                     Deutschland = c(filter(d_beds, bundesland == "Deutschland")$betten_frei, filter(d_beds, bundesland == "Deutschland")$betten_belegt),
+                     Hessen = c(filter(d_beds, bundesland == "Hessen")$betten_frei, filter(d_beds, bundesland == "Hessen")$betten_belegt))
 
 d_beds_dw <- d_beds %>%
-    select(Land = state, Betten = beds_total, `davon belegt` = beds_occ) %>%
+    select(Land = bundesland, Betten = betten_gesamt, `davon belegt` = betten_belegt, `CoVID-Fälle` = faelle_covid_aktuell) %>%
     mutate(`in Prozent` = round(`davon belegt` / Betten * 100, 1))
+    
 
 h_beds_dw3 <- d_beds %>%
-    filter(state == "Hessen" | state == "Deutschland") %>%
-    select(` ` = state, Betten = beds_total, `davon belegt` = beds_occ) %>%
+    filter(bundesland == "Hessen" | bundesland == "Deutschland") %>%
+    select(` ` = bundesland, `CoVID-Fälle` = faelle_covid_aktuell, Betten = betten_gesamt, `davon belegt` = betten_belegt)  %>%
     mutate(`in Prozent` = round(`davon belegt` / Betten * 100, 1)) %>%
     arrange(desc(` `))
 
@@ -253,13 +268,13 @@ kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
 
 h_kreise_dw4 <- d_kreise %>%
   filter(bundesland == 6) %>% 
-  mutate(resp_rel = 0, beds_total = 0) %>%
-  select(AGS = gemeindeschluessel, cases = faelle_covid_aktuell, resp = faelle_covid_aktuell_beatmet, resp_rel, beds_occ="betten_belegt", 
-         beds_free = "betten_frei", beds_total) %>%
-  mutate(resp_rel = round(resp / cases * 100,0),
-         beds_total = beds_occ + beds_free,
-         beds_rel = round(beds_occ/beds_total*100,0)) %>%
-  mutate(scraped = ymd(today())) %>%
+  mutate(beatmet_anteil = 0, betten_gesamt = 0) %>%
+  select(AGS = gemeindeschluessel, faelle_covid_aktuell, beatmet = faelle_covid_aktuell_beatmet, beatmet_anteil, betten_belegt,
+         betten_frei, betten_gesamt) %>%
+  mutate(beatmet_anteil = round(beatmet / faelle_covid_aktuell * 100,0),
+         betten_gesamt = betten_frei + betten_gesamt,
+         belegungsquote = round(betten_belegt/betten_gesamt*100,0)) %>%
+  mutate(abgefragt = ymd(today())) %>%
   mutate(AGS = paste0("0",as.character(AGS))) %>%
   left_join(kreise,by = c("AGS" = "AGS"))
   
@@ -279,7 +294,7 @@ write.csv(h_beds, format(Sys.time(), "archiv/divi_he_beds_%Y%m%d_%H%M.csv"), fil
 write.csv(d_tbl, "./divi.csv", fileEncoding = "UTF-8", row.names = F)
 write.csv(d_beds, "./divi_beds.csv", fileEncoding = "UTF-8", row.names = F)
 write.csv(h_tbl, "./divi_he.csv", fileEncoding = "UTF-8", row.names = F)
-write.csv(h_beds, "./divi_he_beds.csv"), fileEncoding = "UTF-8", row.names = F)
+write.csv(h_beds, "./divi_he_beds.csv", fileEncoding = "UTF-8", row.names = F)
 
 
 

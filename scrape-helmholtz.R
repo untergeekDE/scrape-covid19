@@ -12,7 +12,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 10.6.2020 vormittags
+# Stand: 16.9.2020 vormittags
 
 library("rvest")
 library("tidyverse")
@@ -55,25 +55,45 @@ if (length(args)!=0) {
   if(args[1] == "logfile") logfile <- "./logs/scrape-hsm.log"
 } 
 
-gs4_email <- "googlesheets4@scrapers-272317.iam.gserviceaccount.com"
-gs4_keypath <- "C:/Users/Jan/Documents/PythonScripts/creds/scrapers-272317-4a60db8e6863.json"
+sheets_email <- "corona-rki-hmsi-googlesheets@corona-rki-hmsi-2727248702.iam.gserviceaccount.com"
+sheets_filename <- "corona-rki-hmsi-2727248702-d35af1e1baab.json"
 
-###### VERSION FÜR DEN SERVER #####
+# VERSION FÜR DEN SERVER 
 if (server) {
   # Arbeitsverzeichnis, Logdatei beschreiben
   setwd("/home/jan_eggers_hr_de/rscripts/")
   # Authentifizierung Google-Docs umbiegen
-  gs4_keypath <- "/home/jan_eggers_hr_de/key/scrapers-272317-4a60db8e6863.json"
-} 
+  sheets_keypath <- "/home/jan_eggers_hr_de/key/"
+} else {
+  # Etwas umständlich: Die Pfade zu den beiden Entwicklungs-Rechnern...
+  
+  # ...mein privater Laptop: 
+  if (dir.exists("D:/Nextcloud/hr-DDJ/projekte/covid-19")) {
+    setwd("D:/Nextcloud/hr-DDJ/projekte/covid-19")
+    sheets_keypath <- "D:/key/"
+  }  
+  
+  # ...mein Datenteam-Laptop im Sender: 
+  if (dir.exists("F:/projekte/covid-19")) {
+    setwd("F:/projekte/covid-19")
+    sheets_keypath <- "F:/creds/"
+  }  
+  
+  # Gibt es die Datei? 
+  if (!file.exists(paste0(sheets_keypath,sheets_filename))) { 
+    simpleError("Kein Keyfile!")
+  }
+}
 
 
 gs4_deauth() # Authentifizierung löschen
-gs4_auth(email=gs4_email,path=gs4_keypath)
+gs4_auth(email=sheets_email,path=paste0(sheets_keypath,sheets_filename))
 
 msg(as.character(now()),"-- scrape-helmholtz --")
 
 # Tabelle: "Corona-Fallzahlen-Hessen"
-id_fallzahl = "1OhMGQJXe2rbKg-kCccVNpAMc3yT2i3ubmCndf-zX0JU"
+#id_fallzahl = "1OhMGQJXe2rbKg-kCccVNpAMc3yT2i3ubmCndf-zX0JU"
+id_fallzahl = "17s82vieTzxblhzqNmHw814F0xWN0ruJkqnFB1OpameQ"
 
 # Vergleichsdaten vom Google Sheet: letztes gelesenes Datum
 fallzahl_df <- read_sheet(id_fallzahl,sheet ="rt-helmholtz")
@@ -87,8 +107,7 @@ this_date <- lastdate
 starttime <- now()
 
 msg("Lies CSV vom SECIR-Gitlab")
-while(lastdate == this_date)
-{
+while(lastdate == this_date) {
   brics_df <- read.csv(brics_url)
   # Manchmal enthält das Dokument Kontrollzeilen, die man daran erkennt, dass in Spalte date
   # kein gültiges Datum liegt. 
@@ -98,7 +117,12 @@ while(lastdate == this_date)
   # Neues Datum?
   if (this_date == lastdate){
     # Falls Startzeit schon mehr als 2 Stunden zurück: 
-    if (now() > starttime+7200) simpleError("Timeout")
+    if (now() > starttime+7200)
+      { 
+        simpleWarning("Timeout")
+        msg("Alte SECIR-Daten vom ",lastdate)
+        lastdate <- this_date-1               # wir tun als ob
+    }
     Sys.sleep(300)
   }
 }
@@ -150,7 +174,7 @@ sheet_write(rki_r_df,ss = id_fallzahl, sheet = "rt-rki")
 
 r_df <- rki_r_df %>%
   select(datum = datum_erkrankt, r_lo, r_hi) %>%
-  right_join(rt_df, by = c("datum" = "date")) %>%
+  full_join(rt_df, by = c("datum" = "date")) %>%
   select(datum,r_rki_lo = r_lo, r_rki_hi = r_hi,
          r_helmholtz_min = Min, 
          r_helmholtz_med = Med,

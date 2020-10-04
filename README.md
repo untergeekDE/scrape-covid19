@@ -58,6 +58,7 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 2.10.: Neue Inzidenz-Choropleth-Karte eingebaut (mit diskreten Farbabstufungen statt Gradienten); Google-Bucket-Kopie angepasst
 * 16.9.: R-Wert-Datumsbereich für RKI ausgeweitet, Fehler in einer (bislang nicht publizierten) DIVI-Tabelle korrigiert: Fälle statt Meldestellen; umgebaut auf neuen Google-Key 
 * 23.8.: Datenbasis für Inzidenzberechnung jetzt Bevölkerungsstatistik Stand Q1/2020; Berechnung der 7-Tage-Inzidenz nach Falldatenbank, nicht nach Meldungshistorie
 * 13.7.: Bis jetzt erfolgte der Aufruf über ein Shellskript; die Kopier-Befehle wurden jetzt in das Hauptskript übernommen und das Shellskript abgeschaltet. 

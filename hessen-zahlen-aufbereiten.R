@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 15.9.2020
+# Stand: 2.10.2020
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -749,7 +749,9 @@ dw_publish_chart(chart_id = "NrBYs") # Neufälle und Trend letzte 4 Wochen
 dw_publish_chart(chart_id = "jLkVj") # Neufälle je Woche seit März
 dw_publish_chart(chart_id = "k8nUv") # Flächengrafik
 dw_publish_chart(chart_id = "ALaUp") # Choropleth-Karte Fallinzidenz
-dw_publish_chart(chart_id = "nQY0P") # Choropleth 7-Tage-Dynamik
+#dw_publish_chart(chart_id = "nQY0P") # Choropleth 7-Tage-Dynamik 
+#nach dem Update problematisch; keine neue Version pushen!
+dw_publish_chart(chart_id = "m7sqt") # Choropleth 7-Tage-Dynamik mit DIV statt SVG  
 dw_publish_chart(chart_id = "XpbpH") # Aktive Fälle nach Alter und Geschlecht
 dw_publish_chart(chart_id = "JQobx") # Todesfälle nach Alter und Geschlecht
 dw_publish_chart(chart_id = "JQiOo") # Anteil der Altersgruppen an den Neufällen
@@ -765,15 +767,15 @@ dw_publish_chart(chart_id = "JQiOo") # Anteil der Altersgruppen an den Neufälle
 
 if (server) {
   # Google-Bucket befüllen
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/scrape-hsm.csv')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./Basisdaten.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./rki-alter.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./rki-tote.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./hessen_rki_df.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisFallzahl.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisGenesen.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisTote.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-store" cp ./KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/scrape-hsm.csv')
+  system('gsutil -h "Cache-Control:no-store" cp ./KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-store" cp ./Basisdaten.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-store" cp ./rki-alter.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-store" cp ./rki-tote.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-store" cp ./hessen_rki_df.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-store" cp ./ArchivKreisFallzahl.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-store" cp ./ArchivKreisGenesen.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-store" cp ./ArchivKreisTote.csv gs://d.data.gcp.cloud.hr.de/')
 }
 
 # CSV-Archivkopien von rki_he_df und kreise_summe_df anlegen

@@ -58,6 +58,7 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 2.11.: Update der Neufälle in 14-Tage-Prognose und der Intensivfälle in 4-Wochen-Prognose; Gesamtübersicht 7-Tage-Inzidenzen nach Kreis
 * 23.10.: Tageszahl Neufälle pro Kreis ergänzt
 * 2.10.: Neue Inzidenz-Choropleth-Karte eingebaut (mit diskreten Farbabstufungen statt Gradienten); Google-Bucket-Kopie angepasst
 * 16.9.: R-Wert-Datumsbereich für RKI ausgeweitet, Fehler in einer (bislang nicht publizierten) DIVI-Tabelle korrigiert: Fälle statt Meldestellen; umgebaut auf neuen Google-Key 

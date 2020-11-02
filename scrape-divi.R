@@ -4,7 +4,7 @@
 # Erfahrungsgemäß dauert es ein oder zwei Stunden länger. 
 # 
 # 23.3. Till Hafermann, hr-Datenteam
-# zuletzt bearbeitet: 15.09.je
+# zuletzt bearbeitet: 19.10.je
 
 #------------------------------------------#
 #       Load required packages             #
@@ -180,8 +180,8 @@ d_beds <- d_kreise %>%
   mutate(beatmet_anteil = 0, betten_gesamt = 0) %>%
   mutate(bundesland = states[bundesland]) %>%
   select(bundesland, faelle_covid_aktuell, beatmet = faelle_covid_aktuell_beatmet, beatmet_anteil, betten_belegt, 
-         betten_frei) %>%
-  mutate(scraped = ts(now())) %>%
+         betten_frei,daten_stand) %>%
+  mutate(scraped = daten_stand) %>%
   # Nach Ländern aufsummieren
   group_by(bundesland) %>%
   summarize(faelle_covid_aktuell = sum(faelle_covid_aktuell), 
@@ -189,7 +189,8 @@ d_beds <- d_kreise %>%
          beatmet_anteil = ifelse(faelle_covid_aktuell > 0,round(sum(beatmet)/sum(faelle_covid_aktuell)*100,1),0),
          betten_belegt = sum(betten_belegt),
          betten_frei = sum(betten_frei),
-         betten_gesamt = sum(betten_belegt+betten_frei))
+         betten_gesamt = sum(betten_belegt+betten_frei),
+         scraped = as_date(max(scraped)))
   
 # Summe berechnen, vornedranstellen, Länder (alphabetisch sortiert) hintendran klatschen
 d_beds <- rbind(
@@ -199,7 +200,8 @@ d_beds <- rbind(
                  beatmet_anteil = round(sum(d_beds$beatmet)/sum(d_beds$faelle_covid_aktuell)*100,1),
                  betten_belegt = sum(d_beds$betten_belegt),
                  betten_frei = sum(d_beds$betten_frei),
-                 betten_gesamt = sum(d_beds$betten_gesamt)),
+                 betten_gesamt = sum(d_beds$betten_gesamt),
+                 scraped = as_date(max(d_beds$scraped))),
               d_beds)
 
 
@@ -256,7 +258,7 @@ d_beds_dw <- d_beds %>%
 h_beds_dw3 <- d_beds %>%
     filter(bundesland == "Hessen" | bundesland == "Deutschland") %>%
     select(` ` = bundesland, `CoVID-Fälle` = faelle_covid_aktuell, Betten = betten_gesamt, `davon belegt` = betten_belegt)  %>%
-    mutate(`in Prozent` = round(`davon belegt` / Betten * 100, 1)) %>%
+    mutate(Auslastung = round(`davon belegt` / Betten * 100, 1)) %>%
     arrange(desc(` `))
 
 
@@ -272,11 +274,54 @@ h_kreise_dw4 <- d_kreise %>%
   select(AGS = gemeindeschluessel, faelle_covid_aktuell, beatmet = faelle_covid_aktuell_beatmet, beatmet_anteil, betten_belegt,
          betten_frei, betten_gesamt) %>%
   mutate(beatmet_anteil = round(beatmet / faelle_covid_aktuell * 100,0),
-         betten_gesamt = betten_frei + betten_gesamt,
-         belegungsquote = round(betten_belegt/betten_gesamt*100,0)) %>%
+         betten_gesamt = betten_frei + betten_belegt) %>%
+  mutate(belegungsquote = round(betten_belegt/betten_gesamt*100,0)) %>%
   mutate(abgefragt = ymd(today())) %>%
   mutate(AGS = paste0("0",as.character(AGS))) %>%
   left_join(kreise,by = c("AGS" = "AGS"))
+
+
+# ---- Daten für Prognose aktualisieren - nur die DIVI-Daten
+
+# DIVI-freie Betten - Hypothese: maximale Kapazität entspricht
+# der Anzahl der derzeit freien Betten plus der COVID-Intensivfälle
+
+# Kapazitätsprognose: 
+max_beds <- h_beds$faelle_covid_aktuell+h_beds$betten_frei
+
+prognose_df <- read_sheet(ss="12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4","ICUPrognose") %>%
+  select(-intensiv,-`ungefähre derzeitige Kapazität`)
+
+icu_df <- read_sheet(ss=sheet_id,sheet="icu_hessen_archive") %>%
+  select(datum = 1,intensiv = 2) %>%
+  mutate(datum = as_date(datum))
+  
+if (h_beds$scraped %in% icu_df$datum) {
+  icu_df$intensiv[icu_df$datum == h_beds$scraped] <-h_beds$faelle_covid_aktuell 
+} else {
+  t_df = data.frame(h_beds$scraped,h_beds$faelle_covid_aktuell)
+  names(t_df) = c("datum","intensiv")
+  icu_df <- rbind(icu_df,t_df)
+}
+
+write_sheet(icu_df,ss=sheet_id,sheet="icu_hessen_archive")
+
+
+  icu_df <- icu_df %>%
+  full_join(prognose_df,by = c("datum" = "datum")) %>%
+  arrange(datum) %>%
+  #letzte 4 Wochen
+  filter(datum > today()-29) %>%
+  # nächste 14 Tage
+  filter(datum < today()+29) %>%
+  mutate(kapazitaet = max_beds) %>%
+  select(1,2,3,4,5,`ungefähre derzeitige Kapazität` = kapazitaet)
+
+icu
+
+
+write_sheet(icu_df,ss="12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4","ICUPrognose")
+
   
   
 #------------------------------------------#
@@ -295,6 +340,7 @@ write.csv(d_tbl, "./divi.csv", fileEncoding = "UTF-8", row.names = F)
 write.csv(d_beds, "./divi_beds.csv", fileEncoding = "UTF-8", row.names = F)
 write.csv(h_tbl, "./divi_he.csv", fileEncoding = "UTF-8", row.names = F)
 write.csv(h_beds, "./divi_he_beds.csv", fileEncoding = "UTF-8", row.names = F)
+write.csv(h_kreise_dw4,"./divi_he_kreise.csv", fileEncoding = "UTF-8", row.names = F)
 
 
 
@@ -325,7 +371,8 @@ if (server) {
   system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./divi_he.csv gs://d.data.gcp.cloud.hr.de/')
   system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./divi_beds.csv gs://d.data.gcp.cloud.hr.de/')
   system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./divi_he_beds.csv gs://d.data.gcp.cloud.hr.de/')
-}  
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./divi_he_kreise.csv gs://d.data.gcp.cloud.hr.de/')
+  }  
 
 # ---- Alles OK, melde dich ab ----
 msg("OK!")

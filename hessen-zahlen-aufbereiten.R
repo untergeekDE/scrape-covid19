@@ -25,8 +25,14 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 23.10.2020
-
+# Stand: 2.11.2020 -- BETA mit Code für Prognose-Update
+#
+# TODO: 
+# - 4-Wochen-Fallzahlen mit korrigierten Daten rechnen
+# - Inzidenz nur über 60-Jährige?
+# t() der Archivdateien
+# Vorbereitung Heatmap
+# Import Prognose anpassen
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 library(dplyr)
@@ -111,7 +117,7 @@ msg("\n\n-- START ",as.character(today())," --")
 # Vorbereitung: Index-Datei einlesen; enthält Kreise/AGS und Bevölkerungszahlen
 msg("Lies index/kreise-index-pop.xlsx","\n")
 # Jeweils aktuelle Bevölkerungszahlen; zuletzt aktualisiert Juli 2020
-kreise <- read.xlsx("index/kreise-index-pop-2018.xlsx") %>%
+kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
   mutate(AGS = paste0("06",str_replace(AGS,"000","")))
 
 # RKI-Daten lesen und auf Hessen filtern
@@ -425,6 +431,69 @@ range_write(gsheet_id,as.data.frame(tote_gesamt),
             range="Basisdaten!B11",
             col_names = FALSE,reformat=FALSE)
 
+# ---- Update des Prognose-Sheets auf der Klinik-Seite
+
+prog_d <- ymd("2020-10-28")
+
+sim_df <- read_csv(paste0("daten/hessen_cosim-",prog_d,".csv")) %>%
+  select(-state) %>%
+  mutate(vom = prog_d) 
+
+sim_df$var <- as.factor(sim_df$var)
+
+
+daily_df <- sim_df %>%
+  filter(var == "DAILY_CASES" ) %>%
+  # gleitendes 7-Tage-Mittel
+  mutate(neu7_min  = (lag(minsim)+
+                        lag(minsim,n=2)+
+                        lag(minsim,n=3)+
+                        lag(minsim,n=4)+
+                        lag(minsim,n=5)+
+                        lag(minsim,n=6)+
+                        minsim)/7) %>%
+  mutate(neu7_mean  = (lag(meansim)+
+                         lag(meansim,n=2)+
+                         lag(meansim,n=3)+
+                         lag(meansim,n=4)+
+                         lag(meansim,n=5)+
+                         lag(meansim,n=6)+
+                         meansim)/7) %>%
+  mutate(neu7_max  = (lag(maxsim)+
+                        lag(maxsim,n=2)+
+                        lag(maxsim,n=3)+
+                        lag(maxsim,n=4)+
+                        lag(maxsim,n=5)+
+                        lag(maxsim,n=6)+
+                        maxsim)/7) %>%
+  filter(date >= prog_d) %>%
+  select(date,neu7_min, neu7_mean, neu7_max)
+
+# ---- Daten ausgeben ----
+
+# Google Sheet mit Krankenhausdaten
+
+p_str <- paste0("Prognose vom ",day(prog_d),".",month(prog_d),".")
+
+id = "12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4"
+
+
+# Prognosen dranhängen
+
+prognose_df <- fall4w_df %>%
+  select(datum,neu,neu7tagemittel) %>%
+  full_join(daily_df, by = c("datum" = "date")) %>%
+  # Prognose zwei Wochen in die Zukunft
+  filter(datum < today()+15) %>%
+  select(datum,neu,neu7tagemittel,min = neu7_min, neu7_mean, max = neu7_max) %>%
+  rename(!!p_str:=neu7_mean)
+
+
+# In Sheet "NeuPrognose" ausgeben
+
+write_sheet(prognose_df,ss=id,sheet="NeuPrognose")  
+
+
 # ---- Aufbereitung nach Kreisen ----
 
 # Das letzte Kreis-Dokument ziehen und die Notizen isolieren
@@ -567,6 +636,48 @@ write_sheet(kreise_summe_df,ss=gsheet_id,sheet="KreisdatenAktuell")
 write_csv2(kreise_summe_df,"KreisdatenAktuell.csv")
 
 msg("Kreisdaten geschrieben.")         
+
+# ---- Überblick erstellen: Archivdaten 7-Tage-Inzidenzen nach Kreis seit 15.8.
+
+# Daten für Hessen nach Kreis und Datum pivotieren
+hessen_neu_df <- rki_he_df %>%
+  filter(NeuerFall %in% c(0,1)) %>%
+  select(Meldedatum,AGS = IdLandkreis,AnzahlFall) %>%
+  group_by(AGS, Meldedatum) %>%
+  summarize(Neu = sum(AnzahlFall)) %>%
+  pivot_wider(names_from = AGS,values_from=Neu,values_fill = list(Neu = 0)) %>%
+  arrange(Meldedatum)
+
+# Leeres Dataframe anlegen
+hsum_df <- hessen_neu_df
+
+# Spalten von Integer in Double  umwandeln
+hsum_df[,2:27] <- sapply(hsum_df[,2:27],as.numeric)
+
+# Für alle 26 Kreise: 
+for ( k in 2:27){
+  # Bevölkerung aus der Kreis-Tabelle ziehen, via AGS
+  p <- kreise$pop[kreise$AGS == colnames(hessen_neu_df[,k])]
+  # Kopiere aus hessen_df eine gleitende 7-Tage-Summe und berechne die Inzidenz
+  # Stumpfer Algorithmus ohne jede Raffinesse, dauert entsprechend lang
+  for (i in 8:nrow(hessen_neu_df)){
+    hsum_df[i,k] <- round(sum(hessen_neu_df[(i-6):i,k])/p*100000,1)
+  }
+}
+
+# Kreisnamen als Spaltenköpfe
+k <- kreise %>%
+  arrange(AGS)
+  
+colnames(hsum_df) <- c("Datum",k$kreis)
+
+# Datum auf Datumsspalte
+
+hsum_df$Datum <- as_date(hsum_df$Datum)
+
+# Als Excel-Blatt exportieren
+write_sheet(hsum_df,ss=gsheet_id,sheet="ArchivKreisInzidenz")
+write_csv2(hsum_df,"ArchivKreisInzidenz.csv")
 
 # ---- Archivdaten in die GSheets ArchivKreisFallzahl, (...Tote, ...Genesen) -----
 archiv_df <- kreise_summe_df %>% select(ags_kreis, gesamt) %>%
@@ -766,7 +877,8 @@ dw_publish_chart(chart_id = "nQY0P") # Choropleth 7-Tage-Dynamik
 dw_publish_chart(chart_id = "XpbpH") # Aktive Fälle nach Alter und Geschlecht
 dw_publish_chart(chart_id = "JQobx") # Todesfälle nach Alter und Geschlecht
 dw_publish_chart(chart_id = "JQiOo") # Anteil der Altersgruppen an den Neufällen
-
+#
+dw_publish_chart(chart_id = "8eMAz") # Liniengrafik Inzidenz nach Kreisen für Dirk Kunze
 
 # Kein Update DIVI-Scraper
 # Kein Update dieser Grafiken: 
@@ -787,6 +899,7 @@ if (server) {
   system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisFallzahl.csv gs://d.data.gcp.cloud.hr.de/')
   system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisGenesen.csv gs://d.data.gcp.cloud.hr.de/')
   system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisTote.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisInzidenz.csv gs://d.data.gcp.cloud.hr.de/')
 }
 
 # CSV-Archivkopien von rki_he_df und kreise_summe_df anlegen

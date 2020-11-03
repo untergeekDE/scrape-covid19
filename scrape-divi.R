@@ -4,7 +4,7 @@
 # Erfahrungsgemäß dauert es ein oder zwei Stunden länger. 
 # 
 # 23.3. Till Hafermann, hr-Datenteam
-# zuletzt bearbeitet: 19.10.je
+# zuletzt bearbeitet: 3.11.je - BETA-Fortschreibung der ICU-Daten für die Prognose
 
 #------------------------------------------#
 #       Load required packages             #
@@ -316,8 +316,6 @@ write_sheet(icu_df,ss=sheet_id,sheet="icu_hessen_archive")
   filter(datum < today()+29) %>%
   mutate(kapazitaet = max_beds) %>%
   select(1,2,3,4,5,`ungefähre derzeitige Kapazität` = kapazitaet)
-
-icu
 
 
 write_sheet(icu_df,ss="12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4","ICUPrognose")

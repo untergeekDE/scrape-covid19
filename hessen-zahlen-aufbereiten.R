@@ -25,8 +25,8 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 2.11.2020 -- BETA mit Code für Prognose-Update
-#
+# Stand: 16.11.2020
+
 # TODO: 
 # - 4-Wochen-Fallzahlen mit korrigierten Daten rechnen
 # - Inzidenz nur über 60-Jährige?
@@ -433,9 +433,10 @@ range_write(gsheet_id,as.data.frame(tote_gesamt),
 
 # ---- Update des Prognose-Sheets auf der Klinik-Seite
 
-prog_d <- ymd("2020-10-28")
+prog_d <- ymd("2020-11-13")
 
 sim_df <- read_csv(paste0("daten/hessen_cosim-",prog_d,".csv")) %>%
+  filter(state =="Hessen") %>%
   select(-state) %>%
   mutate(vom = prog_d) 
 
@@ -469,7 +470,7 @@ daily_df <- sim_df %>%
   filter(date >= prog_d) %>%
   select(date,neu7_min, neu7_mean, neu7_max)
 
-# ---- Daten ausgeben ----
+# ---- Prognose-Daten ergänzen ----
 
 # Google Sheet mit Krankenhausdaten
 
@@ -485,8 +486,20 @@ prognose_df <- fall4w_df %>%
   full_join(daily_df, by = c("datum" = "date")) %>%
   # Prognose zwei Wochen in die Zukunft
   filter(datum < today()+15) %>%
-  select(datum,neu,neu7tagemittel,min = neu7_min, neu7_mean, max = neu7_max) %>%
-  rename(!!p_str:=neu7_mean)
+  select(datum,neu,neu7tagemittel,min = neu7_min, mean=neu7_mean, max = neu7_max) 
+
+# Früher: rename(!!p_str:=neu7_mean), das hat aber den Nachteil, dass man in Datawrapper
+# die Gestaltung der Zeile von Hand umkonfigurieren muss. 
+# Besser: Über die API die entsprechende Datenreihe umbenennen. 
+
+prog_chart_id = "g2CwK"
+chart_data <- dw_retrieve_chart_metadata(prog_chart_id)
+chart_data_changes <- chart_data$content$metadata$data$changes
+# Das hier ist total nicht stabil: Ändert das 3. Element in der Liste der Änderungen. 
+# Wenn ich flüssiger mit R-Listen wäre, würde ich das entsprechende Element raussuchen. 
+chart_data$content$metadata$data$changes[3][[1]]$value <- p_str # "Prognose vom... " als Zeilenkopf eintragen
+dw_edit_chart(prog_chart_id,data = chart_data$content$metadata$data)
+
 
 
 # In Sheet "NeuPrognose" ausgeben
@@ -556,7 +569,7 @@ kreise_summe_df <- rki_he_df %>%
          GenesenProz,
          AktivProz)
 
-# --- Neufälle letzte vier Wochen, SVG-Grafik ---
+# ---- Neufälle letzte vier Wochen, SVG-Grafik ----
 
 f28_21_df <- rki_he_df %>%
   mutate(datum = as_date(Meldedatum)) %>%
@@ -598,11 +611,18 @@ f14_7_df <- rki_he_df %>%
   summarize(AnzahlFall = sum(AnzahlFall)) %>%
   select(AGS,f14_7 = AnzahlFall)
 
+# Die heute gemeldeten(!) Neufälle
+# Nicht nach dem Meldedatum gefiltert, sondern nach dem Publikationsdatum - 
+# mithilfe der Neufall-Filter - und das aus einem gewichtigen Grund: 
+# Mitunter melden Kreise dem RKI Fälle mit dem falschen Daten; das führt dann
+# zu null Fällen unter dem heutigen Meldedatum. Mit dem nächsten Tag werden
+# die Fälle korrigiert - und so tauchen die nachgemeldeten Fälle wenigstens
+# einmal auf. 
 f_1_df <- rki_he_df %>%
   mutate(datum = as_date(Meldedatum)) %>%
-  filter(datum == heute-1) %>%
+#  filter(datum == heute-1) %>%
   # Auf die Summen filtern?
-  filter(NeuerFall %in% c(0,1)) %>%
+  filter(NeuerFall %in% c(-1,1)) %>%
   select(AGS = IdLandkreis,AnzahlFall) %>%
   # Nach Kreis sortieren
   group_by(AGS) %>%
@@ -637,7 +657,7 @@ write_csv2(kreise_summe_df,"KreisdatenAktuell.csv")
 
 msg("Kreisdaten geschrieben.")         
 
-# ---- Überblick erstellen: Archivdaten 7-Tage-Inzidenzen nach Kreis seit 15.8.
+#---- Überblick erstellen: Archivdaten 7-Tage-Inzidenzen nach Kreis ----
 
 # Daten für Hessen nach Kreis und Datum pivotieren
 hessen_neu_df <- rki_he_df %>%
@@ -873,12 +893,13 @@ dw_publish_chart(chart_id = "NrBYs") # Neufälle und Trend letzte 4 Wochen
 dw_publish_chart(chart_id = "jLkVj") # Neufälle je Woche seit März
 dw_publish_chart(chart_id = "k8nUv") # Flächengrafik
 dw_publish_chart(chart_id = "ALaUp") # Choropleth-Karte Fallinzidenz
-dw_publish_chart(chart_id = "nQY0P") # Choropleth 7-Tage-Dynamik
+dw_publish_chart(chart_id = "m7sqt") # Choropleth 7-Tage-Dynamik
 dw_publish_chart(chart_id = "XpbpH") # Aktive Fälle nach Alter und Geschlecht
 dw_publish_chart(chart_id = "JQobx") # Todesfälle nach Alter und Geschlecht
 dw_publish_chart(chart_id = "JQiOo") # Anteil der Altersgruppen an den Neufällen
 #
 dw_publish_chart(chart_id = "8eMAz") # Liniengrafik Inzidenz nach Kreisen für Dirk Kunze
+#dw_publish_chart(chart_id = "g2CwK") # 14-Tage-Prognose Neufälle
 
 # Kein Update DIVI-Scraper
 # Kein Update dieser Grafiken: 

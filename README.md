@@ -58,6 +58,9 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 21.11.: Rekursive Abfrage der RKI-Daten auf Schleife umgestellt, um Speichercrash zu vermeiden
+* 20.11.: Abfrage und Aktualisierung der Passanten-Daten von hystreet.com für die hessischen Stationen; Passanten-Index
+* 19.11.: Einlesen der Keys, Libraries, Messaging-Funktion über GoogleSheets in eine Include-Datei namens server-msg-googlesheet-include.R verlagert
 * 2.11.: Update der Neufälle in 14-Tage-Prognose und der Intensivfälle in 4-Wochen-Prognose; Gesamtübersicht 7-Tage-Inzidenzen nach Kreis
 * 23.10.: Tageszahl Neufälle pro Kreis ergänzt
 * 2.10.: Neue Inzidenz-Choropleth-Karte eingebaut (mit diskreten Farbabstufungen statt Gradienten); Google-Bucket-Kopie angepasst

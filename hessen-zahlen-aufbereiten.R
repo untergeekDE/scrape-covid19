@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 16.11.2020
+# Stand: 19.11.2020
 
 # TODO: 
 # - 4-Wochen-Fallzahlen mit korrigierten Daten rechnen
@@ -35,80 +35,21 @@
 # Import Prognose anpassen
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
-library(dplyr)
-library(stringr)
-library(readr)
-library(tidyr)
-library(openxlsx)
-library(googlesheets4) #v0.2.0 - viele Änderungen
-library(lubridate)
-library(DatawRappr)
-library(jsonlite)
-
 # Alles weg, was noch im Speicher rumliegt
 rm(list=ls())
 
-# Init-Werte fürs Logging, das Arbeitsverzeichnis und die Keyfile-Auswahl
-server <- FALSE
+# Definiere Messaging, Server-Parameter, RKI-Lese-Funktion
+# Im WD, bitte!
 
-# Logging und Update der Semaphore-Seite
-id_msg <- "1Q5rCvvSUn6WGcsCnKwGJ0y9PwbiML-34kyxYSYX2Qjk"
-logfile <- ""
-
-msg <- function(x,...) {
-  print(paste0(x,...))
-  # Zeitstempel in B12, Statuszeile in C12
-  d <- data.frame(b = now(tzone= "CEST"), c = paste0(x,...))
-  range_write(id_msg,d,sheet="Tabellenblatt1",
-              range="B12:C12",col_names = FALSE,reformat=FALSE)
-  if (server) Sys.sleep(5)     # Skript ein wenig runterbremsen wegen Quota
-  if (logfile != "") {
-    cat(x,...,file = logfile, append = TRUE)
-  }
-}
-
-# Argumente werden in einem String-Vektor namens args übergeben,
-# wenn ein Argument übergeben wurde, dort suchen, sonst Unterverzeichnis "src"
-
-args = commandArgs(trailingOnly = TRUE)
-if (length(args)!=0) { 
-  server <- args[1] %in% c("server","logfile")
-  if(args[1] == "logfile") logfile <- "./logs/hessen.log"
-} 
-
-sheets_email <- "corona-rki-hmsi-googlesheets@corona-rki-hmsi-2727248702.iam.gserviceaccount.com"
-sheets_filename <- "corona-rki-hmsi-2727248702-d35af1e1baab.json"
-  
-# VERSION FÜR DEN SERVER 
-if (server) {
-  # Arbeitsverzeichnis, Logdatei beschreiben
-  setwd("/home/jan_eggers_hr_de/rscripts/")
-  # Authentifizierung Google-Docs umbiegen
-  sheets_keypath <- "/home/jan_eggers_hr_de/key/"
+if (file.exists("./server-msg-googlesheet-include.R")) {
+  source("./server-msg-googlesheet-include.R")
 } else {
-  # Etwas umständlich: Die Pfade zu den beiden Entwicklungs-Rechnern...
-  
-  # ...mein privater Laptop: 
-  if (dir.exists("D:/Nextcloud/hr-DDJ/projekte/covid-19")) {
-    setwd("D:/Nextcloud/hr-DDJ/projekte/covid-19")
-    sheets_keypath <- "D:/key/"
-  }  
-  
-  # ...mein Datenteam-Laptop im Sender: 
-  if (dir.exists("F:/projekte/covid-19")) {
-    setwd("F:/projekte/covid-19")
-    sheets_keypath <- "F:/creds/"
-  }  
-  
-    # Gibt es die Datei? 
-  if (!file.exists(paste0(sheets_keypath,sheets_filename))) { 
-    simpleError("Kein Keyfile!")
-  }
+  source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
 }
 
+library(hystReet) # Zugriff auf Hystreet-Passantendaten
 
-gs4_deauth() # Authentifizierung löschen
-gs4_auth(email=sheets_email,path=paste0(sheets_keypath,sheets_filename))
+
 
 # ---- Start, RKI-Daten lesen, Hessen-Fälle filtern, Kopie schreiben ----
 
@@ -125,69 +66,6 @@ kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
 
 # rki_df anlegen, damit er sie als globale Variable kennt
 rki_df <- data.frame(2,2)
-
-read_rki_data <- function(use_json = TRUE) {
-  if (use_json) {
-
-  # JSON-Abfrage-Code von Till (danke!)
-  rki_json_link <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/RKI_COVID19/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json"
-  
-  # Muss in Stückchen gelesen werden, weil per JSON nicht mehr als 5000 Datensätze zurückgegeben werden
-    rekursiver_offset <- function(alte_faelle = NULL, offset = 0){
-      neuer_rki_link = str_c(rki_json_link, "&resultOffset=", offset)
-      neue_liste = read_json(neuer_rki_link, simplifyVector = TRUE)
-      neue_faelle = neue_liste$features$attributes
-  
-      if(is.null(alte_faelle)){
-        alle_faelle = neue_faelle
-      } else{
-        alle_faelle = bind_rows(alte_faelle, neue_faelle) 
-      }
-    
-      if(is.null(neue_faelle)){
-        return(alle_faelle)
-      
-      } else {
-        neuer_offset = as.integer(offset + nrow(neue_faelle)) # as.integer() vermeidet einen Bug, bei dem die Zahl 100000 als "1e+05" übergeben wird.
-        return(rekursiver_offset(alle_faelle, neuer_offset))        
-      }
-    
-    } # function rekursiver_offset
-  
-    rki_ = rekursiver_offset()
-  
-  # Datumsspalten in solche umwandeln
-  # Die Spalten "Meldedatum" und "Refdatum" sind in UTC-Millisekunden(!) angegeben.
-  
-    rki_ <- rki_ %>%
-      mutate(Meldedatum = as_datetime(Meldedatum/1000, origin = lubridate::origin, tz = "UTC"),
-             Refdatum = as_datetime(Refdatum/1000, origin = lubridate::origin, tz = "UTC"))
-
-    rki_$Datenstand <- as_date(dmy_hm(rki_$Datenstand))
-
-  } else {
-  # use_json == FALSE
-    rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"  
-    ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
-    rki_ = read.csv(url(rki_url)) 
-    if (ncol(rki_)> 17 & nrow(rki_) > 100000) {
-      msg("Daten erfolgreich vom RKI-CSV gelesen")
-    } else {
-    # Rückfall: Aus dem NDR-Data-Warehouse holen
-      rki_ = read.csv(url(ndr_url))
-    msg("Daten erfolgreich aus dem NDR Data Warehouse gelesen")
-    }
-  }
-  # Sollte die Spalte mit der Landkreis kein String sein, umwandeln und mit führender 0 versehen
-  if(class(rki_$IdLandkreis) != "character") {
-    rki_$IdLandkreis <- paste0("0",rki_$IdLandkreis)
-  }
-  # Wenn 'Datenstand' ein String ist, in ein Datum umwandeln. Sonst das Datum nutzen. 
-  if (class(rki_$Datenstand) == "character") {
-    rki_$Datenstand <- parse_date(rki_$Datenstand[1],format = "%d.%m.%y%H, %M:%S Uhr")
-  }
-  return(rki_)
-}
 
 # Daten lesen; wenn noch Daten von gestern, warten. 
 use_json <- TRUE
@@ -431,11 +309,11 @@ range_write(gsheet_id,as.data.frame(tote_gesamt),
             range="Basisdaten!B11",
             col_names = FALSE,reformat=FALSE)
 
-# ---- Update des Prognose-Sheets auf der Klinik-Seite
+# ---- Update des Prognose-Sheets auf der Hospitalisierungen-Seite ----
 
-prog_d <- ymd("2020-11-13")
+prog_d <- ymd("2020-11-18")
 
-sim_df <- read_csv(paste0("daten/hessen_cosim-",prog_d,".csv")) %>%
+sim_df <- read_csv(paste0("daten/cosim-Hessen-",prog_d,".csv")) %>%
   filter(state =="Hessen") %>%
   select(-state) %>%
   mutate(vom = prog_d) 
@@ -506,6 +384,121 @@ dw_edit_chart(prog_chart_id,data = chart_data$content$metadata$data)
 
 write_sheet(prognose_df,ss=id,sheet="NeuPrognose")  
 
+# ---- Passanten in den Fußgängerzonen ----
+
+# Hystreet API Token lesen
+tag0 <- ymd("2019-12-30")
+if (server) {
+  token <- read_lines("/home/jan_eggers_hr_de/key/.hystreettoken")
+} else {
+  token <- read_lines(".hystreettoken")
+}
+set_hystreet_token(token)
+
+# Lies die verfügbaren Messstationen
+stations <- get_hystreet_locations()
+msg(nrow(stations)," Hystreet-Stationen gefunden")
+
+# Helper: Download data from Feb. 1st until given date for given station
+get_station_data <- function(id, date){
+  data = get_hystreet_station_data(
+    hystreetId = id,
+    query = list(from = "2020-02-01", to = date, resolution = "day")
+  )
+  
+  ret = data[["measurements"]] %>%
+    mutate(id = data[["id"]],
+           city = data[["city"]],
+           station = data[["name"]],
+           label = paste0(city, ", ", station)) %>%
+    select(id, city, station, label, timestamp,
+           weather_condition, temperature, min_temperature,
+           pedestrians_count)
+  
+  return(ret)
+}
+
+# Collect data for every station available
+# Filter out today. Why not collect only until yesterday?
+# -> Data for last day
+# in request seems weird
+all_data <- lapply(stations$id, function(x){
+  get_station_data(x, today())
+}) %>% bind_rows %>%
+  filter(timestamp != today())
+
+# Pivot for datawrapper
+data_by_city <- all_data %>%
+  pivot_wider(id_cols = timestamp, names_from = label, values_from = c(pedestrians_count,weather_condition)) %>%
+  mutate(week = isoweek(timestamp))
+
+# Summiere Städte auf, dann: 
+# Kalkuliere Wochenmittel und prozentuale Veränderung zu Referenzwoche
+
+reference_week = 38 # KW38 war Mitte September 
+
+data_for_dw_weeks <- data_by_city %>%
+  # Nur Wochentage!
+  filter(wday(timestamp) %in% 2:6) %>%
+  mutate(Frankfurt = `pedestrians_count_Frankfurt a.M., Goethestraße`+
+           `pedestrians_count_Frankfurt a.M., Zeil (Mitte)` +
+           `pedestrians_count_Frankfurt a.M., Große Bockenheimer Straße`,
+         Frankfurt_Wetter = `weather_condition_Frankfurt a.M., Zeil (Mitte)`) %>%
+  mutate(Limburg = `pedestrians_count_Limburg, Werner-Senger-Straße`,
+         Limburg_Wetter = `weather_condition_Limburg, Werner-Senger-Straße`) %>%
+  # Für wiesbaden nur den Zähler in Mitte; den in der Kirchgasse Nord
+  # gab es erst ab Anfang April. Vermutung: Das schafft Probleme!
+  mutate(Wiesbaden = `pedestrians_count_Wiesbaden, Kirchgasse (Mitte)`,
+         Wiesbaden_Wetter = `weather_condition_Wiesbaden, Kirchgasse (Mitte)`) %>%
+  mutate(Darmstadt = `pedestrians_count_Darmstadt, Schuchardstraße`+
+           `pedestrians_count_Darmstadt, Ernst-Ludwig-Straße`,
+         Darmstadt_Wetter = `weather_condition_Darmstadt, Schuchardstraße`) %>%
+  mutate(Gießen = `pedestrians_count_Gießen, Seltersweg`,
+         Gießen_Wetter = `weather_condition_Gießen, Seltersweg`) %>%
+  # Erst mal ohne Wetter
+  select(timestamp,week,
+         Darmstadt, Darmstadt_Wetter,
+         Frankfurt,Frankfurt_Wetter,
+         Gießen, Gießen_Wetter,
+         Limburg,Limburg_Wetter,
+         Wiesbaden, Wiesbaden_Wetter) %>%
+  group_by(week) %>%
+  summarize(Darmstadt = sum(Darmstadt),
+            Darmstadt_Wetter = first(Darmstadt_Wetter),
+            Frankfurt = sum(Frankfurt),
+            Frankfurt_Wetter = first(Darmstadt_Wetter),
+            Gießen = sum(Gießen),
+            Gießen_Wetter = first(Gießen_Wetter),
+            Limburg = sum(Limburg),
+            Limburg_Wetter = first(Limburg_Wetter),
+            Wiesbaden = sum(Wiesbaden),
+            Wiesbaden_Wetter = first(Wiesbaden_Wetter))
+
+# Referenzwerte bestimmen
+ref_week <- data_for_dw_weeks %>%
+  select(Frankfurt, Gießen, Darmstadt, Limburg, Wiesbaden,week) %>%
+  filter(week == reference_week)
+
+data_for_dw_weeks <- data_for_dw_weeks %>%
+  # laufende Woche ausfiltern
+  filter((tag0+week*7) > ymd("2020-03-03")) %>%
+  filter((tag0+week*7-2) < today()) %>%
+  mutate(Frankfurt = round(Frankfurt/ref_week$Frankfurt*100,1)-100,
+         Darmstadt = round(Darmstadt/ref_week$Darmstadt*100,1)-100,
+         Gießen = round(Gießen/ref_week$Gießen*100,1)-100,
+         Wiesbaden = round(Wiesbaden/ref_week$Wiesbaden*100,1)-100,
+         Limburg = round(Limburg/ref_week$Limburg*100,1)-100) %>%
+  mutate(Mittel = (Frankfurt+Darmstadt+Gießen+Wiesbaden+Limburg)/5) %>%
+  mutate(wtext = paste0(day(as_date(tag0+week*7-7)),".",
+                        ifelse(month(as_date(tag0+week*7-7)) == month(as_date(tag0+week*7-3)),"",month(as_date(week*7+4))),
+                        ifelse(month(as_date(tag0+week*7-7)) == month(as_date(tag0+week*7-3)),"","."),
+                        "-",day(as_date(tag0+week*7-3)),
+                        ".",month(as_date(tag0+week*7-3)),"."))
+
+
+dw_data_to_chart(data_for_dw_weeks,"U89m9",parse_dates =FALSE)
+dw_publish_chart(chart_id = "U89m9")
+
 
 # ---- Aufbereitung nach Kreisen ----
 
@@ -525,7 +518,9 @@ f7tage_df <- rki_he_df %>%
 #  pivot_wider(names_from = datum, values_from = AnzahlFall)
   # Summen für Fallzahl, Genesen, Todesfall bilden
   summarize(AnzahlFall = sum(AnzahlFall)) %>%
+  ungroup() %>%
   select(AGS,neu7tage = AnzahlFall)
+  
   
 
 kreise_summe_df <- rki_he_df %>% 
@@ -622,6 +617,7 @@ f_1_df <- rki_he_df %>%
   mutate(datum = as_date(Meldedatum)) %>%
 #  filter(datum == heute-1) %>%
   # Auf die Summen filtern?
+  # Filter auf neu gemeldete Fälle (auch nachgemeldete)
   filter(NeuerFall %in% c(-1,1)) %>%
   select(AGS = IdLandkreis,AnzahlFall) %>%
   # Nach Kreis sortieren
@@ -692,8 +688,9 @@ k <- kreise %>%
 colnames(hsum_df) <- c("Datum",k$kreis)
 
 # Datum auf Datumsspalte
+# Um eins erhöht, weil die Inzidenz ja die Meldedaten bis gestern berücksichtigt. 
 
-hsum_df$Datum <- as_date(hsum_df$Datum)
+hsum_df$Datum <- as_date(hsum_df$Datum)+1
 
 # Als Excel-Blatt exportieren
 write_sheet(hsum_df,ss=gsheet_id,sheet="ArchivKreisInzidenz")
@@ -882,8 +879,23 @@ msg("Daten auf alte Basisdaten-Seite kopiert")
 
 
 #msg("Daten auf alte Basisdaten-Seite kopiert")
+# Nur auf dem Server ausführen
 
-msg(as.character(now()),"Datawrapper-Grafiken pingen...","\n")
+if (server) {
+  # Google-Bucket befüllen
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/scrape-hsm.csv')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./Basisdaten.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./rki-alter.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./rki-tote.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./hessen_rki_df.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisFallzahl.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisGenesen.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisTote.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisInzidenz.csv gs://d.data.gcp.cloud.hr.de/')
+}
+
+msg(as.character(now()),"Daten ins Bucket kopiert, Datawrapper-Grafiken pingen...","\n")
 
 # Alle einmal ansprechen, damit sie die neuen Daten ziehen
 # - Neu publizieren, damit der DW-Server einmal die Google-Sheet-Daten zieht.
@@ -905,27 +917,13 @@ dw_publish_chart(chart_id = "8eMAz") # Liniengrafik Inzidenz nach Kreisen für D
 # Kein Update dieser Grafiken: 
 # dw_publish_chart(chart_id = "KP1H3") # Trendlinien-Grafik -> scrape-jhu.R
 # dw_publish_chart(chart_id = "82BUn") # Helmholtz-R-Kurve -> scrape-helmholtz.R
-
+msg("Alle Datawrapper-Grafiken aktualisiert.")
 # ---- Archivkopien der Dateien anlegen ----
-# Nur auf dem Server ausführen
-
-if (server) {
-  # Google-Bucket befüllen
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/scrape-hsm.csv')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./Basisdaten.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./rki-alter.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./rki-tote.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./hessen_rki_df.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisFallzahl.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisGenesen.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisTote.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisInzidenz.csv gs://d.data.gcp.cloud.hr.de/')
-}
 
 # CSV-Archivkopien von rki_he_df und kreise_summe_df anlegen
 
 write_csv2(rki_he_df,paste0("archiv/rki-",heute,".csv"))
 write_csv2(kreise_summe_df,paste0("archiv/kreis-",heute,".csv"))
-  
+
+
 msg("OK!")

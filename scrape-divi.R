@@ -4,80 +4,27 @@
 # Erfahrungsgemäß dauert es ein oder zwei Stunden länger. 
 # 
 # 23.3. Till Hafermann, hr-Datenteam
-# zuletzt bearbeitet: 3.11.je - BETA-Fortschreibung der ICU-Daten für die Prognose
+# zuletzt bearbeitet: 19.11.je
 
 #------------------------------------------#
 #       Load required packages             #
 #------------------------------------------#
 
-require(tidyverse)
-require(lubridate)
-require(jsonlite)
-require(googlesheets4)
-require(httr)
-require(openxlsx)
-require(DatawRappr)
-require(rvest)
-
-
+# ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
 rm(list=ls())
 
+msgTarget <- "B8:C8"
 
-# ---- Logging und Update der Semaphore-Seite, Vorbereitung Google Sheet ----
-id_msg <- "1Q5rCvvSUn6WGcsCnKwGJ0y9PwbiML-34kyxYSYX2Qjk"
-logfile <- ""
-
-
-msg <- function(x,...) {
-  print(paste0(x,...))
-  # Zeitstempel in B8, Statuszeile in C8
-  d <- data.frame(b = now(tzone= "CEST"), c = paste0(x,...))
-  range_write(id_msg,d,sheet="Tabellenblatt1",
-              range="B8:C8",col_names = FALSE,reformat=FALSE)
-  if (server) Sys.sleep(5)     # Skript ein wenig runterbremsen wegen Quota
-  if (logfile != "") {
-    cat(x,...,file = logfile, append = TRUE)
-  }
-}
-
-server <- FALSE
-args = commandArgs(trailingOnly = TRUE)
-if (length(args)!=0) { 
-  server <- args[1] %in% c("server","logfile")
-  if(args[1] == "logfile") logfile <- "./logs/scrape-hsm.log"
-} 
-
-
-sheets_email <- "corona-rki-hmsi-googlesheets@corona-rki-hmsi-2727248702.iam.gserviceaccount.com"
-sheets_filename <- "corona-rki-hmsi-2727248702-d35af1e1baab.json"
-
-# VERSION FÜR DEN SERVER 
-if (server) {
-  # Arbeitsverzeichnis, Logdatei beschreiben
-  setwd("/home/jan_eggers_hr_de/rscripts/")
-  # Authentifizierung Google-Docs umbiegen
-  sheets_keypath <- "/home/jan_eggers_hr_de/key/"
+# Definiere Messaging, Server-Parameter, RKI-Lese-Funktion
+if (file.exists("./server-msg-googlesheet-include.R")) {
+  source("./server-msg-googlesheet-include.R")
 } else {
-  if (dir.exists("D:/Nextcloud/hr-DDJ/projekte/covid-19")) {
-    setwd("D:/Nextcloud/hr-DDJ/projekte/covid-19")
-    sheets_keypath <- "D:/key/"
-  }  
-  if (dir.exists("F:/projekte/covid-19")) {
-    setwd("F:/projekte/covid-19")
-    sheets_keypath <- "F:/creds/"
-  }  
-  
-  # Gibt es die Datei? 
-  if (!file.exists(paste0(sheets_keypath,sheets_filename))) { 
-    simpleError("Kein Keyfile!")
-  }
+  source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
 }
 
-gs4_deauth() # Authentifizierung löschen
-gs4_auth(email=sheets_email,path=paste0(sheets_keypath,sheets_filename))
-
-msg("Google Credentials erfolgreich gesetzt\n")
+require(httr)
+require(rvest)
 
 sheet_id <- "15hhqkeyKkwEXsd7qlt90QOfsxlQFUdoJbpT18EMlHo8"
 
@@ -118,7 +65,14 @@ dw_timestamp = str_c("zuletzt abgerufen: ", day(now()), ". ", month(now(), label
 if (ncol(d_tbl) != 13) simpleError("Formatänderung!")
 
 
+# ---- Kreistabelle lesen ----
+
+divi_kreise_url <- "https://diviexchange.blob.core.windows.net/%24web/DIVI_Intensivregister_Auszug_pro_Landkreis.csv"
+divi_kreise_df <- downloadData <- read.csv(divi_kreise_url,colClasses = "character")
+
 # ---- Ländertabelle lesen ----
+
+# Neue URL: 
 
 # Muss nicht mehr per OCR aus dem SVG gescraped werden, weil es ein handliches CSV gibt, 
 # jeden Tag neu. 
@@ -281,7 +235,7 @@ h_kreise_dw4 <- d_kreise %>%
   left_join(kreise,by = c("AGS" = "AGS"))
 
 
-# ---- Daten für Prognose aktualisieren - nur die DIVI-Daten
+# ---- Daten für Prognose aktualisieren - nur die DIVI-Daten ---- 
 
 # DIVI-freie Betten - Hypothese: maximale Kapazität entspricht
 # der Anzahl der derzeit freien Betten plus der COVID-Intensivfälle
@@ -311,9 +265,9 @@ write_sheet(icu_df,ss=sheet_id,sheet="icu_hessen_archive")
   full_join(prognose_df,by = c("datum" = "datum")) %>%
   arrange(datum) %>%
   #letzte 4 Wochen
-  filter(datum > today()-29) %>%
-  # nächste 14 Tage
-  filter(datum < today()+29) %>%
+  filter(datum > today()-28) %>%
+  # nächste 28 Tage
+  filter(datum < today()+ 14) %>%
   mutate(kapazitaet = max_beds) %>%
   select(1,2,3,4,5,`ungefähre derzeitige Kapazität` = kapazitaet)
 

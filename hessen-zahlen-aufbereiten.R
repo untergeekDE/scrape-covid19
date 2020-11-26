@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 19.11.2020
+# Stand: 25.11.2020
 
 # TODO: 
 # - 4-Wochen-Fallzahlen mit korrigierten Daten rechnen
@@ -178,7 +178,7 @@ fallzahl_df$gsum[fallzahl_ofs] <- genesen_gesamt
 fallzahl_df$faelle[fallzahl_ofs] <- faelle_gesamt
 fallzahl_df$steigerung[fallzahl_ofs] <- faelle_gesamt/(faelle_gesamt-faelle_neu)-1
 fallzahl_df$tote[fallzahl_ofs] <- tote_gesamt
-fallzahl_df$tote_steigerung[fallzahl_ofs] <- tote_gesamt/(tote_gesamt-tote_neu)-1
+fallzahl_df$tote_steigerung[fallzahl_ofs] <- tote_neu
 fallzahl_df$aktiv[fallzahl_ofs] <- faelle_gesamt-genesen_gesamt-tote_gesamt
 fallzahl_df$neu[fallzahl_ofs] <- faelle_neu
 fallzahl_df$aktiv_ohne_neu[fallzahl_ofs] <- faelle_gesamt-genesen_gesamt-tote_gesamt-faelle_neu
@@ -372,12 +372,17 @@ prognose_df <- fall4w_df %>%
 
 prog_chart_id = "g2CwK"
 chart_data <- dw_retrieve_chart_metadata(prog_chart_id)
-chart_data_changes <- chart_data$content$metadata$data$changes
-# Das hier ist total nicht stabil: Ändert das 3. Element in der Liste der Änderungen. 
-# Wenn ich flüssiger mit R-Listen wäre, würde ich das entsprechende Element raussuchen. 
-chart_data$content$metadata$data$changes[3][[1]]$value <- p_str # "Prognose vom... " als Zeilenkopf eintragen
-dw_edit_chart(prog_chart_id,data = chart_data$content$metadata$data)
+# chart_data$content$metadata$data$changes
+# Liste der Änderungen durchgehen, die mit dem Wort "Prognose" finden und updaten
+# for (i in 1:length(chart_data$content$metadata$data$changes)) {
+#   if (str_detect(chart_data$content$metadata$data$changes[[i]]$value,"Prognose")) chart_data$content$metadata$data$changes[[i]]$value = p_str
+# }
+# chart_data_changes[[1]]$value <- p_str # "Prognose vom... " als Zeilenkopf eintragen
+p_str <- paste0("Trendlinie ist der gleitende Mittelwert über 7 Tage<br>",
+                p_str, " - beruht auf dem SEIR-Modell der Universität des ",
+                "Saarlandes, Forschungsgruppe von Prof. Thorsten Lehr")
 
+dw_edit_chart(chart_id = prog_chart_id,annotate = p_str)
 
 
 # In Sheet "NeuPrognose" ausgeben
@@ -911,7 +916,7 @@ dw_publish_chart(chart_id = "JQobx") # Todesfälle nach Alter und Geschlecht
 dw_publish_chart(chart_id = "JQiOo") # Anteil der Altersgruppen an den Neufällen
 #
 dw_publish_chart(chart_id = "8eMAz") # Liniengrafik Inzidenz nach Kreisen für Dirk Kunze
-#dw_publish_chart(chart_id = "g2CwK") # 14-Tage-Prognose Neufälle
+dw_publish_chart(chart_id = "g2CwK") # 14-Tage-Prognose Neufälle
 
 # Kein Update DIVI-Scraper
 # Kein Update dieser Grafiken: 

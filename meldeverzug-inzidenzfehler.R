@@ -92,6 +92,23 @@ sheet_write(v_ags_df,ss = aaa_id, sheet = "Meldeverzug Woche Kreis")
 msg("Durchschnittlicher Meldeverzug pro Kreis berechnet und geschrieben")
 
 # Auswertung aktuelle Woche: Wie hoch ist der Anteil der Fälle in den letzten 7 Tagen mit mehr als 3 Tagen Meldeverzug?
+
+delay_ags_today_df <- verzuege_df %>%
+  filter(datum == today()-1) %>%
+  right_join(kreise, by = "AGS") %>% # Kreisnamen reinholen
+  select(-AGS) %>%
+  group_by(kreis) %>%
+  count(delta > 3) %>%
+  pivot_wider(names_from = 'delta > 3',values_from = n) %>%
+  select(1,pünktlich = 2,verspätet = 3) %>%
+  mutate(verspätet = ifelse(is.na(verspätet),0,verspätet),
+         pünktlich = ifelse(is.na(pünktlich),0,pünktlich)) %>%
+  mutate(quote_heute = ifelse(verspätet+pünktlich > 0, verspätet/ (pünktlich + verspätet) * 100,0)) 
+
+q_heute_hessen = sum(delay_ags_today_df$verspätet)/
+  (sum(delay_ags_today_df$pünktlich) + sum(delay_ags_today_df$verspätet) * 100)
+delay_ags_today_df <- delay_ags_today_df %>% select(kreis, quote_heute)
+
 delay_ags_df <- verzuege_df %>%
   filter(datum > today()-8) %>%
   right_join(kreise, by = "AGS") %>% # Kreisnamen reinholen
@@ -103,12 +120,16 @@ delay_ags_df <- verzuege_df %>%
   mutate(verspätet = ifelse(is.na(verspätet),0,verspätet)) %>%
   mutate(quote = verspätet/ (pünktlich + verspätet) * 100)
 
+
+
 # Summe dran
 delay_ags_df <- rbind(delay_ags_df,
                       tibble(kreis = "HESSEN",
                              pünktlich = sum(delay_ags_df$pünktlich),
                              verspätet = sum(delay_ags_df$verspätet),
-                            quote = sum(delay_ags_df$verspätet)/sum(c(delay_ags_df$verspätet,delay_ags_df$pünktlich))*100))
+                            quote = sum(delay_ags_df$verspätet)/sum(c(delay_ags_df$verspätet,delay_ags_df$pünktlich))*100)) %>%
+                  full_join(delay_ags_today_df, by = "kreis")
+  
 
 sheet_write(delay_ags_df,ss = aaa_id, sheet = "Datenqualität")
 msg("Meldeverzug hessenweit: ",round(delay_ags_df$quote[delay_ags_df$kreis=="HESSEN"],2),"% mehr als 3 Tage verspätet")

@@ -22,7 +22,10 @@ Die tägliche Übersicht der Fallzahlen, Inzidenzen, Neufälle in den letzten 7 
 ## Die Skripte
 * hessen-zahlen-aufbereiten.R - holt morgens die RKI-Daten, rechnet ein paar Auswertungen, beschreibt Tabellen und erneuert die Grafiken
 * scrape-helmholtz.R - liest die Reproduktionswert-Daten des SECIR-Modells der Helmholtz-Gesellschaft für Hessen
-* scrape-divi.R - liest morgens die Einzelmeldungen (JSON) und das Überblicks-Blatt (CSV) zur Intensivbettenauslastung
+* divi-zahlen-aufbereiten.R - liest morgens die Einzelmeldungen (JSON) und das Überblicks-Blatt (CSV) zur Intensivbettenauslastung
+* meldeverzug-inzidenz.R - schaut für die zurückliegenden Wochen nach der prozentualen Veränderung der Inzidenz durch Meldeverzug und versucht einen "Datenqualitäts-Index" - Anteil der Daten in der letzten Woche, der mehr als 3 Tage zu spät kam
+
+### veraltet: 
 * scrape-jhu.R - baut aus RKI-Daten via API und JHU-Daten via Github ein Google Sheet für die logarithmische Inzidenz-Wachstumskurve
 
 ### Datenexport
@@ -58,6 +61,7 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 2.12.: Meldeverzugs-Skript
 * 26.11.: DIVI-Abfrage durch ein anderes Skript ersetzt; Veränderung Todeszahlen absolut statt prozentual
 * 21.11.: Rekursive Abfrage der RKI-Daten auf Schleife umgestellt, um Speichercrash zu vermeiden
 * 20.11.: Abfrage und Aktualisierung der Passanten-Daten von hystreet.com für die hessischen Stationen; Passanten-Index

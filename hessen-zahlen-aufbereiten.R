@@ -19,13 +19,13 @@
 # als Aktuell-Kopie auf den Google-Bucket geschoben. 
 #
 # Weiter NICHT von diesem Skript betreut sind:
-# - die DIVI-Daten (-> scrape-divi.R)
+# - die DIVI-Daten (-> divi-zahlen-aufbereiten.R)
 # - die Reproduktionszahlen-Daten (->scrape-helmholtz.R)
-# - die logarithmische Wachstumsgrafik (-> scrape-jhu.R)
+# - die Übertragung der Prognose und der RKI-Testdaten (-> mittwochsskript.R)
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 25.11.2020
+# Stand: 4.12.2020
 
 # TODO: 
 # - 4-Wochen-Fallzahlen mit korrigierten Daten rechnen
@@ -40,6 +40,8 @@ rm(list=ls())
 
 # Definiere Messaging, Server-Parameter, RKI-Lese-Funktion
 # Im WD, bitte!
+
+msgTarget <- "B12:C12"
 
 if (file.exists("./server-msg-googlesheet-include.R")) {
   source("./server-msg-googlesheet-include.R")
@@ -309,85 +311,30 @@ range_write(gsheet_id,as.data.frame(tote_gesamt),
             range="Basisdaten!B11",
             col_names = FALSE,reformat=FALSE)
 
-# ---- Update des Prognose-Sheets auf der Hospitalisierungen-Seite ----
+# ---- Update der Prognose-Sheets auf der Hospitalisierungen-Seite ----
 
-prog_d <- ymd("2020-11-18")
-
-sim_df <- read_csv(paste0("daten/cosim-Hessen-",prog_d,".csv")) %>%
-  filter(state =="Hessen") %>%
-  select(-state) %>%
-  mutate(vom = prog_d) 
-
-sim_df$var <- as.factor(sim_df$var)
-
-
-daily_df <- sim_df %>%
-  filter(var == "DAILY_CASES" ) %>%
-  # gleitendes 7-Tage-Mittel
-  mutate(neu7_min  = (lag(minsim)+
-                        lag(minsim,n=2)+
-                        lag(minsim,n=3)+
-                        lag(minsim,n=4)+
-                        lag(minsim,n=5)+
-                        lag(minsim,n=6)+
-                        minsim)/7) %>%
-  mutate(neu7_mean  = (lag(meansim)+
-                         lag(meansim,n=2)+
-                         lag(meansim,n=3)+
-                         lag(meansim,n=4)+
-                         lag(meansim,n=5)+
-                         lag(meansim,n=6)+
-                         meansim)/7) %>%
-  mutate(neu7_max  = (lag(maxsim)+
-                        lag(maxsim,n=2)+
-                        lag(maxsim,n=3)+
-                        lag(maxsim,n=4)+
-                        lag(maxsim,n=5)+
-                        lag(maxsim,n=6)+
-                        maxsim)/7) %>%
-  filter(date >= prog_d) %>%
-  select(date,neu7_min, neu7_mean, neu7_max)
-
-# ---- Prognose-Daten ergänzen ----
+# Liest die Prognose-Daten aus dem Sheet und rechnet die Neufälle dazu.
+# Die eingelesenen Seiten werden einmal wöchentlich aktualisiert - 
+# über das Skript "mittwochsupdate.R"
 
 # Google Sheet mit Krankenhausdaten
+hosp_id = "12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4"
 
-p_str <- paste0("Prognose vom ",day(prog_d),".",month(prog_d),".")
-
-id = "12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4"
-
-
+neu_p_df <- read_sheet(hosp_id,sheet = "NeuPrognose") %>%
+icu_p_df <- read_sheet(hosp_id,sheet = "ICUPrognose")
 # Prognosen dranhängen
 
-prognose_df <- fall4w_df %>%
-  select(datum,neu,neu7tagemittel) %>%
-  full_join(daily_df, by = c("datum" = "date")) %>%
-  # Prognose zwei Wochen in die Zukunft
-  filter(datum < today()+15) %>%
-  select(datum,neu,neu7tagemittel,min = neu7_min, mean=neu7_mean, max = neu7_max) 
+#Etwas übersichtlicher
+f4w_neu_df <- fall4w_df %>%
+  select(datum, neu, neu7tagemittel)
 
-# Früher: rename(!!p_str:=neu7_mean), das hat aber den Nachteil, dass man in Datawrapper
-# die Gestaltung der Zeile von Hand umkonfigurieren muss. 
-# Besser: Über die API die entsprechende Datenreihe umbenennen. 
-
-prog_chart_id = "g2CwK"
-chart_data <- dw_retrieve_chart_metadata(prog_chart_id)
-# chart_data$content$metadata$data$changes
-# Liste der Änderungen durchgehen, die mit dem Wort "Prognose" finden und updaten
-# for (i in 1:length(chart_data$content$metadata$data$changes)) {
-#   if (str_detect(chart_data$content$metadata$data$changes[[i]]$value,"Prognose")) chart_data$content$metadata$data$changes[[i]]$value = p_str
-# }
-# chart_data_changes[[1]]$value <- p_str # "Prognose vom... " als Zeilenkopf eintragen
-p_str <- paste0("Trendlinie ist der gleitende Mittelwert über 7 Tage<br>",
-                p_str, " - beruht auf dem SEIR-Modell der Universität des ",
-                "Saarlandes, Forschungsgruppe von Prof. Thorsten Lehr")
-
-dw_edit_chart(chart_id = prog_chart_id,annotate = p_str)
-
-
+neu_p_df <- neu_p_df %>%
+  select(datum, min, mean, max, prognosedatum) %>%
+  left_join(f4w_neu_df, by="datum") %>%
+  select(datum,neu,neu7tagemittel, min, mean, max, prognosedatum) 
 # In Sheet "NeuPrognose" ausgeben
 
-write_sheet(prognose_df,ss=id,sheet="NeuPrognose")  
+write_sheet(neu_p_df,ss=id,sheet="NeuPrognose")  
 
 # ---- Passanten in den Fußgängerzonen ----
 

@@ -61,6 +61,7 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 4.12.: Prognose wird aus Google Sheet gelesen, um aktuelle 4-Wochen-Werte ergänzt und neu geschrieben. 
 * 2.12.: Meldeverzugs-Skript
 * 26.11.: DIVI-Abfrage durch ein anderes Skript ersetzt; Veränderung Todeszahlen absolut statt prozentual
 * 21.11.: Rekursive Abfrage der RKI-Daten auf Schleife umgestellt, um Speichercrash zu vermeiden

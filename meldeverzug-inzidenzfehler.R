@@ -91,6 +91,7 @@ sheet_write(v_ags_df,ss = aaa_id, sheet = "Meldeverzug Woche Kreis")
 # write.xlsx(v_ags_df,"mean_meldeverzug.xlsx")
 msg("Durchschnittlicher Meldeverzug pro Kreis berechnet und geschrieben")
 
+# ---- Anteil verspätete Meldungen ----
 # Auswertung aktuelle Woche: Wie hoch ist der Anteil der Fälle in den letzten 7 Tagen mit mehr als 3 Tagen Meldeverzug?
 
 delay_ags_today_df <- verzuege_df %>%
@@ -168,7 +169,7 @@ ffm_df <- verzuege_df %>%
 write.xlsx(ffm_df,"ffm-histogramm.xlsx")
 
 msg("Histogrammdaten WI, LDK, Bergstrasse, FFM lokal geschrieben")
-# ---- Jetzt berechnen: Wochenweise Ungenauigkeit
+# ---- Jetzt berechnen: Wochenweise Ungenauigkeit ----
 
 t = today()
 
@@ -231,4 +232,77 @@ inz_delta_df <- kreise %>%
 # write.xlsx(inz_delta_df,"vollstaendigkeit-kreise-wochen.xlsx")
 sheet_write(inz_delta_df, ss = aaa_id, sheet = "Abweichung Inzidenz")
 msg("Abweichungen berechnet und geschreiben")
+
+# ---- Letzte 4 Wochen: Abweichungen nach Kreis und Wochentag
+
+t <- today()
+inz_wt_df <- NULL
+
+for (d in (t-35):(t-7)) {
+  
+  tag <- wday(as_date(d),label=TRUE,abbr=TRUE)
+  # 
+  ref7tage_df <- read_csv2(paste0(path,"rki-",as_date(d+7),".csv")) %>%
+    mutate(datum = as_date(Meldedatum)) %>%
+    filter(datum > as_date(d-8) & datum < as_date(d)) %>%
+    # Auf die Summen filtern?
+    filter(NeuerFall %in% c(0,1)) %>%
+    select(AGS = IdLandkreis,AnzahlFall) %>%
+    # Nach Kreis sortieren
+    group_by(AGS) %>%
+    #  pivot_wider(names_from = datum, values_from = AnzahlFall)
+    # Summen für Fallzahl, Genesen, Todesfall bilden
+    summarize(AnzahlFall = sum(AnzahlFall)) %>%
+    ungroup() %>%
+    select(AGS,ref7t = AnzahlFall)
+  alt7tage_df <- read_csv2(paste0(path,"rki-",as_date(d),".csv")) %>%
+    mutate(datum = as_date(Meldedatum)) %>%
+    filter(datum > as_date(d-8) & datum < as_date(d)) %>%
+    # Auf die Summen filtern?
+    filter(NeuerFall %in% c(0,1)) %>%
+    select(AGS = IdLandkreis,AnzahlFall) %>%
+    # Nach Kreis sortieren
+    group_by(AGS) %>%
+    #  pivot_wider(names_from = datum, values_from = AnzahlFall)
+    # Summen für Fallzahl, Genesen, Todesfall bilden
+    summarize(AnzahlFall = sum(AnzahlFall)) %>%
+    ungroup()  %>%
+    select(AGS,alt7t = AnzahlFall) %>%
+    full_join(ref7tage_df, by = "AGS") %>%
+    mutate(vollst = (100*alt7t/ref7t)-100) %>%
+    mutate(wt = tag) %>%
+    # AGS durch Namen ersetzen
+    full_join(kreise, by = "AGS") %>%
+    select(kreis, vollst, wt) %>%
+    pivot_wider(names_from = kreis, values_from = vollst)
+  
+
+  
+  if (is.null(inz_wt_df)) {
+    inz_wt_df <- alt7tage_df  
+  } else {
+    inz_wt_df <- rbind(inz_wt_df,alt7tage_df)
+  }
+  msg("Inzidenz-Fehler ",as_date(d)," berechnet")
+  d <- d+7 # Wochenweise durchsteppen 
+  
+}
+
+inz_wt_sum_df <- inz_wt_df %>%
+  pivot_longer(cols = -wt, names_to = "kreis" ,values_to = "vollst") %>%
+  arrange(wt) %>%
+  group_by(wt,kreis) %>%
+  summarize(vollst = mean(vollst)) %>%
+  pivot_wider(names_from = kreis, values_from = vollst)
+
+
+
+# write.xlsx(inz_wt_df,"vollstaendigkeit-kreise-wochentage.xlsx")
+sheet_write(inz_wt_sum_df, ss = aaa_id, sheet = "Abweichung Wochentage" )
+msg("Abweichungen Wochentage berechnet und geschreiben")
+
+
+
 msg("OK")
+
+

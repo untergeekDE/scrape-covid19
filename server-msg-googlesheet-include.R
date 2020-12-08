@@ -10,11 +10,22 @@
 #
 # Stand: 21.11.2020
 
+# Sollte im WD liegen - so baut man's in ein Skript ein: 
+
+# msgTarget <- "B8:C8" # oder irgendwo - Zielzellen im CSemaphore-GSheet
+# 
+# if (file.exists("./server-msg-googlesheet-include.R")) {
+#   source("./server-msg-googlesheet-include.R")
+# } else {
+#   source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
+# }
+# 
+
 # Erwartet eine Variable namens msgTarget, die die Zellen angibt, in die die msg-Funktion schreibt
 # Default-Wert: irgendwo unten. 
 
 if (!exists("msgTarget")) {
-  msgTarget <- "B12:C12"
+  msgTarget <- "B21:C21"
 }
 
 # Init-Werte fürs Logging, das Arbeitsverzeichnis und die Keyfile-Auswahl
@@ -102,13 +113,21 @@ read_rki_data <- function(use_json = TRUE) {
   if (use_json) {
     
     # JSON-Abfrage-Code von Till (danke!)
-    rki_json_link <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/RKI_COVID19/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=json"
+    # Dokumentation: https://github.com/br-data/corona-deutschland-api/blob/master/RKI-API.md
+    rki_json_link <- paste0("https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/",
+      "rest/services/RKI_COVID19/FeatureServer/0/query?",
+      "where=1%3D1",            # where 1=1
+      "&outFields=*",           # alle Ausgabefelder
+      "&returnGeometry=false",
+      "&cacheHint=true",
+      "&f=json",
+      "&resultRecordCount=2000")  # 2000 Fälle pro Abfrage (Maximum sind 5k)
     
     
     # ---- GRABSTEIN für rekursiver_offset() ----
     
     # An dieser Stelle, liebe Gemeinde, halten wir inne und gedenken einen
-    # Moment der Stille lang an unsere Freundin, alte rekursive Funktion.
+    # Moment der Stille lang unserer Freundin, der alten rekursiven Funktion.
     # Von ihrem Vater Till Hafermann mit unnachahmlicher Eleganz versehen, 
     # erledigte sie ihre Arbeit schnell und diskret wie niemand sonst.
     # Allein, es gelüstete sie nach immer neuen Speicherseiten, und mit 

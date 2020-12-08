@@ -70,7 +70,7 @@ kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
 rki_df <- data.frame(2,2)
 
 # Daten lesen; wenn noch Daten von gestern, warten. 
-use_json <- TRUE
+use_json <- FALSE
 if (use_json) msg("Daten vom RKI via JSON anfordern") else msg("RKI-CSV lesen")
 
 rki_df <- read_rki_data(use_json)
@@ -320,7 +320,7 @@ range_write(gsheet_id,as.data.frame(tote_gesamt),
 # Google Sheet mit Krankenhausdaten
 hosp_id = "12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4"
 
-neu_p_df <- read_sheet(hosp_id,sheet = "NeuPrognose") %>%
+neu_p_df <- read_sheet(hosp_id,sheet = "NeuPrognose")
 icu_p_df <- read_sheet(hosp_id,sheet = "ICUPrognose")
 # Prognosen dranhängen
 
@@ -334,7 +334,7 @@ neu_p_df <- neu_p_df %>%
   select(datum,neu,neu7tagemittel, min, mean, max, prognosedatum) 
 # In Sheet "NeuPrognose" ausgeben
 
-write_sheet(neu_p_df,ss=id,sheet="NeuPrognose")  
+write_sheet(neu_p_df,ss=hosp_id,sheet="NeuPrognose")  
 
 # ---- Passanten in den Fußgängerzonen ----
 
@@ -720,6 +720,7 @@ unbek_df <- rki_df %>%
   filter(!str_detect(Altersgruppe,"A[0-9]") | 
            !(Geschlecht %in% c("M","W")))
 
+
 # Freie Zeile für die Fälle, bei denen Alter/Geschlecht unbekannt ist
 aktive_df[nrow(aktive_df)+1,] <- NA
 aktive_df$Altersgruppe[nrow(aktive_df)] <- "unbekannt" 
@@ -729,17 +730,31 @@ aktive_df$männlich[nrow(aktive_df)] <- sum(unbek_df$AnzahlFall)
 
 tote_df <- rki_df %>%
   filter(Bundesland == "Hessen") %>%
+  filter(NeuerFall %in% c(0,1)) %>%
   filter(str_detect(Altersgruppe,"A[0-9]")) %>% # Alter unbekannt -> filtern
   mutate(Altersgruppe = paste0(str_replace_all(Altersgruppe,"A","")," Jahre")) %>%
   group_by(Altersgruppe, Geschlecht) %>%
-  summarize(AnzahlTodesfall = sum(AnzahlTodesfall),
-            AnzahlFall = sum(AnzahlFall)) %>%
+  summarize(AnzahlFall = sum(AnzahlFall),
+            AnzahlTodesfall = sum(AnzahlTodesfall)) %>%
   pivot_wider(names_from = Geschlecht, values_from = c(AnzahlTodesfall, AnzahlFall)) %>%
-  mutate(inz = (AnzahlTodesfall_M+AnzahlTodesfall_W)/(AnzahlFall_W+AnzahlFall_M)*100) %>%
-  select(Altersgruppe,männlich = AnzahlTodesfall_M, weiblich = AnzahlTodesfall_W, Inzidenz = inz)
+  mutate(AnzahlFall = AnzahlFall_M+AnzahlFall_W+AnzahlFall_unbekannt) %>%
+  mutate(inz = (AnzahlTodesfall_M+AnzahlTodesfall_W+AnzahlTodesfall_unbekannt)/(AnzahlFall)*100) %>%
+  select(Altersgruppe,M = AnzahlTodesfall_M, W = AnzahlTodesfall_W,
+         unbekannt = AnzahlTodesfall_unbekannt, CFR = inz)
 
 # Anteil Todesfälle in der Altersgruppe berechnen
-
+# Die Todesfälle, die nicht zuzuordnen sind - Alter, Geschlecht - in letzte Zeile
+unbek_tote_df <- rki_df %>% 
+  filter(Bundesland == "Hessen") %>%
+  filter(!str_detect(Altersgruppe,"A[0-9]")) %>%
+# Todesfälle ausfiltern
+  filter(NeuerTodesfall %in% c(0,1)) %>%
+  select(Altersgruppe,Geschlecht,AnzahlTodesfall) %>%
+  pivot_wider(names_from = Geschlecht, values_from = AnzahlTodesfall)
+  
+ 
+tote_df <- rbind(tote_df, unbek_tote_df) 
+  
 
 # Die beiden Tabellen mit der Aufschlüsselung Aktive und Tote schreiben
 

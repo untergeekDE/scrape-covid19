@@ -24,6 +24,7 @@ Die tägliche Übersicht der Fallzahlen, Inzidenzen, Neufälle in den letzten 7 
 * scrape-helmholtz.R - liest die Reproduktionswert-Daten des SECIR-Modells der Helmholtz-Gesellschaft für Hessen
 * divi-zahlen-aufbereiten.R - liest morgens die Einzelmeldungen (JSON) und das Überblicks-Blatt (CSV) zur Intensivbettenauslastung
 * meldeverzug-inzidenz.R - schaut für die zurückliegenden Wochen nach der prozentualen Veränderung der Inzidenz durch Meldeverzug und versucht einen "Datenqualitäts-Index" - Anteil der Daten in der letzten Woche, der mehr als 3 Tage zu spät kam
+* server-msg-googlesheet-include.R - enthält Code, den fast alle Skripte brauchen: die Ausgabe von Statusmeldungen über GoogleSheets, den JSON-Code zum Einlesen der RKI-Daten, Unterscheidung Server/lokal, etc. 
 
 ### veraltet: 
 * scrape-jhu.R - baut aus RKI-Daten via API und JHU-Daten via Github ein Google Sheet für die logarithmische Inzidenz-Wachstumskurve
@@ -61,6 +62,7 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 8.12.: Todesfälle-Statistik berücksichtigt jetzt auch nicht zugeordnete Fälle
 * 4.12.: Prognose wird aus Google Sheet gelesen, um aktuelle 4-Wochen-Werte ergänzt und neu geschrieben. 
 * 2.12.: Meldeverzugs-Skript
 * 26.11.: DIVI-Abfrage durch ein anderes Skript ersetzt; Veränderung Todeszahlen absolut statt prozentual

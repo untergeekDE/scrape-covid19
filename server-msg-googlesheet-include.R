@@ -48,16 +48,24 @@ library(jsonlite)
 
 # ---- Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 
-
-msg <- function(x,...) {
-  print(paste0(x,...))
-  # Zeitstempel in msgTarget
-  d <- data.frame(b = now(tzone= "CEST"), c = paste0(x,...))
-  tryCatch(range_write(id_msg,d,sheet="Tabellenblatt1",
-              range=msgTarget,col_names = FALSE,reformat=FALSE))
-  if (server) Sys.sleep(1)     # Skript ein wenig runterbremsen wegen Quota
-  if (logfile != "") {
-    cat(x,...,file = logfile, append = TRUE)
+if (!is.null(msgTarget)) {
+  msg <- function(x,...) {
+    print(paste0(x,...))
+    # Zeitstempel in msgTarget
+    d <- data.frame(b = now(tzone= "CEST"), c = paste0(x,...))
+    tryCatch(range_write(id_msg,d,sheet="Tabellenblatt1",
+                         range=msgTarget,col_names = FALSE,reformat=FALSE))
+    if (server) Sys.sleep(1)     # Skript ein wenig runterbremsen wegen Quota
+    if (logfile != "") {
+      cat(x,...,file = logfile, append = TRUE)
+    }
+  }
+} else {
+  msg <- function(x,...) {
+    print(paste0(x,...))
+    if (logfile != "") {
+      cat(x,...,file = logfile, append = TRUE)
+    }
   }
 }
 

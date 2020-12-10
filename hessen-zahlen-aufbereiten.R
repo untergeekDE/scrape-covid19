@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 4.12.2020
+# Stand: 10.12.2020
 
 # TODO: 
 # - 4-Wochen-Fallzahlen mit korrigierten Daten rechnen

@@ -11,13 +11,13 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 2.12.2020
+# Stand: 10.12.2020
 #
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
 rm(list=ls())
 
-msgTarget <- "B14:C14"
+msgTarget <- NULL
 
 if (file.exists("./server-msg-googlesheet-include.R")) {
   source("./server-msg-googlesheet-include.R")
@@ -48,6 +48,27 @@ kreise <- read.xlsx("index/kreise-namen-index.xlsx") %>%
 start_date <- as_date("2020-09-01")
 path <- "./archiv/"
 
+col_descr <- cols(
+  IdBundesland = col_double(),
+  Bundesland = col_character(),
+  Landkreis = col_character(),
+  Altersgruppe = col_character(),
+  Geschlecht = col_character(),
+  AnzahlFall = col_double(),
+  AnzahlTodesfall = col_double(),
+  ObjectId = col_double(),
+  Meldedatum = col_character(),
+  IdLandkreis = col_character(),
+  Datenstand = col_date(format = ""),
+  NeuerFall = col_double(),
+  NeuerTodesfall = col_double(),
+  Refdatum = col_character(), # als String lesen und wandeln
+  NeuGenesen = col_double(),
+  AnzahlGenesen = col_double(),
+  IstErkrankungsbeginn = col_double(),
+  Altersgruppe2 = col_character()
+)
+
 # ---- Erste Runde: Meldeverzug in eine Tabelle schreiben. -----
 
 verzuege_df <- NULL
@@ -57,10 +78,12 @@ for (d in start_date:today()) { # Irritierenderweise ist d eine Integer-Zahl
   # wk <- isoweek(as_date(d))
   file_name <- paste0(path,"rki-",as_date(d),".csv")
   if(file.exists(file_name)) {
-    tagesmeldung_df <- read_csv2(file_name) %>%
+    tagesmeldung_df <- read_csv2(file_name,col_types = col_descr) %>%
     # Fälle, die neu zum Vortag waren
       filter(NeuerFall == 1) %>%
-      mutate(datum = ymd(Datenstand)) %>%
+      mutate(datum = ymd(Datenstand),
+             Meldedatum = as_date(Meldedatum),
+             Refdatum = as_date(Refdatum)) %>%
       mutate(delta = as_date(datum) - as_date(Meldedatum)) %>%
       select(datum, delta, n = AnzahlFall, AGS = IdLandkreis)
     # Die Fallmeldungen auspacken: 
@@ -85,10 +108,16 @@ v_ags_df <- verzuege_df %>%
   group_by(kreis, wk) %>%
   summarize(m_delay = mean(delta)) %>%
   pivot_wider(names_from = kreis, values_from = m_delay) %>%
-  ungroup() 
+  ungroup()
+
+write.xlsx(v_ags_df,"mean_meldeverzug.xlsx")
+
+
+v_ags_df <- v_ags_df %>%  
+  # auf die letzten 12 Wochen filtern
+  filter(wk > isoweek(today())-12)
   
-sheet_write(v_ags_df,ss = aaa_id, sheet = "Meldeverzug Woche Kreis") 
-# write.xlsx(v_ags_df,"mean_meldeverzug.xlsx")
+sheet_write(v_ags_df,ss = aaa_id, sheet = "MeldeverzugWocheKreis") 
 msg("Durchschnittlicher Meldeverzug pro Kreis berechnet und geschrieben")
 
 # ---- Anteil verspätete Meldungen ----
@@ -169,7 +198,12 @@ ffm_df <- verzuege_df %>%
 write.xlsx(ffm_df,"ffm-histogramm.xlsx")
 
 msg("Histogrammdaten WI, LDK, Bergstrasse, FFM lokal geschrieben")
-# ---- Jetzt berechnen: Wochenweise Ungenauigkeit ----
+# ---- Jetzt berechnen: Abweichung Inzidenz nach Tagen ----
+
+# Es wird der Inzidenz-Stand vom Meldetag mit dem Stand eine Woche später verglichen: 
+# Wie sehr weicht der Inzidenzwert vom Meldetag vom korrekten Wert ab, der eine Woche später
+# mit allen bis dahin eingetroffenen Nachmeldungen berechnet wird. 
+
 
 t = today()
 
@@ -182,7 +216,7 @@ while (d <= t-7) {
   
   kw <- isoweek(as_date(d))
   # 
-  ref7tage_df <- read_csv2(paste0(path,"rki-",as_date(d+7),".csv")) %>%
+  ref7tage_df <- read_csv2(paste0(path,"rki-",as_date(d+7),".csv"),col_types = col_descr) %>%
     mutate(datum = as_date(Meldedatum)) %>%
     filter(datum > as_date(d-8) & datum < as_date(d)) %>%
     # Auf die Summen filtern?
@@ -195,7 +229,7 @@ while (d <= t-7) {
     summarize(AnzahlFall = sum(AnzahlFall)) %>%
     ungroup() %>%
     select(AGS,ref7t = AnzahlFall)
-  alt7tage_df <- read_csv2(paste0(path,"rki-",as_date(d),".csv")) %>%
+  alt7tage_df <- read_csv2(paste0(path,"rki-",as_date(d),".csv"),col_types = col_descr) %>%
     mutate(datum = as_date(Meldedatum)) %>%
     filter(datum > as_date(d-8) & datum < as_date(d)) %>%
     # Auf die Summen filtern?
@@ -221,16 +255,24 @@ while (d <= t-7) {
       full_join(alt7tage_df, by = "AGS")
   }
   msg("Inzidenz-Fehler ",as_date(d)," berechnet")
-  d <- d+7 # Wochenweise durchsteppen 
+  d <- d+1 # Tageweise durchsteppen 
   
 }
 
-inz_delta_df <- kreise %>%
+inz_delta2_df <- kreise %>%
   full_join(inz_delta_df, by = "AGS") %>%
-  select(-AGS)
+  select(-AGS) %>%
+  # Transponiere: Erst den umgekehrten Pivot nach Datum...
+  pivot_longer(cols = -kreis, names_to = "Datum", values_to ="inz") %>%
+  select(Datum,kreis,inz) %>%
+  # ...und dann nach Kreis pivotieren. 
+  pivot_wider(names_from = kreis, values_from = inz)
+  
 
-# write.xlsx(inz_delta_df,"vollstaendigkeit-kreise-wochen.xlsx")
-sheet_write(inz_delta_df, ss = aaa_id, sheet = "Abweichung Inzidenz")
+write.xlsx(inz_delta2_df,"vollstaendigkeit-kreise-wochen.xlsx")
+# Ins Google Sheet nur die letzten 8 Wochen: 8*7=56 
+# für die letzte 
+sheet_write(inz_delta2_df %>% filter(Datum > today()-56), ss = aaa_id, sheet = "Abweichung Inzidenz")
 msg("Abweichungen berechnet und geschreiben")
 
 # ---- Letzte 4 Wochen: Abweichungen nach Kreis und Wochentag
@@ -242,7 +284,7 @@ for (d in (t-35):(t-7)) {
   
   tag <- wday(as_date(d),label=TRUE,abbr=TRUE)
   # 
-  ref7tage_df <- read_csv2(paste0(path,"rki-",as_date(d+7),".csv")) %>%
+  ref7tage_df <- read_csv2(paste0(path,"rki-",as_date(d+7),".csv"),col_types = col_descr) %>%
     mutate(datum = as_date(Meldedatum)) %>%
     filter(datum > as_date(d-8) & datum < as_date(d)) %>%
     # Auf die Summen filtern?
@@ -255,7 +297,7 @@ for (d in (t-35):(t-7)) {
     summarize(AnzahlFall = sum(AnzahlFall)) %>%
     ungroup() %>%
     select(AGS,ref7t = AnzahlFall)
-  alt7tage_df <- read_csv2(paste0(path,"rki-",as_date(d),".csv")) %>%
+  alt7tage_df <- read_csv2(paste0(path,"rki-",as_date(d),".csv"),col_types = col_descr) %>%
     mutate(datum = as_date(Meldedatum)) %>%
     filter(datum > as_date(d-8) & datum < as_date(d)) %>%
     # Auf die Summen filtern?

@@ -9,7 +9,7 @@
 # Stand: 09.12.2020
 
 rm(list=ls())
-msgTarget <- "B13:C13"
+msgTarget <- "B15:C15"
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt

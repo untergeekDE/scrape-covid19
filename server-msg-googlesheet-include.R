@@ -33,6 +33,8 @@ server <- FALSE
 
 # Logging und Update der Semaphore-Seite
 id_msg <- "1Q5rCvvSUn6WGcsCnKwGJ0y9PwbiML-34kyxYSYX2Qjk"
+aaa_id = "17s82vieTzxblhzqNmHw814F0xWN0ruJkqnFB1OpameQ"
+
 logfile <- ""
 
 # ---- Bibliotheken  ----
@@ -102,6 +104,11 @@ if (dir.exists("/home/jan_eggers_hr_de/rscripts/")) {
     setwd("F:/projekte/covid-19")
     sheets_keypath <- "F:/creds/"
   }  
+
+  if (dir.exists("E:/projekte/covid-19")) {
+    setwd("E:/projekte/covid-19")
+    sheets_keypath <- "E:/creds/"
+  }  
   
   # Gibt es die Datei? 
   if (!file.exists(paste0(sheets_keypath,sheets_filename))) { 
@@ -110,92 +117,10 @@ if (dir.exists("/home/jan_eggers_hr_de/rscripts/")) {
 }
 
 
+
+
 gs4_deauth() # Authentifizierung löschen
 gs4_auth(email=sheets_email,path=paste0(sheets_keypath,sheets_filename))
 
 msg("Google Credentials erfolgreich gesetzt\n")
-
-# ---- Start, RKI-Daten lesen, Hessen-Fälle filtern, Kopie schreiben ----
-
-read_rki_data <- function(use_json = TRUE) {
-  if (use_json) {
-    
-    # JSON-Abfrage-Code von Till (danke!)
-    # Dokumentation: https://github.com/br-data/corona-deutschland-api/blob/master/RKI-API.md
-    rki_json_link <- paste0("https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/",
-      "rest/services/RKI_COVID19/FeatureServer/0/query?",
-      "where=1%3D1",            # where 1=1
-      "&outFields=*",           # alle Ausgabefelder
-      "&returnGeometry=false",
-      "&cacheHint=true",
-      "&f=json",
-      "&resultRecordCount=2000")  # 2000 Fälle pro Abfrage (Maximum sind 5k)
-    
-    
-    # ---- GRABSTEIN für rekursiver_offset() ----
-    
-    # An dieser Stelle, liebe Gemeinde, halten wir inne und gedenken einen
-    # Moment der Stille lang unserer Freundin, der alten rekursiven Funktion.
-    # Von ihrem Vater Till Hafermann mit unnachahmlicher Eleganz versehen, 
-    # erledigte sie ihre Arbeit schnell und diskret wie niemand sonst.
-    # Allein, es gelüstete sie nach immer neuen Speicherseiten, und mit 
-    # dieser Gier riss sie nicht nur sich, sondern auch die ganze R-Umgebung,
-    # in der sie lebte, in den Hungertod - denn ihre Gefräßigkeit beschwor
-    # den unbarmherzigen OOM-kill-daemon herauf. 
-    # Möge sie in Frieden ruhen. 
-    
-    # Muss in Stückchen gelesen werden, weil per JSON nicht mehr als 5000 Datensätze zurückgegeben werden
-    rki_ <- NULL
-    offset <- 0
-    
-    rki_json_offset <- function(offset = 0){
-      neuer_rki_link = str_c(rki_json_link, "&resultOffset=", offset)
-      neue_liste = read_json(neuer_rki_link, simplifyVector = TRUE)
-      neue_faelle = neue_liste$features$attributes
-      return(neue_faelle)
-    }
-      
-    while(!is.null(neue_faelle <- rki_json_offset(offset))) {
-      if(is.null(rki_)){
-        rki_ = neue_faelle
-      } else{
-        rki_ = bind_rows(rki_, neue_faelle) 
-      }
-      offset <- as.integer(offset + nrow(neue_faelle)) 
-      # as.integer() vermeidet einen Bug, bei dem die Zahl 100000 
-      # als "1e+05" übergeben wird.
-    }
-    
-    # Datumsspalten in solche umwandeln
-    # Die Spalten "Meldedatum" und "Refdatum" sind in UTC-Millisekunden(!) angegeben.
-    
-    rki_ <- rki_ %>%
-      mutate(Meldedatum = as_datetime(Meldedatum/1000, origin = lubridate::origin, tz = "UTC"),
-             Refdatum = as_datetime(Refdatum/1000, origin = lubridate::origin, tz = "UTC"))
-    
-    rki_$Datenstand <- as_date(dmy_hm(rki_$Datenstand))
-    
-  } else {
-    # use_json == FALSE
-    rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"  
-    ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
-    rki_ = read.csv(url(rki_url)) 
-    if (ncol(rki_)> 17 & nrow(rki_) > 100000) {
-      msg("Daten erfolgreich vom RKI-CSV gelesen")
-    } else {
-      # Rückfall: Aus dem NDR-Data-Warehouse holen
-      rki_ = read.csv(url(ndr_url))
-      msg("Daten erfolgreich aus dem NDR Data Warehouse gelesen")
-    }
-  }
-  # Sollte die Spalte mit der Landkreis kein String sein, umwandeln und mit führender 0 versehen
-  if(class(rki_$IdLandkreis) != "character") {
-    rki_$IdLandkreis <- paste0("0",rki_$IdLandkreis)
-  }
-  # Wenn 'Datenstand' ein String ist, in ein Datum umwandeln. Sonst das Datum nutzen. 
-  if (class(rki_$Datenstand) == "character") {
-    rki_$Datenstand <- parse_date(rki_$Datenstand[1],format = "%d.%m.%y%H, %M:%S Uhr")
-  }
-  return(rki_)
-}
 

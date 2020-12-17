@@ -212,6 +212,10 @@ icu_df <- icu_df %>%
 
 write_sheet(icu_df,ss="12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4","ICUPrognose")
 
+msg("Intensivbetten-Chart-Daten aktualisiert")
+
+# Intensivbetten-Chart pushen
+dw_publish_chart("kc2ot")
 
 
 # ---- Krankenhaus-Einzelmeldungen abrufen und archivieren ----

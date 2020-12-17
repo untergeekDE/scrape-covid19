@@ -6,7 +6,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 09.12.2020
+# Stand: 17.12.2020
 
 rm(list=ls())
 msgTarget <- "B13:C13"
@@ -199,6 +199,7 @@ write_sheet(neuprognose_df,ss=hosp_id,sheet="NeuPrognose")
 # die Gestaltung der Zeile von Hand umkonfigurieren muss. 
 # Besser: Über die API die entsprechende Datenreihe umbenennen. 
 
+# ---- Neufall-Prognose-Chart ----
 
 prog_chart_id = "g2CwK" # Neufälle-Prognose
 chart_data <- dw_retrieve_chart_metadata(prog_chart_id)
@@ -219,6 +220,8 @@ dw_publish_chart(prog_chart_id)
 
 msg("Grafik Neufälle (",prog_chart_id,") aktualisiert")
 
+# ---- Intensivbetten-Prognose erstellen und Chart schreiben ----
+
 # DIVI-Daten einlesen
 divi_df <- read_sheet(aaa_id, sheet="DIVI Hessen-Archiv") %>%
   select(datum = 1,intensiv = 2) %>%
@@ -237,5 +240,17 @@ divi_df <- read_sheet(aaa_id, sheet="DIVI Hessen-Archiv") %>%
 msg("Intensivbetten-Prognose erstellt, schreiben...")
 
 write_sheet(divi_df, ss=hosp_id, sheet="ICUPrognose")
+
+# Grafik anpassen
+msg("Grafik Intensivbetten (",intensiv_chart_id,") aktualisieren")
+
+intensiv_chart_id = "kc2ot" # Neufälle-Prognose
+
+dw_edit_chart(chart_id = intensiv_chart_id,annotate = p_str)
+dw_publish_chart(intensiv_chart_id)
+# DIVI-freie Betten - Hypothese: maximale Kapazität entspricht
+# der Anzahl der derzeit freien Betten plus der COVID-Intensivfälle
+
+
 
 msg("OK!")

@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 10.12.2020
+# Stand: 18.12.2020
 
 # TODO: 
 # - 4-Wochen-Fallzahlen mit korrigierten Daten rechnen
@@ -468,6 +468,8 @@ all_data <- lapply(stations$id, function(x){
 # Pivot for datawrapper
 data_by_city <- all_data %>%
   pivot_wider(id_cols = timestamp, names_from = label, values_from = c(pedestrians_count,weather_condition)) %>%
+### 
+# Woche unter Einbeziehung des Jahres 
   mutate(week = isoweek(timestamp))
 
 # Summiere Städte auf, dann: 
@@ -477,7 +479,7 @@ reference_week = 38 # KW38 war Mitte September
 
 data_for_dw_weeks <- data_by_city %>%
   # Nur Wochentage!
-  filter(wday(timestamp) %in% 2:6) %>%
+  filter(wday(timestamp) %in% 1:6) %>% # Passanten montags bis samstags
   mutate(Frankfurt = `pedestrians_count_Frankfurt a.M., Goethestraße`+
            `pedestrians_count_Frankfurt a.M., Zeil (Mitte)` +
            `pedestrians_count_Frankfurt a.M., Große Bockenheimer Straße`,

@@ -479,7 +479,7 @@ reference_week = 38 # KW38 war Mitte September
 
 data_for_dw_weeks <- data_by_city %>%
   # Nur Wochentage!
-  filter(wday(timestamp) %in% 1:6) %>% # Passanten montags bis samstags
+  filter(wday(timestamp) %in% 2:7) %>% # Passanten montags bis samstags
   mutate(Frankfurt = `pedestrians_count_Frankfurt a.M., Goethestraße`+
            `pedestrians_count_Frankfurt a.M., Zeil (Mitte)` +
            `pedestrians_count_Frankfurt a.M., Große Bockenheimer Straße`,

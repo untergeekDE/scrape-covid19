@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 18.12.2020
+# Stand: 12.1.2021
 
 # TODO: 
 # - 4-Wochen-Fallzahlen mit korrigierten Daten rechnen
@@ -156,7 +156,7 @@ read_rki_data <- function(use_json = TRUE) {
 rki_df <- data.frame(2,2)
 
 # Daten lesen; wenn noch Daten von gestern, warten. 
-use_json <- FALSE
+use_json <- TRUE
 if (use_json) msg("Daten vom RKI via JSON anfordern") else msg("RKI-CSV lesen")
 
 rki_df <- read_rki_data(use_json)
@@ -375,7 +375,7 @@ range_write(gsheet_id,as.data.frame(faelle_gesamt),
 # Genesen gerundet auf 100 (Zeile 8)
 #range_write(gsheet_id,as.data.frame("Fälle gesamt"),range="Basisdaten!A8")
 genesen_gerundet <- round(genesen_gesamt / 100)*100
-genesen_str <- format(genesen_gerundet,big.mark = ".", nsmall =0)
+genesen_str <- format(genesen_gerundet,big.mark = ".", decimal.mark = ",", nsmall =0)
 range_write(gsheet_id,as.data.frame(paste0("ca. ",genesen_str)),
             range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
 
@@ -468,9 +468,9 @@ all_data <- lapply(stations$id, function(x){
 # Pivot for datawrapper
 data_by_city <- all_data %>%
   pivot_wider(id_cols = timestamp, names_from = label, values_from = c(pedestrians_count,weather_condition)) %>%
-### 
-# Woche unter Einbeziehung des Jahres 
-  mutate(week = isoweek(timestamp))
+  # Woche unter Einbeziehung des Jahres
+  # Rechnerische Woche, damit die Rechnung über den Jahrswechsel hinweg funktioniert
+  mutate(week = 1+as.integer(ymd(timestamp)-ymd(tag0)) %/% 7)
 
 # Summiere Städte auf, dann: 
 # Kalkuliere Wochenmittel und prozentuale Veränderung zu Referenzwoche
@@ -493,13 +493,13 @@ data_for_dw_weeks <- data_by_city %>%
   mutate(Darmstadt = `pedestrians_count_Darmstadt, Schuchardstraße`+
            `pedestrians_count_Darmstadt, Ernst-Ludwig-Straße`,
          Darmstadt_Wetter = `weather_condition_Darmstadt, Schuchardstraße`) %>%
-  mutate(Gießen = `pedestrians_count_Gießen, Seltersweg`,
-         Gießen_Wetter = `weather_condition_Gießen, Seltersweg`) %>%
+  mutate(`Gießen` = `pedestrians_count_Gießen, Seltersweg`,
+         `Gießen_Wetter` = `weather_condition_Gießen, Seltersweg`) %>%
   # Erst mal ohne Wetter
   select(timestamp,week,
          Darmstadt, Darmstadt_Wetter,
          Frankfurt,Frankfurt_Wetter,
-         Gießen, Gießen_Wetter,
+         `Gießen`, Gießen_Wetter,
          Limburg,Limburg_Wetter,
          Wiesbaden, Wiesbaden_Wetter) %>%
   group_by(week) %>%
@@ -507,8 +507,8 @@ data_for_dw_weeks <- data_by_city %>%
             Darmstadt_Wetter = first(Darmstadt_Wetter),
             Frankfurt = sum(Frankfurt),
             Frankfurt_Wetter = first(Darmstadt_Wetter),
-            Gießen = sum(Gießen),
-            Gießen_Wetter = first(Gießen_Wetter),
+            `Gießen` = sum(`Gießen`),
+            `Gießen_Wetter` = first(`Gießen_Wetter`),
             Limburg = sum(Limburg),
             Limburg_Wetter = first(Limburg_Wetter),
             Wiesbaden = sum(Wiesbaden),
@@ -516,7 +516,7 @@ data_for_dw_weeks <- data_by_city %>%
 
 # Referenzwerte bestimmen
 ref_week <- data_for_dw_weeks %>%
-  select(Frankfurt, Gießen, Darmstadt, Limburg, Wiesbaden,week) %>%
+  select(Frankfurt, `Gießen`, Darmstadt, Limburg, Wiesbaden,week) %>%
   filter(week == reference_week)
 
 data_for_dw_weeks <- data_for_dw_weeks %>%
@@ -525,10 +525,10 @@ data_for_dw_weeks <- data_for_dw_weeks %>%
   filter((tag0+week*7-2) < today()) %>%
   mutate(Frankfurt = round(Frankfurt/ref_week$Frankfurt*100,1)-100,
          Darmstadt = round(Darmstadt/ref_week$Darmstadt*100,1)-100,
-         Gießen = round(Gießen/ref_week$Gießen*100,1)-100,
+         `Gießen` = round(`Gießen`/ref_week$`Gießen`*100,1)-100,
          Wiesbaden = round(Wiesbaden/ref_week$Wiesbaden*100,1)-100,
          Limburg = round(Limburg/ref_week$Limburg*100,1)-100) %>%
-  mutate(Mittel = (Frankfurt+Darmstadt+Gießen+Wiesbaden+Limburg)/5) %>%
+  mutate(Mittel = (Frankfurt+Darmstadt+`Gießen`+Wiesbaden+Limburg)/5) %>%
   mutate(wtext = paste0(day(as_date(tag0+week*7-7)),".",
                         ifelse(month(as_date(tag0+week*7-7)) == month(as_date(tag0+week*7-3)),"",month(as_date(week*7+4))),
                         ifelse(month(as_date(tag0+week*7-7)) == month(as_date(tag0+week*7-3)),"","."),
@@ -542,9 +542,14 @@ dw_publish_chart(chart_id = "U89m9")
 
 # ---- Aufbereitung nach Kreisen ----
 
+# Änderung: Als "Notizen" evtl. Ausgangssperren vermerken
 # Das letzte Kreis-Dokument ziehen und die Notizen isolieren
-notizen_df <- range_read(gsheet_id, sheet = "KreisdatenAktuell") %>% 
-  select (AGS = ags_kreis, notizen)
+
+sperren_id = "1zdR1rDOt0H6THUke_W6Hb-Lt3luzh0ZJtBPxvf3cZbI"
+
+notizen_df <- range_read(sperren_id, sheet = "Ausgangssperren") %>% 
+  select (AGS, notizen = Infos) %>%
+  mutate(notizen = ifelse(notizen != "",paste0("<strong>Ausgangssperre: ",notizen,"</strong><br>"),"&nbsp;"))
 
 # für die Inzidenz: Letzte 7 Tage filtern
 f7tage_df <- rki_he_df %>%
@@ -602,7 +607,8 @@ kreise_summe_df <- rki_he_df %>%
          notizen,
          TotProz,
          GenesenProz,
-         AktivProz)
+         AktivProz,
+         GA_link)
 
 # ---- Neufälle letzte vier Wochen, SVG-Grafik ----
 
@@ -837,9 +843,9 @@ unbek_tote_df <- rki_df %>%
   filter(!str_detect(Altersgruppe,"A[0-9]")) %>%
 # Todesfälle ausfiltern
   filter(NeuerTodesfall %in% c(0,1)) %>%
-  select(Altersgruppe,Geschlecht,AnzahlTodesfall) %>%
-  pivot_wider(names_from = Geschlecht, values_from = AnzahlTodesfall)
-  
+  select(Altersgruppe,Geschlecht,AnzahlTodesfall)
+
+unbek_tote_df <- data.frame(Altersgruppe = "unbekannt",M = NA,W = NA,unbekannt=sum(unbek_tote_df$AnzahlTodesfall),CFR = NA)
  
 tote_df <- rbind(tote_df, unbek_tote_df) 
   
@@ -910,9 +916,11 @@ alter_woche_df <- rki_df %>%
           `15-34 Jahre` = `15-34 Jahre`/summe,
           `35-59 Jahre` = `35-59 Jahre`/summe,
           `60-79 Jahre` = `60-79 Jahre`/summe,
-          `80+ Jahre` = `80+ Jahre`/summe)
+          `80+ Jahre` = `80+ Jahre`/summe) %>%
+  # Kalenderwoche als Text
+  mutate(KW = isoweek(Stichtag))
 
-# 
+ 
 range_write(alter_woche_df,ss=gsheet_id,sheet="NeufaelleAlterProzentWoche", reformat=FALSE)
 write_csv2(alter_woche_df,"alter-woche.csv")
 
@@ -967,6 +975,22 @@ dw_publish_chart(chart_id = "JQiOo") # Anteil der Altersgruppen an den Neufälle
 #
 dw_publish_chart(chart_id = "8eMAz") # Liniengrafik Inzidenz nach Kreisen für Dirk Kunze
 dw_publish_chart(chart_id = "g2CwK") # 14-Tage-Prognose Neufälle
+
+# Die barrierefreie Seite auch pingen
+
+# Grafik: Basisdaten OXn7r - wie normale Seite
+dw_publish_chart(chart_id = "4yvyB")       # Tabelle Corona-Kreis-Inzidenzen
+dw_publish_chart(chart_id = "QxCwd")       # Tabelle R-Wert
+# Tabelle Aktive Fälle XpbpH - wie normale Seite
+# Tabelle Todesfälle JQobx - wie normale Seite
+dw_publish_chart(chart_id = "1urhZ")       # Tabelle Schwere Fälle
+# Tabelle DIVI-Auslastung tYJGs - wie normale Seite (DIVI-Skript)
+dw_publish_chart(chart_id = "byXbs")        # Tabelle Neufälle je Woche
+dw_publish_chart(chart_id = "aLtJ0")        # Tabelle Tests
+dw_publish_chart(chart_id = "KyrDx")        # Tabelle Altersschichtung
+
+
+
 
 # Kein Update DIVI-Scraper
 # Kein Update dieser Grafiken: 

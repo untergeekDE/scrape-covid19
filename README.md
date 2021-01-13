@@ -5,6 +5,8 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des Robert-Koch-I
 
 - Quelle RKI (Aktuelle Fallzahlen): https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0 und API
 - Quelle RKI (für den R-Wert): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Projekte_RKI/Nowcasting_Zahlen.xlsx?__blob=publicationFile
+- Quelle RKI (für Testzahlen): 
+- Quelle RKI (für Impfzahlen): via [dieses Repository von ard-data](https://github.com/ard-data/2020-rki-impf-archive/tree/master/data/2_csv)
 - Quelle DIVI: Endpunkt https://diviexchange.blob.core.windows.net/%24web/DIVI_Intensivregister_Auszug_pro_Landkreis.csv und API
 - Quelle Helmholtz: https://gitlab.com/simm/covid19/secir/-/tree/master/img/dynamic/Rt_rawData
 - Quelle JHU: https://gitlab.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/
@@ -15,7 +17,8 @@ Die [Quelle "Hessisches Sozialministerium"](https://soziales.hessen.de/gesundhei
 
 Die Daten werden in der Regel in ein Google Sheet geschrieben.
 
-- https://docs.google.com/spreadsheets/d/17s82vieTzxblhzqNmHw814F0xWN0ruJkqnFB1OpameQ/edit - alle Daten
+- [Google Sheet AAA](https://docs.google.com/spreadsheets/d/17s82vieTzxblhzqNmHw814F0xWN0ruJkqnFB1OpameQ/edit) - alle Daten
+- [Google Sheet Hospitalisierung](https://docs.google.com/spreadsheets/d/12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4/edit) - von Hand eingetragene Klinikdaten
 
 Die tägliche Übersicht der Fallzahlen, Inzidenzen, Neufälle in den letzten 7 Tagen etc. nach Kreisen wird bis auf weiteres auch hier angeboten: https://d.data.gcp.cloud.hr.de/scrape-hsm.csv
   
@@ -64,6 +67,7 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 12.1.: Überblick Todesfälle je Woche; Integration der Impfzahlen in die Basisdaten
 * 10.12.: Helfer-Skripte aktualisieren COVID-Simulator-Prognose und RKI-Testdaten automatisch
 * 8.12.: Todesfälle-Statistik berücksichtigt jetzt auch nicht zugeordnete Fälle
 * 4.12.: Prognose wird aus Google Sheet gelesen, um aktuelle 4-Wochen-Werte ergänzt und neu geschrieben. 

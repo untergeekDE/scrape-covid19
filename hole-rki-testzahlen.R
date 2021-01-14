@@ -37,8 +37,10 @@ while (nrow(tests_df) == nrow(aktuell_df)) {
 
   tests_df <- na.omit(tests_df[2:nrow(tests_df),]) %>%
     rename(kw = 1, tests = 2, positiv = 3, quote = 4) %>%
-    mutate(kw = as.numeric(str_replace(kw,"[^0-9]",""))) %>%
-    mutate(stichtag = as_date("2020-03-15")+(kw-11)*7) %>%
+    mutate(jahr = as.numeric(str_extract(kw,"20[0-9][0-9]"))) %>%
+    mutate(kw = as.numeric(str_replace(str_extract(kw,"[0-9]+/"),"[^0-9]",""))) %>%
+    # Sonderlösung für 2020 und 2021 - weil es 2020 eine KW53 gab, 371 Tage bis KW1/2021
+    mutate(stichtag = as_date("2020-03-15")+(kw-11)*7+(jahr-2020)*371) %>%
     select(kw ,stichtag, tests, positiv, quote)
   if (now() > ts+(24*3600)) {
     msg("KEINE DATEN GEFUNDEN")

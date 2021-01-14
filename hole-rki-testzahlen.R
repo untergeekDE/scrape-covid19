@@ -47,5 +47,6 @@ while (nrow(tests_df) == nrow(aktuell_df)) {
 }
 msg("Neue Testzahlen vom RKI gelesen")
 write_sheet(tests_df, aaa_id, sheet="TestzahlenAutomatisch")
+dw_publish_chart("YjiG1") # Testdatenzahlen neu publizieren
 
 msg("OK!")

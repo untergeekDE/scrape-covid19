@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 18.1.2021
+# Stand: 26.1.2021
 
 # TODO: 
 
@@ -377,11 +377,29 @@ range_write(aaa_id,as.data.frame(paste0(format(faelle_gesamt,big.mark = ".", dec
 # Immunisiert und geimpft (Zeile 8 und 9)
 
 msg("Impfzahlen und Immunisierungsquote")
-if (file.exists("./impfen-include.R")) {
-  source("./impfen-include.R")
-} else {
-  source("/home/jan_eggers_hr_de/rscripts/impfen-include.R")
-}
+# Geimpft (Zeile 8)
+impfen_df <- read_sheet(ss=aaa_id,sheet = "ArchivImpfzahlen") %>%
+  filter(am == max(am))
+range_write(aaa_id,as.data.frame(paste0("Geimpft (",
+                                        format.Date(impfen_df$am,"%d.%m."),")")),
+            range="Basisdaten!A8",col_names=FALSE,reformat=FALSE)
+range_write(aaa_id, as.data.frame(paste0(
+  format(impfen_df$personen,big.mark=".",decimal.mark = ","),
+  " (+", format(impfen_df$differenz_zum_vortag_erstimpfung,big.mark = ".", decimal.mark = ",", nsmall =0),
+  ")")),
+  range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
+
+# Immun (Zeile 9)
+impf_alt_df <- read_sheet(ss=aaa_id,sheet="ArchivImpfzahlen") %>% filter(am <= today()-14)
+immun <- max(as.numeric(impf_alt_df$personen)) + genesen_gesamt
+hessen=sum(read.xlsx("index/kreise-index-pop.xlsx") %>% select(pop))
+
+range_write(aaa_id,as.data.frame("Immun sind ca. "),range="Basisdaten!A9", col_names=FALSE,reformat=FALSE)
+immun_str <- paste0(format(round(immun/hessen*100,2),
+                           big.mark = ".", decimal.mark = ",", nsmall =0),
+                    " %")
+range_write(aaa_id,as.data.frame(immun_str),
+            range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
 
 
 # Todesfälle heute (Zeile 10)

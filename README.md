@@ -5,8 +5,8 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des Robert-Koch-I
 
 - Quelle RKI (Aktuelle Fallzahlen): https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0 und API
 - Quelle RKI (für den R-Wert): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Projekte_RKI/Nowcasting_Zahlen.xlsx?__blob=publicationFile
-- Quelle RKI (für Testzahlen): 
-- Quelle RKI (für Impfzahlen): via [dieses Repository von ard-data](https://github.com/ard-data/2020-rki-impf-archive/tree/master/data/2_csv)
+- Quelle RKI (für Testzahlen): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Testzahlen-gesamt.html;jsessionid=EF5B74A0B2AEE46C92BE7A6C719305A9.internet082?nn=13490888
+- Quelle RKI (für Impfzahlen): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquoten-Tab.html;jsessionid=63BB094C521A1D8D2E1767E9A97F2699.internet061 und z.T. via [diesem Repository von ard-data](https://github.com/ard-data/2020-rki-impf-archive/tree/master/data/2_csv)
 - Quelle DIVI: Endpunkt https://diviexchange.blob.core.windows.net/%24web/DIVI_Intensivregister_Auszug_pro_Landkreis.csv und API
 - Quelle Helmholtz: https://gitlab.com/simm/covid19/secir/-/tree/master/img/dynamic/Rt_rawData
 - Quelle JHU: https://gitlab.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/
@@ -28,6 +28,7 @@ Die tägliche Übersicht der Fallzahlen, Inzidenzen, Neufälle in den letzten 7 
 * divi-zahlen-aufbereiten.R - liest morgens die Einzelmeldungen (JSON) und das Überblicks-Blatt (CSV) zur Intensivbettenauslastung
 * hole-rki-testzahlen.R - liest ein XLSX mit den nationalen Testzahlen von der RKI-Seite
 * hole-covid-simulator.R - liest ein CSV mit der wöchentlichen Simulation des COVID-Simulators der Universität des Saarlandes für Hessen 
+* hole-impfzahlen.R - liest ein XLSX mit aktuellen Impfzahlen von der RKI-Seite
 * meldeverzug-inzidenz.R - schaut für die zurückliegenden Wochen nach der prozentualen Veränderung der Inzidenz durch Meldeverzug und versucht einen "Datenqualitäts-Index" - Anteil der Daten in der letzten Woche, der mehr als 3 Tage zu spät kam
 * server-msg-googlesheet-include.R - enthält Code, den fast alle Skripte brauchen: die Ausgabe von Statusmeldungen über GoogleSheets, den JSON-Code zum Einlesen der RKI-Daten, Unterscheidung Server/lokal, etc. 
 
@@ -67,6 +68,7 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 28.1.: Impfquoten und -zahlen; Prognose zur Durchimpfung der Hochrisiko-Gruppe
 * 12.1.: Überblick Todesfälle je Woche; Integration der Impfzahlen in die Basisdaten
 * 10.12.: Helfer-Skripte aktualisieren COVID-Simulator-Prognose und RKI-Testdaten automatisch
 * 8.12.: Todesfälle-Statistik berücksichtigt jetzt auch nicht zugeordnete Fälle

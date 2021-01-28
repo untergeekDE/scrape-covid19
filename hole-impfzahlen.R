@@ -54,7 +54,7 @@ while (impfen_df$am == max(impfen_meta_df$Datum) &&
     
   }
   # Nochmal versuchen: XLSX neu lesen
-  impfen_meta_df <- omit.na(read.xlsx(rki_xlsx_url,sheet=4)) %>% 
+  impfen_meta_df <- na.omit(read.xlsx(rki_xlsx_url,sheet=4)) %>% 
     filter(Datum != "Gesamt") %>%
     mutate(Datum = as.Date(as.numeric(Datum),origin="1899-12-30"))
   
@@ -103,7 +103,7 @@ msg("Deutschland-Karte aktualisieren...")
 dw_publish_chart("6PRAe") # Basisdaten-Seite
 
 
-# ---- Hessen isolieren, Basisdaten anpassen, Impfdaten-Seite 
+# ---- Hessen isolieren, Basisdaten anpassen, Impfdaten-Seite ----
 msg("Hessen-Daten bauen")
 impf_df <- impfen_alle_df %>%
   # nur Hessen
@@ -123,7 +123,18 @@ range_write(aaa_id, as.data.frame(paste0(
   range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
 dw_publish_chart("OXn7r") # Basisdaten-Seite
 
-# ---- Impfzahlen-Seite
+# ---- Tag archivieren ----
+
+msg("Archivdaten schreiben")
+#impf_tabelle <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen")
+if (as.Date(impf_df$am) %in% as.Date(impf_tabelle$am)) {
+  impf_tabelle[impf_tabelle$am == impf_df$am,] <- impf_df
+} else {
+  impf_tabelle <- rbind(impf_tabelle,impf_df)
+}
+
+write_sheet(impf_tabelle,aaa_id,sheet = "ArchivImpfzahlen")
+# ---- Impfzahlen-Seite ----
 
 # Geimpfte Personen - Zeile 2
 range_write(aaa_id,as.data.frame(paste0(
@@ -174,7 +185,7 @@ range_write(aaa_id,as.data.frame(paste0(
   range="Impfzahlen!A6", col_names = FALSE, reformat=FALSE)
 
 # Impfgeschwindigkeit letzte 5 Tage
-geschwindigkeit = mean(impf_tabelle$differenz_zum_vortag_erstimpfung[nrow(impf_tabelle)-4:0])
+geschwindigkeit = mean(impf_tabelle$differenz_zum_vortag_erstimpfung[nrow(impf_tabelle)-4:nrow(impf_tabelle)])
 tage_bis_x = (prio1-impf_df$personen)/geschwindigkeit
   
 range_write(aaa_id,as.data.frame(paste0(
@@ -209,17 +220,6 @@ dw_publish_chart(chart_id= "69Q8q")
 
 
 
-# ---- Tag archivieren ----
-
-msg("Archivdaten schreiben")
-#impf_tabelle <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen")
-if (as.Date(impf_df$am) %in% as.Date(impf_tabelle$am)) {
-  impf_tabelle[impf_tabelle$am == impf_df$am,] <- impf_df
-} else {
-  impf_tabelle <- rbind(impf_tabelle,impf_df)
-}
-
-write_sheet(impf_tabelle,aaa_id,sheet = "ArchivImpfzahlen")
 ### Ergänzen: Archivdaten bauen
 
 # ---- Tabelle Impfzahlen neu bauen - als Funktion ----

@@ -6,7 +6,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 18.12.2020
+# Stand: 8.2.2021
 
 rm(list=ls())
 msgTarget <- "B13:C13"
@@ -53,18 +53,25 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
   msg("OK - Stand ",prog_d)
 } else{
   msg("Prognose anpassen")
-
-  sim_df <- read_csv(path) %>%
-    filter(state == "Hessen") %>%
-    select(-state) %>%
-    mutate(vom = prog_d) 
+  # Kreisdaten einlesen
   
-  sim_df$var <- as.factor(sim_df$var)
+  sim_df <- read_csv(path) %>%
+    mutate(vom = prog_d) %>%
+    mutate(var = as.factor(var))
+  
+  
+  sim_lk_df <- sim_df %>%
+    filter(state != "Hessen")
+
+  sim_he_df <- sim_df %>%
+    filter(state == "Hessen") %>%
+    select(-state)
+  
   
   # Archivkopie ablegen
   write_csv(sim_df,paste0("./daten/cosim-",prog_d,".csv"))
   
-  daily_df <- sim_df %>%
+  daily_df <- sim_he_df %>%
     filter(var == "DAILY_CASES" ) %>%
     # gleitendes 7-Tage-Mittel
     mutate(neu7_min  = (lag(minsim)+
@@ -91,22 +98,22 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
     filter(date >= prog_d) %>%
     select(date,neu7_min, neu7_mean, neu7_max)
   
-  hospital_df <- sim_df %>%
+  hospital_df <- sim_he_df %>%
     filter(var == "HOSPITAL" ) %>%
     filter(date >= prog_d) %>%
     select(date,hosp_min=minsim, hosp_mean=meansim, hosp_max=maxsim)
   
-  daily_dead_df <- sim_df %>%
+  daily_dead_df <- sim_he_df %>%
     filter(var == "DAILY_DEAD" ) %>%
     filter(date >= prog_d) %>%
     select(date,tote_min=minsim, tote_mean=meansim, tote_max=maxsim)
   
-  icu_df <- sim_df %>%
+  icu_df <- sim_he_df %>%
     filter(var == "ICU" ) %>%
     filter(date >= prog_d) %>%
     select(date,icu_min=minsim, icu_mean=meansim, icu_max=maxsim)
   
-  inz_df <- sim_df %>%
+  inz_df <- sim_he_df %>%
     filter(var == "INCIDENCE" ) %>%
     filter(date >= prog_d) %>%
     select(date,inz_min=minsim, inz_mean=meansim, inz_max=maxsim)
@@ -124,7 +131,7 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
   aaa_id = "17s82vieTzxblhzqNmHw814F0xWN0ruJkqnFB1OpameQ"
   # Fallzahl 4 Wochen vom Google Bucket holen
   
-  rki_he_df <- read.csv("http://d.data.gcp.cloud.hr.de/hessen_rki_df.csv",sep=";")
+  rki_he_df <- read.csv("https://d.data.gcp.cloud.hr.de/hessen_rki_df.csv",sep=";")
   
   # Archivdaten Intensivbettenbelegung nach DIVI letzte Wochen
   hosp_df <- read_sheet(ss = aaa_id, sheet = "DIVI Hessen-Archiv") %>%
@@ -161,7 +168,7 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
     left_join(hosp_df, by = c("datum" = "datum"))
   
   # DIVI-Daten für die Kapazitäten
-  divi_he_df <- read.csv("http://d.data.gcp.cloud.hr.de/divi_laender.csv") %>%
+  divi_he_df <- read.csv("https://d.data.gcp.cloud.hr.de/divi_laender.csv") %>%
     filter(bundesland == "Hessen")
   
   # Kapazitätsprognose: 
@@ -243,16 +250,44 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
   write_sheet(divi_df, ss=hosp_id, sheet="ICUPrognose")
   
   # Grafik anpassen
-  msg("Grafik Intensivbetten (",intensiv_chart_id,") aktualisieren")
   
   intensiv_chart_id = "kc2ot" # Neufälle-Prognose
+
+  msg("Grafik Intensivbetten (",intensiv_chart_id,") aktualisieren")
   
   dw_edit_chart(chart_id = intensiv_chart_id,annotate = p_str)
   dw_publish_chart(intensiv_chart_id)
   # DIVI-freie Betten - Hypothese: maximale Kapazität entspricht
   # der Anzahl der derzeit freien Betten plus der COVID-Intensivfälle
   
-  
+  # ---- Regionale R-Wert-Tabelle ----
+  msg("Berechne regionales R")
+  kreise <- read.xlsx("index/kreise-namen-index.xlsx")
+  r_lk_df <- sim_lk_df %>%
+    # Das R in der Prognose bleibt im prognostizierten Zeitraum konstant
+    filter(date == today()) %>%
+    # Kreisbezeichner dazu
+    full_join(kreise,by=c("state" = "StatName")) %>%
+    # nutze irgendeine Variable
+    filter(var == "DAILY_CASES") %>%
+    select(AGS,Kreis=kreis,rt,vom) %>%
+    # Errechnung der Verdoppelungs- bzw. Halbwertszeit: 
+    # t(1/2) = ln(2)/(1-rt)*gamma (mal Generationenzeit).
+    # Da das Modell des Covid-Simulators mit einer Generationenzeit
+    # von 7 Tagen rechnet, wird hier berechnet mit: 
+    mutate(vzeit=(log(2)/(1-rt)*7))
+  #
+  write_sheet(r_lk_df,ss=aaa_id,sheet="Regionales Rt")
+  dw_edit_chart(chart_id = "me2xm",annotate = paste0(
+    "Berechnung vom ",
+    format.Date(prog_d,"%d.%m.%Y"),
+    " - Aufgrund der niedrigen Fallzahlen ist der Fehlerbereich ",
+    "relativ groß; die Angaben in Tagen dienen nur der Verdeutlichung.", 
+    "Der R-Wert ist mit einer Generationenzeit von 7 Tagen berechnet und deshalb mit ",
+    "den Werten des RKI und HZI nicht direkt vergleichbar. "
+  ))
+  dw_publish_chart(chart_id = "me2xm") 
   
   msg("OK!")
 } 
+

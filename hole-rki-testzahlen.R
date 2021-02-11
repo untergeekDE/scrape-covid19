@@ -6,7 +6,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 09.12.2020
+# Stand: 11.2.2021
 
 rm(list=ls())
 msgTarget <- "B15:C15"
@@ -30,12 +30,14 @@ tests_df <- aktuell_df
 
 ts <- now()
 while (nrow(tests_df) == nrow(aktuell_df)) {
-  tests_df <- read.xlsx(rki_tests_url, sheet = "Testzahlen")
+  tests_df <- read.xlsx(rki_tests_url, sheet = 2)
 
   # Erste Zeile ("bis KW10") und die Summen-Zeilen (mit NA) abschneiden
   # Vorläufig-Sternchen aus der ersten Spalte tilgen
 
   tests_df <- na.omit(tests_df[2:nrow(tests_df),]) %>%
+    # am 10.2.2021 hat das RKI noch eine Spalte mit einer laufenden Wochennr. dazugefügt - raus!
+    select(-1) %>%
     rename(kw = 1, tests = 2, positiv = 3, quote = 4) %>%
     mutate(jahr = as.numeric(str_extract(kw,"20[0-9][0-9]"))) %>%
     mutate(kw = as.numeric(str_replace(str_extract(kw,"[0-9]+/"),"[^0-9]",""))) %>%

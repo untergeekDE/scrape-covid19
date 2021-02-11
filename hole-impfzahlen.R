@@ -1,7 +1,7 @@
 ##################################### hole-impfzahlen.R #########################
 # - Impfzahlen 
 
-# Stand: 28.1.2021
+# Stand: 2.2.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -46,39 +46,43 @@ impfen_df <- read_sheet(ss=aaa_id,sheet = "ArchivImpfzahlen") %>%
 while (impfen_df$am == max(impfen_meta_df$Datum) &&
        today() > impfen_df$am + 1) {
 
+  Sys.sleep(300)
+  # Nochmal versuchen: XLSX neu lesen
+  msg("Datum: ",impfen_meta_df$Datum," - nochmal versuchen...")
+  impfen_meta_df <- na.omit(read.xlsx(rki_xlsx_url,sheet=4)) %>% 
+    filter(Datum != "Gesamt") %>%
+    mutate(Datum = as.Date(as.numeric(Datum),origin="1899-12-30"))
   # 4 Stunden lang versuchen
   if (now() > ts+(4*3600)) {
     msg("KEINE NEUEN DATEN GEFUNDEN")
     stop("Timeout")
   } else {
     
-  }
-  # Nochmal versuchen: XLSX neu lesen
-  impfen_meta_df <- na.omit(read.xlsx(rki_xlsx_url,sheet=4)) %>% 
-    filter(Datum != "Gesamt") %>%
-    mutate(Datum = as.Date(as.numeric(Datum),origin="1899-12-30"))
-  
+  }  
 }
 
 msg("Daten bis ",max(impfen_meta_df$Datum)," gelesen - Ländertabelle lesen...")
-impfen_alle_df <- na.omit(read.xlsx(rki_xlsx_url,sheet=2)) %>%
-  inner_join(na.omit(read.xlsx(rki_xlsx_url,sheet=3)),by = "RS") %>%
+impfen_alle_df <- read.xlsx(rki_xlsx_url,sheet=2) %>%
+  filter(!is.na(RS) & !is.na(Bundesland)) %>%
+  select(1:10) %>%
+  inner_join(read.xlsx(rki_xlsx_url,sheet=3),by = "RS") %>%
   # Datum dazupacken
   mutate(am = as.Date(max(impfen_meta_df$Datum))) %>%
   select(am,
          ID=RS,
          Bundesland = 2,
          personen = 4, # Erstimpfung,
-         differenz_zum_vortag_erstimpfung = 7,
-         impfquote = 8,
-         personen_durchgeimpft = 9,
-         differenz_zum_vortag_zweitimpfung = 10,
-         indikation_nach_alter = 12,
-         berufliche_indikation =13,
-         medizinische_indikation = 14,
-         pflegeheimbewohnerin = 15,
+         differenz_zum_vortag_erstimpfung = 8,
+         impfquote = 9,
+         personen_durchgeimpft = 10,
+         differenz_zum_vortag_zweitimpfung = 13,
+         indikation_nach_alter = 15,
+         berufliche_indikation =16,
+         medizinische_indikation = 17,
+         pflegeheimbewohnerin = 18,
          Biontech = 5,
-         Moderna = 6) %>%
+         Moderna = 6,
+         AstraZeneca = 7) %>%
   mutate(ID = as.numeric(ID),
           personen = as.numeric(personen),
          differenz_zum_vortag_erstimpfung = as.numeric(differenz_zum_vortag_erstimpfung),
@@ -89,8 +93,9 @@ impfen_alle_df <- na.omit(read.xlsx(rki_xlsx_url,sheet=2)) %>%
          berufliche_indikation = as.numeric(berufliche_indikation),
          medizinische_indikation = as.numeric(medizinische_indikation),
          pflegeheimbewohnerin = as.numeric(pflegeheimbewohnerin),
-         Biontech = as.numeric(Biontech),
-         Moderna = as.numeric(Moderna)) %>%
+         Biontech = as.integer(Biontech),
+         Moderna = as.integer(Moderna),
+         AstraZeneca = as.integer(AstraZeneca)) %>%
         #Sternchen aus dem Bundesland
         mutate(Bundesland = str_replace(Bundesland,"\\*",""))
 
@@ -108,7 +113,8 @@ msg("Hessen-Daten bauen")
 impf_df <- impfen_alle_df %>%
   # nur Hessen
   filter(as.numeric(ID) == 6) %>%
-  select(-ID,-Bundesland)
+  select(-ID,-Bundesland) %>%
+  mutate(durchgeimpft_quote = personen_durchgeimpft / hessen * 100)
 
 # Basisdaten-Seite anpassen und aktualisieren
 msg("Impfzahlen und Immunisierungsquote")
@@ -174,7 +180,8 @@ range_write(aaa_id,as.data.frame(paste0(
   range="Impfzahlen!A5", col_names = FALSE, reformat=FALSE)
 
 range_write(aaa_id,as.data.frame(paste0(
-  "haben <strong>beide Impfdosen</strong> erhalten und sind damit durchgeimpft.")),
+  "(",format(impf_df$personen_durchgeimpft/hessen*100,big.mark=".",decimal.mark = ",",digits=3),
+  "%) haben <strong>beide Impfdosen</strong> erhalten und sind damit durchgeimpft.")),
   range="Impfzahlen!B5", col_names = FALSE, reformat=FALSE)
 
 
@@ -219,7 +226,7 @@ dw_edit_chart(chart_id ="69Q8q", intro = indikation_str)
 dw_publish_chart(chart_id= "69Q8q")
 
 
-
+msg("OK")
 ### Ergänzen: Archivdaten bauen
 
 # ---- Tabelle Impfzahlen neu bauen - als Funktion ----
@@ -250,36 +257,38 @@ konstruiere_impftabelle_alt <- function() {
     filter(am != lag(am)) %>%
     # Differenz zum Vortag aus Erstimpfung errechnen
     mutate(differenz_zum_vortag_erstimpfung =as.numeric( 
-             ifelse(is.na(differenz_zum_vortag_erstimpfung),
-                    differenz_zum_vortag,differenz_zum_vortag_erstimpfung))) %>%
-    mutate(personen = as.numeric(ifelse(is.na(impfungen_kumulativ_erstimpfung),
-                            impfungen_kumulativ,
-                            impfungen_kumulativ_erstimpfung))) %>%
+             ifelse(is.na(dosen_differenz_zum_vortag),
+                    dosen_erst_differenz_zum_vortag,dosen_differenz_zum_vortag))) %>%
+    mutate(personen = as.numeric(ifelse(is.na(personen_erst_kumulativ),
+                            dosen_kumulativ,
+                            personen_erst_kumulativ))) %>%
     mutate(impfquote = as.numeric(personen)/hessen*100) %>%
     # Indikationen
-    mutate(indikation_nach_alter = as.numeric(ifelse(is.na(indikation_nach_alter),
-                                          indikation_nach_alter_erstimpfung,
-                                          indikation_nach_alter))) %>%
-    mutate(berufliche_indikation = as.numeric(ifelse(is.na(berufliche_indikation),
-                                          berufliche_indikation_erstimpfung,
-                                          berufliche_indikation))) %>%
-    mutate(medizinische_indikation = as.numeric(ifelse(is.na(medizinische_indikation),
-                                          medizinische_indikation_erstimpfung,
-                                          medizinische_indikation))) %>%
-    mutate(pflegeheimbewohnerin = as.numeric(ifelse(is.na(pflegeheimbewohnerin),
-                                          pflegeheimbewohnerin_erstimpfung,
-                                          pflegeheimbewohnerin))) %>%
+    mutate(indikation_nach_alter = as.numeric(ifelse(is.na(indikation_alter_erst),
+                                          indikation_alter_dosen,
+                                          indikation_alter_erst))) %>%
+    mutate(berufliche_indikation = as.numeric(ifelse(is.na(indikation_beruf_dosen),
+                                          indikation_beruf_erst,
+                                          indikation_beruf_dosen))) %>%
+    mutate(medizinische_indikation = as.numeric(ifelse(is.na(indikation_medizinisch_erst),
+                                          indikation_medizinisch_dosen,
+                                          indikation_medizinisch_erst))) %>%
+    mutate(pflegeheimbewohnerin = as.numeric(ifelse(is.na(indikation_pflegeheim_erst),
+                                          indikation_pflegeheim_dosen,
+                                          indikation_pflegeheim_erst))) %>%
     select(am,personen,differenz_zum_vortag_erstimpfung,impfquote,
-           personen_durchgeimpft = impfungen_kumulativ_zweitimpfung,
-           differenz_zum_vortag_zweitimpfung,
+           personen_durchgeimpft = personen_voll_kumulativ,
+           differenz_zum_vortag_zweitimpfung = dosen_voll_differenz_zum_vortag,
            indikation_nach_alter,
            berufliche_indikation,
            medizinische_indikation,
            pflegeheimbewohnerin,
-           Biontech = impfungen_kumulativ_by_biontech_erstimpfung,
-           Moderna = impfungen_kumulativ_by_moderna_erstimpfung) %>%
+           Biontech = dosen_erst_biontech_kumulativ,
+           Moderna = dosen_erst_moderna_kumulativ) %>%
     mutate(Moderna = as.numeric(ifelse(is.na(Moderna),0,Moderna))) %>%
-    mutate(Biontech = as.numeric(ifelse(is.na(Biontech),personen,Biontech)))
+    mutate(Biontech = as.numeric(ifelse(is.na(Biontech),personen,Biontech))) %>%
+    mutate(personen_durchgeimpft = as.integer(personen_durchgeimpft)) %>%
+    mutate(durchgeimpft_quote = personen_durchgeimpft/hessen*100)
     
     write_sheet(impf_tabelle,aaa_id,sheet="ArchivImpfzahlen")
     return(impf_tabelle)

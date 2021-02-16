@@ -1,7 +1,7 @@
 ##################################### hole-impfzahlen.R #########################
 # - Impfzahlen 
 
-# Stand: 2.2.2021
+# Stand: 16.2.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -48,8 +48,13 @@ while (impfen_df$am == max(impfen_meta_df$Datum) &&
 
   Sys.sleep(300)
   # Nochmal versuchen: XLSX neu lesen
-  msg("Datum: ",impfen_meta_df$Datum," - nochmal versuchen...")
-  impfen_meta_df <- na.omit(read.xlsx(rki_xlsx_url,sheet=4)) %>% 
+  msg("Gelesenes Datum: ",max(impfen_meta_df$Datum)," - nochmal versuchen...")
+  impfen_meta_df <- impfen_meta_df %>% filter(Datum == today())
+  while(nrow(impfen_meta_df) < 1) {
+    tryCatch(tmp <- read.xlsx(rki_xlsx_url,sheet=4)) 
+    impfen_meta_df <- na.omit(tmp)
+  }
+  impfen_meta_df <- impfen_meta_df %>% 
     filter(Datum != "Gesamt") %>%
     mutate(Datum = as.Date(as.numeric(Datum),origin="1899-12-30"))
   # 4 Stunden lang versuchen
@@ -64,7 +69,7 @@ while (impfen_df$am == max(impfen_meta_df$Datum) &&
 msg("Daten bis ",max(impfen_meta_df$Datum)," gelesen - Ländertabelle lesen...")
 impfen_alle_df <- read.xlsx(rki_xlsx_url,sheet=2) %>%
   filter(!is.na(RS) & !is.na(Bundesland)) %>%
-  select(1:10) %>%
+  select(1:13) %>%
   inner_join(read.xlsx(rki_xlsx_url,sheet=3),by = "RS") %>%
   # Datum dazupacken
   mutate(am = as.Date(max(impfen_meta_df$Datum))) %>%

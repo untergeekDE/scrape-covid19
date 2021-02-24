@@ -6,7 +6,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 8.2.2021
+# Stand: 18.2.2021
 
 rm(list=ls())
 msgTarget <- "B13:C13"
@@ -19,12 +19,13 @@ if (file.exists("./server-msg-googlesheet-include.R")) {
   source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
 }
 
+librar(ggplot2)
+
 # ---- Main: Covid-Simulator COSIM lesen ----
 
 
 repo <- "onwhenrdy/cosimhessen/"
 path <- "Hessen_LKs.csv"
-# später Github-Commit-Datum lesen, derzeit nur Statisch
 
 
 
@@ -277,17 +278,37 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
     # von 7 Tagen rechnet, wird hier berechnet mit: 
     mutate(vzeit=(log(2)/(1-rt)*7))
   #
-  write_sheet(r_lk_df,ss=aaa_id,sheet="Regionales Rt")
-  dw_edit_chart(chart_id = "me2xm",annotate = paste0(
+  rr_lk_df <- r_lk_df %>% 
+    left_join(read_sheet(aaa_id,sheet = "KreisdatenAktuell") %>%
+                             select(ags_kreis,neu,neu7tage,inz7t,stand),
+              by= c("AGS" = "ags_kreis")) %>%
+    left_join(read.xlsx("index/kreise-index-pop.xlsx") %>% 
+                select(kreis,Lat=Lon,Lon=Lat),
+              by= c("Kreis" = "kreis")) %>%
+    select(Lat,Lon,Kreis,rt,vom,vzeit,inz7t,neu,neu7tage,stand) %>%
+    # Das hier ist ne etwas dreckige Formel: 
+    # den niedrigsten Wert als Basislinie, ein paar Pixel dazu - und 100fach
+    # skalieren...
+    mutate(rrt = (rt-min(rt))/(max(rt)-min(rt))*50+1) %>%
+    left_join(read.xlsx("index/kreise-namen-index.xlsx") %>%
+                select(kreis,Abk),
+              by = c("Kreis" = "kreis"))
+  
+  write_sheet(rr_lk_df,ss=aaa_id,sheet="Regionales Rt neu")
+  rr_str <- paste0(
+    "Lesebeispiel: Ein großes, tiefrotes Symbol zeigt einen Kreis mit hoher",
+    " Fallzahl an, dessen Inzidenzwerte nur langsam sinken. ",
     "Berechnung vom ",
     format.Date(prog_d,"%d.%m.%Y"),
     " - Aufgrund der niedrigen Fallzahlen ist der Fehlerbereich ",
     "relativ groß; die Angaben in Tagen dienen nur der Verdeutlichung.", 
     "Der R-Wert ist mit einer Generationenzeit von 7 Tagen berechnet und deshalb mit ",
-    "den Werten des RKI und HZI nicht direkt vergleichbar. "
-  ))
-  dw_publish_chart(chart_id = "me2xm") 
-  
+    "den Werten des RKI und HZI nicht direkt vergleichbar. ")
+  dw_edit_chart(chart_id = "eessR", annotate=rr_str)
+  dw_publish_chart(chart_id = "eessR")
+  dw_edit_chart(chart_id = "9UVBF",annotate = rr_str)
+  dw_publish_chart(chart_id ="9UVBF")
+  ggplot(rr_lk_df, aes(rt,inz7t,label = Abk)) +  geom_text()
   msg("OK!")
 } 
 

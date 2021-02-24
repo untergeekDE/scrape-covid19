@@ -1,7 +1,7 @@
 ##################################### hole-impfzahlen.R #########################
 # - Impfzahlen 
 
-# Stand: 16.2.2021
+# Stand: 18.2.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -66,11 +66,30 @@ while (impfen_df$am == max(impfen_meta_df$Datum) &&
   }  
 }
 
-msg("Daten bis ",max(impfen_meta_df$Datum)," gelesen - Ländertabelle lesen...")
-impfen_alle_df <- read.xlsx(rki_xlsx_url,sheet=2) %>%
+msg("Daten bis ",max(impfen_meta_df$Datum)," gelesen - überprüfen...")
+
+# Archivkopie
+
+pp2 <- read.csv2("archiv/impfen-gestern-2.csv")
+pp3 <- read.csv2("archiv/impfen-gestern-3.csv")
+tabelle2 <- read.xlsx(rki_xlsx_url,sheet=2)
+tabelle3 <- read.xlsx(rki_xlsx_url,sheet=3)
+write.csv2(tabelle2,file = "archiv/impfen-gestern-2.csv",row.names=FALSE)
+write.csv2(tabelle3,file = "archiv/impfen-gestern-3.csv",row.names=FALSE)
+
+# Plausibilität prüfen
+# Stumpfer Trick: eine Zeile an das jeweilige Archivdings binden, 
+# wenn rbind() scheitert, hat sich die Tabelle verändert
+msg("Sheet 2 verändert?")
+tmp <- rbind(tabelle2,pp2)
+msg("Sheet 3 verändert?")
+tmp <- rbind(tabelle3,pp3)
+
+msg("Ländertabelle vom ",max(impfen_meta_df$Datum)," lesen")
+impfen_alle_df <- tabelle2 %>%
   filter(!is.na(RS) & !is.na(Bundesland)) %>%
   select(1:13) %>%
-  inner_join(read.xlsx(rki_xlsx_url,sheet=3),by = "RS") %>%
+  inner_join(tabelle3,by = "RS") %>%
   # Datum dazupacken
   mutate(am = as.Date(max(impfen_meta_df$Datum))) %>%
   select(am,
@@ -106,7 +125,7 @@ impfen_alle_df <- read.xlsx(rki_xlsx_url,sheet=2) %>%
 
 write_sheet(impfen_alle_df,aaa_id,sheet = "ImpfzahlenNational")
 
-# !!!Plausi-Prüfung nachtragen!!! - Formatänderungen auffangen
+# Impfdaten archivieren für Vergleich
 
 # ---- Vergleichskarte D generieren ----
 msg("Deutschland-Karte aktualisieren...")

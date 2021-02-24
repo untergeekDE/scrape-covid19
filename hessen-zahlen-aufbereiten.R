@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 26.1.2021
+# Stand: 22.2.2021
 
 # TODO: 
 
@@ -143,8 +143,62 @@ read_rki_data <- function(use_json = TRUE) {
   return(rki_)
 }
 
+# ---- Sicherheitscheck: Neue Daten? ----
+
+#RKI-Abfragestring für die Länder konstruieren
+
+rki_rest_query <- paste0("https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/",
+                         "Coronaf%C3%A4lle_in_den_Bundesl%C3%A4ndern/FeatureServer/0/",
+                         "query?f=json&where=1%3D1",
+                         "&returnGeometry=false&spatialRel=esriSpatialRelIntersects",
+                         "&outFields=*&groupByFieldsForStatistics=LAN_ew_GEN&orderByFields=LAN_ew_GEN%20asc",
+                         "&outStatistics=%5B%7B%22statisticType%22%3A%22max%22%2C%22onStatisticField%22%3A%22Fallzahl%22%2C%22outStatisticFieldName%22%3A%22value%22%7D%5D",
+                         "&outSR=102100&cacheHint=true")
+
+# Das JSON einlesen. Gibt eine ziemlich chaotische Liste zurück. 
+daten_liste <- read_json(rki_rest_query, simplifyVector = TRUE)
+faelle_gesamt_direkt <- daten_liste$features$attributes$value[7]
+
+# Was wo liegt, bekommt man über daten_liste$features$attributes$LAN_ew_GEN
+# Daten von gestern holen und vergleichen
+old_data <- read_sheet(aaa_id,sheet="Basisdaten") %>% select(x=1,y=2)
+od <- old_data %>% filter(str_detect(x,"Fälle gesamt"))
+od2 <- str_remove(od$y," \\(ca.+\\)")
+faelle_gestern <- as.integer(str_remove(od2,"[^0-9]"))
+
+# Test auf gleiches Ergebnis nur, wenn die Basisdaten alt sind
+if (as.Date(old_data$x[1],format="%d.%m.%y%y") < today()) {
+  # Gleiche Daten wie gestern??? Warte. 
+  starttime <- now()
+  while (faelle_gesamt_direkt == faelle_gestern) {
+    msg("!!!JSON-Direktabfrage ergibt keine Veränderung zu gestern!!!")
+    Sys.sleep(300) # 5min schlafen
+    daten_liste <- read_json(rki_rest_query, simplifyVector = TRUE)
+    faelle_gesamt_direkt <- daten_liste$features$attributes$value[7]
+    if (now() > starttime+10800) {
+      msg("JSON: Keine neue Fallzahl")
+      simpleError("Timeout, keine aktuellen RKI-Daten nach 3 Stunden")
+      quit()
+    }
+  }
+}
+
+# Plausibilitätsprüfung 1: Fehler, wenn neue Fallzahl kleiner als die gestern
+if (faelle_gesamt_direkt < faelle_gestern) {
+  msg("!!!Fälle heute < Fälle gestern!!!")
+  simpleError("Fälle heute < Fälle gestern")
+  quit()
+}
+
+# Plausibilitätsprüfung 2: Fehler, Absurd hohe Steigerung
+if (faelle_gesamt_direkt - faelle_gestern > 50000) {
+  msg("!!!Wirklich mehr als 50k neue Fälle in Hessen?!!!")
+  simpleError(">50k Neufälle")
+  quit()
+}
 
 
+# ---- Kompletten Datensatz herunterladen ----
 # RKI-Daten lesen und auf Hessen filtern
 # Wird vom RKI-Scraper hier abgelegt. 
 
@@ -174,9 +228,6 @@ while (ts < today()) {
   ts <- rki_df$Datenstand[1]
 }
 
-# TODO ##################
-# Plausibilitätsprüfung
-# Lesestrategie anpassen: Wenn CSV nicht geht, dann JSON-Zugang nutzen 
 
 
 
@@ -195,30 +246,12 @@ write_csv2(rki_he_df,"hessen_rki_df.csv")
 write_csv2(rki_he_df,paste0("archiv/rki-",heute,".csv"))
 
 
-# ---- Daten für heute berechnen
-
-#RKI-Abfragestring für die Länder konstruieren
-
-rki_rest_query <- paste0("https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/",
-                         "Coronaf%C3%A4lle_in_den_Bundesl%C3%A4ndern/FeatureServer/0/",
-                         "query?f=json&where=1%3D1",
-                         "&returnGeometry=false&spatialRel=esriSpatialRelIntersects",
-                         "&outFields=*&groupByFieldsForStatistics=LAN_ew_GEN&orderByFields=LAN_ew_GEN%20asc",
-                         "&outStatistics=%5B%7B%22statisticType%22%3A%22max%22%2C%22onStatisticField%22%3A%22Fallzahl%22%2C%22outStatisticFieldName%22%3A%22value%22%7D%5D",
-                         "&outSR=102100&cacheHint=true")
-
-# Das JSON einlesen. Gibt eine ziemlich chaotische Liste zurück. 
-daten_liste <- read_json(rki_rest_query, simplifyVector = TRUE)
-
-# Was wo liegt, bekommt man über daten_liste$features$attributes$LAN_ew_GEN
-
 # Paranoia-Polizei: 
 if (daten_liste$features$attributes$LAN_ew_GEN[7] != "Hessen") {
   msg("Kein Hessen im JSON - ",daten_liste$features$attributes$LAN_ew_GEN[7])
   simpleError("Kein Hessen im JSON!")
 }
 
-faelle_gesamt_direkt <- daten_liste$features$attributes$value[7]
 
 # Paranoia-Polizei 22
 heute_df <- rki_he_df %>%
@@ -273,8 +306,8 @@ fallzahl_df$aktiv_ohne_neu[fallzahl_ofs] <- faelle_gesamt-genesen_gesamt-tote_ge
 # Weicht fatalerweise von den fall4w_df-Meldungsdaten leicht ab. 
 # Heutiges Datum => Meldedatum bis gestern. 
 f28_df <- rki_he_df %>%
-  mutate(datum = as_date(Meldedatum)) %>%
-  filter(datum > heute-29) %>%
+  mutate(Meldedatum = as_date(Meldedatum)) %>%
+  filter(Meldedatum > heute-29) %>%
   # Auf die Summen filtern?
   filter(NeuerFall %in% c(0,1)) %>%
   select(Meldedatum,AnzahlFall) %>%

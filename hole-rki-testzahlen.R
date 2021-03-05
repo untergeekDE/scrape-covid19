@@ -6,7 +6,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 11.2.2021
+# Stand: 09.12.2020
 
 rm(list=ls())
 msgTarget <- "B15:C15"
@@ -36,8 +36,6 @@ while (nrow(tests_df) == nrow(aktuell_df)) {
   # Vorläufig-Sternchen aus der ersten Spalte tilgen
 
   tests_df <- na.omit(tests_df[2:nrow(tests_df),]) %>%
-    # am 10.2.2021 hat das RKI noch eine Spalte mit einer laufenden Wochennr. dazugefügt - raus!
-    select(-1) %>%
     rename(kw = 1, tests = 2, positiv = 3, quote = 4) %>%
     mutate(jahr = as.numeric(str_extract(kw,"20[0-9][0-9]"))) %>%
     mutate(kw = as.numeric(str_replace(str_extract(kw,"[0-9]+/"),"[^0-9]",""))) %>%

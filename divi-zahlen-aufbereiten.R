@@ -5,7 +5,7 @@
 # und 
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 24.11.2020
+# Stand: 12.3.2020
 
 
 
@@ -73,11 +73,11 @@ divi_k_df <- divi_kreise_df %>%
 
 msg("DIVI-Kreisdaten nach hess. VG aufbereitet")
 
-write.csv(divi_k_df, format(Sys.time(), "divi_kreise.csv"), fileEncoding = "UTF-8", row.names = F)
+write.csv(divi_k_df, "daten/divi_kreise.csv", fileEncoding = "UTF-8", row.names = F)
 sheet_write(divi_k_df, ss = aaasheet_id, sheet = "DIVI Kreise")
 if (server) {
   # Google-Bucket befüllen
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./divi_kreise.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp daten/divi_kreise.csv gs://d.data.gcp.cloud.hr.de/')
 }  
 
 msg("Daten archiviert und aufs GSheet gepusht")
@@ -124,13 +124,13 @@ hessen_df <- laender_df %>%
 
 msg("Ländertabelle errechnet")
 
-write.csv(laender_df, "divi_laender.csv", fileEncoding = "UTF-8", row.names = F)
-write.csv(hessen_df, "divi_hessen.csv", fileEncoding = "UTF-8", row.names = F)
+write.csv(laender_df, "daten/divi_laender.csv", fileEncoding = "UTF-8", row.names = F)
+write.csv(hessen_df, "daten/divi_hessen.csv", fileEncoding = "UTF-8", row.names = F)
 
 if (server) {
   # Google-Bucket befüllen
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./divi_laender.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./divi_hessen.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp daten/divi_laender.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp daten/divi_hessen.csv gs://d.data.gcp.cloud.hr.de/')
 }  
 
 sheet_write(laender_df, ss = aaasheet_id, sheet = "DIVI Bundesländer")

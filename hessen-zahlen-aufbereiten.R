@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 22.2.2021
+# Stand: 11.3.2021
 
 # TODO: 
 
@@ -242,7 +242,7 @@ rki_he_df <- rki_df %>%
 
 # CSV-Archivkopien von rki_he_df anlegen
 heute <- as_date(ymd(today()))
-write_csv2(rki_he_df,"hessen_rki_df.csv")
+write_csv2(rki_he_df,"daten/hessen_rki_df.csv")
 write_csv2(rki_he_df,paste0("archiv/rki-",heute,".csv"))
 
 
@@ -330,11 +330,12 @@ fall4w_df <- fallzahl_df %>% mutate(neu7tagemittel = (lag(neu)+
 # Letzte 4 Wochen isolieren
 fall4w_df <- fall4w_df[(nrow(fall4w_df)-27):nrow(fall4w_df),]
 
+msg("FallzahlVerlauf (",fallzahl_ofs," Zeilen) -> Fallzahl4Wochen von ",
+    fall4w_df$datum[1]," bis ",fall4w_df$datum[28])
+
 # Letzte 4 Wochen und Verlauf auf die Sheets
 write_sheet(fallzahl_df, ss=aaa_id, sheet="FallzahlVerlauf")
 range_write(fall4w_df,ss = aaa_id, sheet = "Fallzahl4Wochen",reformat=FALSE)
-msg("FallzahlVerlauf (",fallzahl_ofs," Zeilen) -> Fallzahl4Wochen von ",
-    fall4w_df$datum[1]," bis ",fall4w_df$datum[28])
 
 # ---- Basisdaten schreiben ----
 
@@ -754,9 +755,21 @@ kreise_summe_df <- kreise_summe_df %>%
          w3 = floor(f14_7*skalierung),
          w4 = floor(neu7tage*skalierung))
 
+# ---- Ergänzung der regionalen R-Werte aus der Prognose ----
 
+msg("Ergänze regionales R")
+
+kreise_summe_df <- kreise_summe_df %>%
+  left_join(range_read(aaa_id,sheet="Regionales Rt neu") %>% 
+                         select(kreis=Kreis,rt,vom,vzeit,rrt,Abk),by="kreis")
+
+# Kompletten Datensatz mit alle und scharf
+write_csv2(kreise_summe_df,"daten/KreisdatenAktuell.csv")
 write_sheet(kreise_summe_df,ss=aaa_id,sheet="KreisdatenAktuell")
-write_csv2(kreise_summe_df,"KreisdatenAktuell.csv")
+
+# Aktualisieren der Trend-Grafik
+dw_publish_chart(chart_id ="9UVBF")
+
 
 #---- Überblick erstellen: Archivdaten 7-Tage-Inzidenzen nach Kreis ----
 
@@ -801,7 +814,7 @@ hsum_df$Datum <- as_date(hsum_df$Datum)+1
 
 # Als Excel-Blatt exportieren
 write_sheet(hsum_df,ss=aaa_id,sheet="ArchivKreisInzidenz")
-write_csv2(hsum_df,"ArchivKreisInzidenz.csv")
+write_csv2(hsum_df,"daten/ArchivKreisInzidenz.csv")
 
 # ---- Archivdaten in die GSheets ArchivKreisFallzahl, (...Tote, ...Genesen) -----
 
@@ -822,7 +835,7 @@ if (ts %in% ArchivKreisFallzahl_df$Datum) {
 }
 
 write_sheet(ArchivKreisFallzahl_df,ss=aaa_id, sheet="ArchivKreisFallzahl")
-write_csv2(ArchivKreisFallzahl_df,"ArchivKreisFallzahl.csv")
+write_csv2(ArchivKreisFallzahl_df,"daten/ArchivKreisFallzahl.csv")
 
 # Tote
 ArchivKreisTote_df <- read_sheet(ss = aaa_id, sheet="ArchivKreisTote") %>%
@@ -840,7 +853,7 @@ if (ts %in% ArchivKreisTote_df$Datum) {
 }
 
 write_sheet(ArchivKreisTote_df,ss=aaa_id, sheet="ArchivKreisTote")
-write_csv2(ArchivKreisTote_df,"ArchivKreisTote.csv")
+write_csv2(ArchivKreisTote_df,"daten/ArchivKreisTote.csv")
 
 # Genesen
 ArchivKreisGenesen_df <- read_sheet(ss = aaa_id, sheet="ArchivKreisGenesen") %>%
@@ -858,7 +871,7 @@ if (ts %in% ArchivKreisGenesen_df$Datum) {
 }
 
 write_sheet(ArchivKreisGenesen_df,ss=aaa_id, sheet="ArchivKreisGenesen")
-write_csv2(ArchivKreisGenesen_df,"ArchivKreisGenesen.csv")
+write_csv2(ArchivKreisGenesen_df,"daten/ArchivKreisGenesen.csv")
 
 # ---- Aufbereitung Alter und Geschlecht Aktive/Tote ----
 
@@ -951,8 +964,8 @@ options(scipen=100,           # Immer normale Kommazahlen ausgeben, Keine wissen
         OutDec=","	          # Komma ist Dezimaltrennzeichen bei Ausgabe
 )  
 
-write_csv2(aktive_df, "rki-alter.csv")
-write_csv2(tote_df,"rki-tote.csv")
+write_csv2(aktive_df, "daten/rki-alter.csv")
+write_csv2(tote_df,"daten/rki-tote.csv")
 
 # sheets_append(laender_faelle_df,rki_alter_id,sheet ="faelle")
 # sheets_append(laender_tote_df,rki_alter_id,sheet ="tote")
@@ -1030,7 +1043,7 @@ alter_woche_df <- rki_he_df %>%
 
  
 range_write(alter_woche_df,ss=aaa_id,sheet="NeufaelleAlterProzentWoche", reformat=FALSE)
-write_csv2(alter_woche_df,"alter-woche.csv")
+write_csv2(alter_woche_df,"daten/alter-woche.csv")
 
 
 # ---- Aufräumarbeiten, Grafiken pingen ---- 
@@ -1045,7 +1058,7 @@ basisdaten <- basisdaten %>%
   mutate(Messzahl = str_replace(Messzahl,"NULL"," "))
 # Den ganzen HTML-Kram aus der Steigerung zur Vorwoche verschwinden lassen
 basisdaten$Messzahl[4] <- as.character(steigerung_prozent_vorwoche)
-write_csv2(basisdaten,"Basisdaten.csv",quote_escape="double")
+write_csv2(basisdaten,"daten/Basisdaten.csv",quote_escape="double")
 
 
 #msg("Daten auf alte Basisdaten-Seite kopiert")
@@ -1055,16 +1068,16 @@ write_csv2(basisdaten,"Basisdaten.csv",quote_escape="double")
 if (server) {
   # Google-Bucket befüllen
   msg("Lokale Daten ins Google-Bucket schieben...")
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/scrape-hsm.csv')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./Basisdaten.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./rki-alter.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./rki-tote.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./hessen_rki_df.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisFallzahl.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisGenesen.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisTote.csv gs://d.data.gcp.cloud.hr.de/')
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./ArchivKreisInzidenz.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/scrape-hsm.csv')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/KreisdatenAktuell.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/Basisdaten.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/rki-alter.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/rki-tote.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/hessen_rki_df.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/ArchivKreisFallzahl.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/ArchivKreisGenesen.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/ArchivKreisTote.csv gs://d.data.gcp.cloud.hr.de/')
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/ArchivKreisInzidenz.csv gs://d.data.gcp.cloud.hr.de/')
 }
 
 msg(as.character(now()),"Datawrapper-Grafiken pingen...","\n")
@@ -1089,6 +1102,7 @@ dw_publish_chart(chart_id = "g2CwK") # 14-Tage-Prognose Neufälle
 
 msg("Die barrierefreien Datawrapper-Grafiken pingen...")
 # Grafik: Basisdaten OXn7r - wie normale Seite
+dw_edit_chart(chart_id="4yvyB", annotate=paste0("Stand: ",datumsstring))
 dw_publish_chart(chart_id = "4yvyB")       # Tabelle Corona-Kreis-Inzidenzen
 dw_publish_chart(chart_id = "QxCwd")       # Tabelle R-Wert
 # Tabelle Aktive Fälle XpbpH - wie normale Seite

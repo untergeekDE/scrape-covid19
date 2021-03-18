@@ -25,10 +25,13 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 11.3.2021
+# Stand: 16.3.2021
 
 # TODO: 
-
+# - Visualisierung der Impfstoff-Vorräte und -Käufe
+# - JSON-Direktabfrage der ESRI-Datenbank anpassen
+# - Visualisierung 3 Tage 
+# - evtl. DIVI-Intensivbetten-Modell
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -61,7 +64,45 @@ kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
 
 # ---- Funktion RKI-Daten lesen ----
 
+# Die Daten liegen nicht bei der RKI, sondern im Data Warehouse des Daten-Dienstleisters ESRI,
+# der auch das Dashboard betreibt. 
+
+# ESRI-Status-Abfrage; danke Björn Schwendker, NDR
+
+get_esri_status <- function() {
+  # Holt und säubert Statusinformationen über die Bereitstellung des RKI Covid-19-Datensatzes durch ESRI
+  # (Gemeint ist dieser Datensatz: https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0/data)
+  # Beschreibung des Services: https://www.arcgis.com/home/item.html?id=cd0eda38e31d41259465f9c763de1941  esri_base_url <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/ArcGIS/rest/services/rki_service_status_v/FeatureServer/0/query"
+  esri_base_url <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/ArcGIS/rest/services/rki_service_status_v/FeatureServer/0/query"
+  response <- httr::GET(esri_base_url, 
+                        query = list(f = "json", 
+                                     outfields = "*",
+                                     where = "Url='https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/RKI_COVID19/FeatureServer/0'") ) %>% 
+    httr::content() %>% jsonlite::fromJSON()  
+  attributes <- response["features"][[1]]$attributes# %>% 
+  # Erfahrung: Wenn der ESRI-Server sich verschluckt, bricht das Programm
+  # mit einem Fehler ab, weil die Felder Timestamp und Datum nicht existieren
+  if (!is.null(attributes$Timestamp) & !is.null(attributes$Datum)) {
+    attribute <- attributes %>%
+      mutate(Timestamp = lubridate::as_datetime(Timestamp/1000),
+    Datum = lubridate::as_datetime(Datum/1000,  tz = "UTC"))  
+  }
+  return(attributes)
+}
+
+# NOT RUN
+# get_esri_status()$Timestamp_txt # -> "03.03.2021, 03:22 Uhr"
+# get_esri_status()$Status # -> "Ok"
+
+
 read_rki_data <- function(use_json = TRUE) {
+  
+  # Wenn ESRI-Datenbank noch nicht OK, warte!
+  while(get_esri_status()$Status != "OK ") {
+    msg("ESRI-Status: ", get_esri_status()$Status)
+    Sys.sleep(60)
+  }
+  
   if (use_json) {
     
     # JSON-Abfrage-Code von Till (danke!)
@@ -99,6 +140,7 @@ read_rki_data <- function(use_json = TRUE) {
       return(neue_faelle)
     }
     
+    msg("JSON-Abfrage läuft...")
     while(!is.null(neue_faelle <- rki_json_offset(offset))) {
       if(is.null(rki_)){
         rki_ = neue_faelle
@@ -121,9 +163,12 @@ read_rki_data <- function(use_json = TRUE) {
     
   } else {
     # use_json == FALSE
+    msg("Download der CSV-Datei vom RKI-Server läuft...")
     rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"  
     ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
-    rki_ = read.csv(url(rki_url)) 
+    # Zwei Schritte: Erst der Download, dann einlesen
+    download.file(rki_url,"RKI_COVID19.csv",method="curl")
+    rki_ = read.csv("RKI_COVID19.csv") 
     if (ncol(rki_)> 17 & nrow(rki_) > 100000) {
       msg("Daten erfolgreich vom RKI-CSV gelesen")
     } else {
@@ -143,7 +188,17 @@ read_rki_data <- function(use_json = TRUE) {
   return(rki_)
 }
 
-# ---- Sicherheitscheck: Neue Daten? ----
+
+# ---- Datenabfrage ESRI: -----
+
+# Wenn ESRI-Datenbank noch nicht OK, warte!
+while(get_esri_status()$Status != "OK ") {
+  msg("ESRI-Status: ", get_esri_status()$Status)
+  Sys.sleep(60)
+}
+
+
+# Sicherheitscheck: Neue Daten? ----
 
 #RKI-Abfragestring für die Länder konstruieren
 
@@ -211,8 +266,23 @@ if (use_json) msg("Daten vom RKI via JSON anfordern...") else msg("RKI-CSV lesen
 
 rki_df <- read_rki_data(use_json)
 
+# Fallback: Von Hand laden
+fallback <- FALSE
+if (fallback) {
+  rki_df <- read.csv("~/Downloads/RKI_COVID19.csv")
+  # Sollte die Spalte mit der Landkreis kein String sein, umwandeln und mit führender 0 versehen
+  if(class(rki_df$IdLandkreis) != "character") {
+    rki_df$IdLandkreis <- paste0("0",rki_df$IdLandkreis)
+  }
+  # Wenn 'Datenstand' ein String ist, in ein Datum umwandeln. Sonst das Datum nutzen.
+  if (class(rki_df$Datenstand) == "character") {
+    rki_df$Datenstand <- parse_date(rki_df$Datenstand[1],format = "%d.%m.%y%H, %M:%S Uhr")
+  }
+}
+
 ts <- rki_df$Datenstand[1]
 
+# Alte Daten? 
 starttime <- now()
 while (ts < today()) {
   msg("!!!RKI-Daten sind Stand ",ts)
@@ -225,11 +295,13 @@ while (ts < today()) {
   rki_df <- read_rki_data(use_json)
   # alternierend versuchen, das CSV zu lesen
   use_json <- !use_json
+  # Nur, wenn Anzahl der Zeilen laut Statusabfrage der Anzahl der Zeilen
+  # via JSON entspricht, weitermachen
+  if (get_esri_status)
   ts <- rki_df$Datenstand[1]
 }
 
-
-
+# Plausibilität: Datensätze per JSON 
 
 msg("RKI-Daten gelesen - ",nrow(rki_df)," Zeilen ",ncol(rki_df)," Spalten - ",ts)
 
@@ -428,8 +500,8 @@ impf_alt_df <- read_sheet(ss=aaa_id,sheet="ArchivImpfzahlen") %>% filter(am <= t
 immun <- max(as.numeric(impf_alt_df$personen)) + genesen_gesamt
 hessen=sum(read.xlsx("index/kreise-index-pop.xlsx") %>% select(pop))
 
-range_write(aaa_id,as.data.frame("Immun sind ca. "),range="Basisdaten!A9", col_names=FALSE,reformat=FALSE)
-immun_str <- paste0(format(round(immun/hessen*100,2),
+range_write(aaa_id,as.data.frame("Immunisiert sind ca. "),range="Basisdaten!A9", col_names=FALSE,reformat=FALSE)
+immun_str <- paste0(format(round(immun/hessen*100,1),
                            big.mark = ".", decimal.mark = ",", nsmall =0),
                     " %")
 range_write(aaa_id,as.data.frame(immun_str),

@@ -6,7 +6,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 18.2.2021
+# Stand: 25.2.2021
 
 rm(list=ls())
 msgTarget <- "B13:C13"
@@ -19,7 +19,7 @@ if (file.exists("./server-msg-googlesheet-include.R")) {
   source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
 }
 
-librar(ggplot2)
+library(ggplot2)
 
 # ---- Main: Covid-Simulator COSIM lesen ----
 
@@ -69,8 +69,6 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
     select(-state)
   
   
-  # Archivkopie ablegen
-  write_csv(sim_df,paste0("./daten/cosim-",prog_d,".csv"))
   
   daily_df <- sim_he_df %>%
     filter(var == "DAILY_CASES" ) %>%
@@ -222,7 +220,7 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
                    "Saarlandes, Forschungsgruppe von Prof. Thorsten Lehr")
   
   dw_edit_chart(chart_id = prog_chart_id,annotate = pp_str)
-  dw_edit_chart(chart_id = prog_chart_id, data = chart_data)
+  dw_edit_chart(chart_id = prog_chart_id, data = chart_data$content$metadata)
   dw_publish_chart(prog_chart_id)
   # DIVI-freie Betten - Hypothese: maximale Kapazität entspricht
   # der Anzahl der derzeit freien Betten plus der COVID-Intensivfälle
@@ -263,12 +261,13 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
   
   # ---- Regionale R-Wert-Tabelle ----
   msg("Berechne regionales R")
-  kreise <- read.xlsx("index/kreise-namen-index.xlsx")
+  # Abkürzungen dazuholen
+  aküverz <- read.xlsx("index/kreise-namen-index.xlsx")
   r_lk_df <- sim_lk_df %>%
     # Das R in der Prognose bleibt im prognostizierten Zeitraum konstant
     filter(date == today()) %>%
     # Kreisbezeichner dazu
-    full_join(kreise,by=c("state" = "StatName")) %>%
+    full_join(aküverz,by=c("state" = "StatName")) %>%
     # nutze irgendeine Variable
     filter(var == "DAILY_CASES") %>%
     select(AGS,Kreis=kreis,rt,vom) %>%
@@ -295,20 +294,25 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
               by = c("Kreis" = "kreis"))
   
   write_sheet(rr_lk_df,ss=aaa_id,sheet="Regionales Rt neu")
-  rr_str <- paste0(
-    "Lesebeispiel: Ein großes, tiefrotes Symbol zeigt einen Kreis mit hoher",
-    " Fallzahl an, dessen Inzidenzwerte nur langsam sinken. ",
-    "Berechnung vom ",
-    format.Date(prog_d,"%d.%m.%Y"),
+  rr_str <- paste0("Berechnung vom ",format.Date(prog_d,"%d.%m.%Y"),
     " - Aufgrund der niedrigen Fallzahlen ist der Fehlerbereich ",
     "relativ groß; die Angaben in Tagen dienen nur der Verdeutlichung.", 
     "Der R-Wert ist mit einer Generationenzeit von 7 Tagen berechnet und deshalb mit ",
     "den Werten des RKI und HZI nicht direkt vergleichbar. ")
-  dw_edit_chart(chart_id = "eessR", annotate=rr_str)
+  
+  # Kopie der Karte mit den Sechsecken
+  dw_edit_chart(chart_id = "eessR", annotate=paste0(
+    "Lesebeispiel: Ein großes, tiefrotes Symbol zeigt einen Kreis mit hoher",
+    " Fallzahl an, dessen Inzidenzwerte nur langsam sinken. ",rr_str))
   dw_publish_chart(chart_id = "eessR")
+  
+  # Liniengrafik  
   dw_edit_chart(chart_id = "9UVBF",annotate = rr_str)
   dw_publish_chart(chart_id ="9UVBF")
-  ggplot(rr_lk_df, aes(rt,inz7t,label = Abk)) +  geom_text()
+#  ggplot(rr_lk_df, aes(rt,inz7t,label = Abk)) +  geom_text()
+  msg("Archivkopie schreiben...")
+  # Archivkopie ablegen
+  write_csv(sim_df,paste0("./daten/cosim-",prog_d,".csv"))
   msg("OK!")
 } 
 

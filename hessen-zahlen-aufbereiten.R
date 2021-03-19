@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 16.3.2021
+# Stand: 19.3.2021
 
 # TODO: 
 # - Visualisierung der Impfstoff-Vorräte und -Käufe
@@ -183,7 +183,7 @@ read_rki_data <- function(use_json = TRUE) {
   }
   # Wenn 'Datenstand' ein String ist, in ein Datum umwandeln. Sonst das Datum nutzen. 
   if (class(rki_$Datenstand) == "character") {
-    rki_$Datenstand <- parse_date(rki_$Datenstand[1],format = "%d.%m.%y%H, %M:%S Uhr")
+    rki_$Datenstand <- parse_datetime(rki_$Datenstand[1],format = "%d.%m.%Y, %H:%M Uhr")
   }
   return(rki_)
 }
@@ -1196,3 +1196,4 @@ msg("Alle Datawrapper-Grafiken aktualisiert.")
 
 
 msg("OK!")
+

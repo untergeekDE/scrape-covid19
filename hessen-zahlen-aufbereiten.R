@@ -1056,7 +1056,7 @@ unbek_tote_df <- data.frame(Altersgruppe = "unbekannt",M = NA,W = NA,unbekannt=s
 tote_df <- rbind(tote_df, unbek_tote_df) 
   
 
-# Die beiden Tabellen mit der Aufschlüsselung Aktive und Tote schreiben
+# Die beiden Tabellen mit der Aufschlüsselung Neufälle und Tote schreiben
 
 write_sheet(neu7tage_df, ss = aaa_id, sheet="NeufälleAlter")
 write_sheet(tote_df,ss = aaa_id, sheet="ToteAlter")
@@ -1066,14 +1066,14 @@ options(scipen=100,           # Immer normale Kommazahlen ausgeben, Keine wissen
         OutDec=","	          # Komma ist Dezimaltrennzeichen bei Ausgabe
 )  
 
-write_csv2(aktive_df, "daten/rki-alter.csv")
+write_csv2(neu7tage_df, "daten/rki-alter.csv")
 write_csv2(tote_df,"daten/rki-tote.csv")
 
 # sheets_append(laender_faelle_df,rki_alter_id,sheet ="faelle")
 # sheets_append(laender_tote_df,rki_alter_id,sheet ="tote")
 
 # Zeitstempel 
-range_write(aaa_id,as.data.frame(as.character(heute)),sheet="AktiveAlter",range= "A1",col_names = FALSE)
+range_write(aaa_id,as.data.frame(as.character(heute)),sheet="NeufälleAlter",range= "A1",col_names = FALSE)
 range_write(aaa_id,as.data.frame(as.character(heute)),sheet="ToteAlter",range= "A1",col_names = FALSE)
 
 # ---- Todesfälle je Woche ----
@@ -1193,7 +1193,7 @@ dw_publish_chart(chart_id = "jLkVj") # Neufälle je Woche seit März
 dw_publish_chart(chart_id = "k8nUv") # Flächengrafik
 dw_publish_chart(chart_id = "ALaUp") # Choropleth-Karte Fallinzidenz
 dw_publish_chart(chart_id = "m7sqt") # Choropleth 7-Tage-Dynamik
-dw_publish_chart(chart_id = "XpbpH") # Aktive Fälle nach Alter und Geschlecht
+dw_publish_chart(chart_id = "XpbpH") # Neufälle 7-Tage nach Alter und Geschlecht
 dw_publish_chart(chart_id = "JQobx") # Todesfälle nach Alter und Geschlecht
 dw_publish_chart(chart_id = "JQiOo") # Anteil der Altersgruppen an den Neufällen
 #

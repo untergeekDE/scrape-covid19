@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 19.3.2021
+# Stand: 20.4.2021
 
 # TODO: 
 # - Visualisierung der Impfstoff-Vorräte und -Käufe
@@ -98,12 +98,17 @@ get_esri_status <- function() {
 read_rki_data <- function(use_json = TRUE) {
   
   # Wenn ESRI-Datenbank noch nicht OK, warte!
-  while(get_esri_status()$Status != "OK ") {
-    msg("ESRI-Status: ", get_esri_status()$Status)
-    Sys.sleep(60)
-  }
   
   if (use_json) {
+    while(get_esri_status()$Status != "OK") {
+      msg("ESRI-Status: ", get_esri_status()$Status)
+      Sys.sleep(60)
+    }
+    
+    # Anmerkung zur Schnittstelle (März 2021):
+    # Der Service RKI_COVID19 wird zwar vom Corona-Dashboard der ESRI
+    # selbst nicht mehr genutzt, dient aber weiter zur Bereitstellung der Daten.
+    # Mehr hier: https://arcgis.esri.de/neue-datenstrukturen-im-dashboard/
     
     # JSON-Abfrage-Code von Till (danke!)
     # Dokumentation: https://github.com/br-data/corona-deutschland-api/blob/master/RKI-API.md
@@ -192,27 +197,48 @@ read_rki_data <- function(use_json = TRUE) {
 # ---- Datenabfrage ESRI: -----
 
 # Wenn ESRI-Datenbank noch nicht OK, warte!
-while(get_esri_status()$Status != "OK ") {
-  msg("ESRI-Status: ", get_esri_status()$Status)
-  Sys.sleep(60)
-}
+# while(get_esri_status()$Status != "OK") {
+#   msg("ESRI-Status: ", get_esri_status()$Status)
+#   Sys.sleep(60)
+# }
 
 
 # Sicherheitscheck: Neue Daten? ----
 
 #RKI-Abfragestring für die Länder konstruieren
 
-rki_rest_query <- paste0("https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/",
-                         "Coronaf%C3%A4lle_in_den_Bundesl%C3%A4ndern/FeatureServer/0/",
-                         "query?f=json&where=1%3D1",
-                         "&returnGeometry=false&spatialRel=esriSpatialRelIntersects",
-                         "&outFields=*&groupByFieldsForStatistics=LAN_ew_GEN&orderByFields=LAN_ew_GEN%20asc",
-                         "&outStatistics=%5B%7B%22statisticType%22%3A%22max%22%2C%22onStatisticField%22%3A%22Fallzahl%22%2C%22outStatisticFieldName%22%3A%22value%22%7D%5D",
-                         "&outSR=102100&cacheHint=true")
+esri_url <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/"
 
-# Das JSON einlesen. Gibt eine ziemlich chaotische Liste zurück. 
-daten_liste <- read_json(rki_rest_query, simplifyVector = TRUE)
-faelle_gesamt_direkt <- daten_liste$features$attributes$value[7]
+esri_service <- "rki_key_data_v/"
+
+rki_rest_query1 <- paste0(esri_url,esri_service,
+                         "FeatureServer/0/",
+                         "query?f=json&",
+                         "where=1%3D1&",
+                         "outFields=*")
+
+# rki_rest_query <- paste0(esri_url,
+#                          "Coronaf%C3%A4lle_in_den_Bundesl%C3%A4ndern/FeatureServer/0/",
+#                          "query?f=json&where=1%3D1",
+#                          "&returnGeometry=false&spatialRel=esriSpatialRelIntersects",
+#                          "&outFields=*&groupByFieldsForStatistics=LAN_ew_GEN&orderByFields=LAN_ew_GEN%20asc",
+#                          "&outStatistics=%5B%7B%22statisticType%22%3A%22max%22%2C%22onStatisticField%22%3A%22Fallzahl%22%2C%22outStatisticFieldName%22%3A%22value%22%7D%5D",
+#                          "&outSR=102100&cacheHint=true")
+
+# Das JSON einlesen. Gibt eine ziemlich chaotische Liste zurück.
+# Tabelle für alle Länder und Kreise ist in daten_liste$features$attributes.
+esri_daten_tabelle <- read_json(rki_rest_query1, simplifyVector = TRUE)$features$attributes
+faelle_gesamt_direkt <- esri_daten_tabelle$AnzFall[esri_daten_tabelle$AdmUnitId==6]
+
+hessen_esri_df <- esri_daten_tabelle %>% filter(BundeslandId==6)
+msg("Schreibe ESRI-Tabelle für Land und Kreise...")
+write.csv(hessen_esri_df,"daten/esri-tabelle-hessen.csv")
+write_sheet(hessen_esri_df,ss=aaa_id,sheet="ESRI direkt")
+if (server) {
+  # Google-Bucket befüllen
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/esri-tabelle-hessen.csv gs://d.data.gcp.cloud.hr.de/esri-tabelle-hessen.csv')
+}  
+msg("Geschrieben. ESRI-Status: ",get_esri_status()$Status)
 
 # Was wo liegt, bekommt man über daten_liste$features$attributes$LAN_ew_GEN
 # Daten von gestern holen und vergleichen
@@ -319,9 +345,9 @@ write_csv2(rki_he_df,paste0("archiv/rki-",heute,".csv"))
 
 
 # Paranoia-Polizei: 
-if (daten_liste$features$attributes$LAN_ew_GEN[7] != "Hessen") {
-  msg("Kein Hessen im JSON - ",daten_liste$features$attributes$LAN_ew_GEN[7])
-  simpleError("Kein Hessen im JSON!")
+if (nrow(esri_daten_tabelle)<429) {
+  msg("ESRI-Daten-Tabelle unvollständig?")
+  simpleError("ESRI-Daten-Tabelle unvollständig?")
 }
 
 
@@ -519,18 +545,19 @@ range_write(aaa_id,as.data.frame(format(tote_gesamt,big.mark=".",decimal.mark = 
             range="Basisdaten!B11",
             col_names = FALSE,reformat=FALSE)
 
-# ---- Update der Prognose-Sheets auf der Hospitalisierungen-Seite ----
+# ---- Update der Prognose-Sheets NeuPrognose und ICUPrognose ----
 
+# NEUPrognose ersetzt seit Februar 2021 die Neufall-Grafik
 # Liest die Prognose-Daten aus dem Sheet und rechnet die Neufälle dazu.
 # Die eingelesenen Seiten werden einmal wöchentlich aktualisiert - 
-# über das Skript "mittwochsupdate.R"
+# über das Skript "hole-covid-simulator.R"
 
-msg("Neufälle zu Prognosen auf den Hosp-Sheet...")
+msg("Prognosen zu Neufällen und ICU vorbereiten...")
 # Google Sheet mit Krankenhausdaten
-hosp_id = "12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4"
+#hosp_id = "12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4"
 
-neu_p_df <- read_sheet(hosp_id,sheet = "NeuPrognose")
-icu_p_df <- read_sheet(hosp_id,sheet = "ICUPrognose")
+neu_p_df <- read_sheet(aaa_id,sheet = "NeuPrognose")
+icu_p_df <- read_sheet(aaa_id,sheet = "ICUPrognose")
 # Prognosen dranhängen
 
 #Etwas übersichtlicher
@@ -543,7 +570,7 @@ neu_p_df <- neu_p_df %>%
   select(datum,neu,neu7tagemittel, min, mean, max, prognosedatum) 
 # In Sheet "NeuPrognose" ausgeben
 
-write_sheet(neu_p_df,ss=hosp_id,sheet="NeuPrognose")  
+write_sheet(neu_p_df,ss=aaa_id,sheet="NeuPrognose")  
 
 # ---- Passanten in den Fußgängerzonen ----
 
@@ -949,21 +976,24 @@ write_csv2(ArchivKreisGenesen_df,"daten/ArchivKreisGenesen.csv")
 
 # Tabelle Altersgruppen/Population einlesen
 
-msg("Aufschlüsselung aktive Fälle nach Alter...")
+msg("Aufschlüsselung Neufälle nach Alter...")
 
 altersgruppen_df <- range_read(aaa_id,sheet="AltersgruppenPop") %>%
   mutate(Altersgruppe = as.factor(Altersgruppe))
 
 # Auf aktive Fälle filtern, nach Alter und Geschlecht anordnen
 
-aktive_df <- rki_he_df %>%
+neu7tage_df <- rki_he_df %>%
   filter(NeuerFall %in% c(0,1)) %>%
+  # Neufälle der letzten 7 Tage
+  filter(Meldedatum > heute-8) %>%
+  
   # filter(NeuGenesen %in% c(0,1)) %>%
   # Alter unbekannt? Ausfiltern. 
   filter(str_detect(Altersgruppe,"A[0-9]")) %>% 
   # Genesene und Todesfälle ausfiltern - nur aktive Fälle
-  filter(AnzahlGenesen == 0) %>%              #
-  filter(AnzahlTodesfall == 0) %>%
+  # filter(AnzahlGenesen == 0) %>%              #
+  # filter(AnzahlTodesfall == 0) %>%
   group_by(Altersgruppe, Geschlecht) %>%
   summarize(AnzahlFall = sum(AnzahlFall)) %>%
   pivot_wider(names_from = Geschlecht, values_from = AnzahlFall) %>%
@@ -975,7 +1005,7 @@ aktive_df <- rki_he_df %>%
 # Spalte pop mit den Bevölkerungszahlen für die jeweilige Alterskohorte
 
 # Inzidenzen für Altersgruppen berechnen
-aktive_df <- aktive_df %>%
+neu7tage_df <- neu7tage_df %>%
   right_join(altersgruppen_df, by= c("Altersgruppe"="Altersgruppe")) %>%
   mutate(Inzidenz = (männlich+weiblich)/pop*100000) %>%
   mutate(Altersgruppe = paste0(str_replace_all(Altersgruppe,"A","")," Jahre")) %>%
@@ -992,9 +1022,9 @@ unbek_df <- rki_he_df %>%
 
 
 # Freie Zeile für die Fälle, bei denen Alter/Geschlecht unbekannt ist
-aktive_df[nrow(aktive_df)+1,] <- NA
-aktive_df$Altersgruppe[nrow(aktive_df)] <- "unbekannt" 
-aktive_df$männlich[nrow(aktive_df)] <- sum(unbek_df$AnzahlFall)
+neu7tage_df[nrow(neu7tage_df)+1,] <- NA
+neu7tage_df$Altersgruppe[nrow(neu7tage_df)] <- "unbekannt" 
+neu7tage_df$männlich[nrow(neu7tage_df)] <- sum(unbek_df$AnzahlFall)
 
 # Tote nach Alter und Geschlecht aufschlüsseln 
 
@@ -1028,7 +1058,7 @@ tote_df <- rbind(tote_df, unbek_tote_df)
 
 # Die beiden Tabellen mit der Aufschlüsselung Aktive und Tote schreiben
 
-write_sheet(aktive_df, ss = aaa_id, sheet="AktiveAlter")
+write_sheet(neu7tage_df, ss = aaa_id, sheet="NeufälleAlter")
 write_sheet(tote_df,ss = aaa_id, sheet="ToteAlter")
 
 
@@ -1168,7 +1198,7 @@ dw_publish_chart(chart_id = "JQobx") # Todesfälle nach Alter und Geschlecht
 dw_publish_chart(chart_id = "JQiOo") # Anteil der Altersgruppen an den Neufällen
 #
 dw_publish_chart(chart_id = "8eMAz") # Liniengrafik Inzidenz nach Kreisen für Dirk Kunze
-dw_publish_chart(chart_id = "g2CwK") # 14-Tage-Prognose Neufälle
+dw_publish_chart(chart_id = "eTpGf") # 14-Tage-Prognose Neufälle
 
 # Die barrierefreie Seite auch pingen
 

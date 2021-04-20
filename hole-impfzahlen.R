@@ -1,7 +1,7 @@
 ##################################### hole-impfzahlen.R #########################
 # - Impfzahlen 
 
-# Stand: 18.2.2021
+# Stand: 8.4.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -19,9 +19,12 @@ if (file.exists("./server-msg-googlesheet-include.R")) {
   source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
 }
 
-# Bevölkerungszahl
-hessen=sum(read.xlsx("index/kreise-index-pop.xlsx") %>% select(pop))
-prio1 = 550000 # Menschen in Gruppe höchster Priorität
+# Bevölkerung nach Altersgruppen
+bev_df= read_sheet(aaa_id,sheet="AltersgruppenPop")
+hessen=sum(bev_df %>% select(pop))
+ue60 = sum(bev_df %>% filter(Altersgruppe %in% c("A60-A79","A80+")) %>% select(pop))
+u60 = hessen - ue60
+# Vergleiche https://corona-impfung.hessen.de/faq/impfstrategie
 # Auskunft Innenministerium an Tobias Lübben 15.1.2021
 
 # ---- Ich bin genervt, ich arbeite mit den RKI-Daten jetzt. ----
@@ -32,9 +35,9 @@ rki_xlsx_url <- "https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Da
 
 msg("Impfzahlen vom RKI lesen...")
 impf_tabelle <- read_sheet(aaa_id,sheet="ArchivImpfzahlen")
-impfen_meta_df <- na.omit(read.xlsx(rki_xlsx_url,sheet=4)) %>% 
-  filter(Datum != "Gesamt") %>%
-  mutate(Datum = as.Date(as.numeric(Datum),origin="1899-12-30"))
+impfen_meta_df <- read.xlsx(rki_xlsx_url,sheet=4) %>% 
+  mutate(Datum = as.Date(as.numeric(Datum),origin="1899-12-30")) %>%
+  na.omit()
 
 ts <- now()
 impfen_df <- read_sheet(ss=aaa_id,sheet = "ArchivImpfzahlen") %>%
@@ -43,7 +46,7 @@ impfen_df <- read_sheet(ss=aaa_id,sheet = "ArchivImpfzahlen") %>%
 # Wenn das Datum inzwischen höher ist als das letzte Archivdatum,
 # aber keine neue Datei: 
 
-while (impfen_df$am == max(impfen_meta_df$Datum) &&
+while (impfen_df$am == max(impfen_meta_df$Datum) &
        today() > impfen_df$am + 1) {
 
   Sys.sleep(300)
@@ -57,8 +60,8 @@ while (impfen_df$am == max(impfen_meta_df$Datum) &&
   impfen_meta_df <- impfen_meta_df %>% 
     filter(Datum != "Gesamt") %>%
     mutate(Datum = as.Date(as.numeric(Datum),origin="1899-12-30"))
-  # 4 Stunden lang versuchen
-  if (now() > ts+(4*3600)) {
+  # 6 Stunden lang versuchen
+  if (now() > ts+(6*3600)) {
     msg("KEINE NEUEN DATEN GEFUNDEN")
     stop("Timeout")
   } else {
@@ -70,105 +73,129 @@ msg("Daten bis ",max(impfen_meta_df$Datum)," gelesen - überprüfen...")
 
 # Archivkopie
 
-pp2 <- read.csv2("archiv/impfen-gestern-2.csv")
-pp3 <- read.csv2("archiv/impfen-gestern-3.csv")
+pp2 <- read.csv2("daten/impfen-gestern-2.csv")
+pp3 <- read.csv2("daten/impfen-gestern-3.csv")
 tabelle2 <- read.xlsx(rki_xlsx_url,sheet=2)
 tabelle3 <- read.xlsx(rki_xlsx_url,sheet=3)
-write.csv2(tabelle2,file = "archiv/impfen-gestern-2.csv",row.names=FALSE)
-write.csv2(tabelle3,file = "archiv/impfen-gestern-3.csv",row.names=FALSE)
+write.csv2(tabelle2,file = "daten/impfen-gestern-2.csv",row.names=FALSE)
+write.csv2(tabelle3,file = "daten/impfen-gestern-3.csv",row.names=FALSE)
 
 # Plausibilität prüfen
 # Stumpfer Trick: eine Zeile an das jeweilige Archivdings binden, 
 # wenn rbind() scheitert, hat sich die Tabelle verändert
-msg("Sheet 2 verändert?")
-tmp <- rbind(tabelle2,pp2)
-msg("Sheet 3 verändert?")
-tmp <- rbind(tabelle3,pp3)
+# msg("Sheet 2 verändert?")
+# tmp <- rbind(tabelle2,pp2)
+# msg("Sheet 3 verändert?")
+# tmp <- rbind(tabelle3,pp3)
 
 msg("Ländertabelle vom ",max(impfen_meta_df$Datum)," lesen")
-impfen_alle_df <- tabelle2 %>%
-  filter(!is.na(RS) & !is.na(Bundesland)) %>%
-  select(1:13) %>%
-  inner_join(tabelle3,by = "RS") %>%
-  # Datum dazupacken
-  mutate(am = as.Date(max(impfen_meta_df$Datum))) %>%
-  select(am,
-         ID=RS,
-         Bundesland = 2,
-         personen = 4, # Erstimpfung,
-         differenz_zum_vortag_erstimpfung = 8,
-         impfquote = 9,
-         personen_durchgeimpft = 10,
-         differenz_zum_vortag_zweitimpfung = 13,
-         indikation_nach_alter = 15,
-         berufliche_indikation =16,
-         medizinische_indikation = 17,
-         pflegeheimbewohnerin = 18,
-         Biontech = 5,
-         Moderna = 6,
-         AstraZeneca = 7) %>%
-  mutate(ID = as.numeric(ID),
-          personen = as.numeric(personen),
-         differenz_zum_vortag_erstimpfung = as.numeric(differenz_zum_vortag_erstimpfung),
-         impfquote = as.numeric(impfquote),
-         personen_durchgeimpft = as.numeric(personen_durchgeimpft),
-         differenz_zum_vortag_zweitimpfung = as.numeric(differenz_zum_vortag_zweitimpfung),
-         indikation_nach_alter = as.numeric(indikation_nach_alter),
-         berufliche_indikation = as.numeric(berufliche_indikation),
-         medizinische_indikation = as.numeric(medizinische_indikation),
-         pflegeheimbewohnerin = as.numeric(pflegeheimbewohnerin),
-         Biontech = as.integer(Biontech),
-         Moderna = as.integer(Moderna),
-         AstraZeneca = as.integer(AstraZeneca)) %>%
-        #Sternchen aus dem Bundesland
-        mutate(Bundesland = str_replace(Bundesland,"\\*",""))
+# Tabelle 2 seit dem 8.4. nicht mehr wirklich sinnvoll zu nutzen. 
+# Einzige sinnvolle Info: Anteil u60/ü60
 
-write_sheet(impfen_alle_df,aaa_id,sheet = "ImpfzahlenNational")
+impfen_alle_df <- tabelle3 %>%
+  filter(!is.na(RS) & !is.na(Bundesland)) %>%
+  mutate(am = as.Date(max(impfen_meta_df$Datum))) %>%
+  # Bundesländer auswählen und um Sternchen bereinigen
+  filter(as.numeric(RS) %in% 1:16) %>%
+  
+  mutate(Bundesland = str_replace(Bundesland,"\\*","")) %>%
+  inner_join(tabelle2 %>% select(-Bundesland),by = "RS") %>%
+  # Offset für tabelle2 ist 21
+  select(am, ID=RS, Bundesland,
+         zentren_erst = 3, # Erstimpfung nur Impfzentren
+         zentren_neu = 7,
+         zentren_zweit = 8,
+         zentren_zweit_neu = 12,
+         zentren_biontech = 4,
+         zentren_moderna = 5,
+         zentren_az = 6,
+         aerzte_erst = 13,
+         aerzte_neu = 17,
+         aerzte_zweit = 18,
+         aerzte_zweit_neu = 22,
+         aerzte_biontech = 14,
+         aerzte_moderna = 15,
+         aerzte_az = 16,
+         impfquote_erst = 27, 
+         impfquote_zweit = 30, 
+         zentren_u60 = 33,   # Erstimpfung!
+         zentren_ue60 = 34,
+         aerzte_u60 = 37,
+         aerzte_ue60 = 38) %>%
+    mutate(zentren_erst = as.numeric(zentren_erst), # Erstimpfung nur Impfzentren
+            zentren_neu = as.numeric(zentren_neu),
+            zentren_zweit = as.numeric(zentren_zweit),
+            zentren_zweit_neu = as.numeric(zentren_zweit_neu),
+            zentren_biontech = as.numeric(zentren_biontech),
+            zentren_moderna = as.numeric(zentren_moderna),
+            zentren_az = as.numeric(zentren_az),
+            aerzte_erst = as.numeric(aerzte_erst),
+            aerzte_neu = as.numeric(aerzte_neu),
+            aerzte_zweit = as.numeric(aerzte_zweit),
+            aerzte_zweit_neu = as.numeric(aerzte_zweit_neu),
+            aerzte_biontech = as.numeric(aerzte_biontech),
+            aerzte_moderna = as.numeric(aerzte_moderna),
+            aerzte_az = as.numeric(aerzte_az),
+            impfquote_erst = as.numeric(impfquote_erst), 
+            impfquote_zweit = as.numeric(impfquote_zweit),
+            zentren_u60 = as.numeric(zentren_u60),   # Erstimpfung!
+            zentren_ue60 = as.numeric(zentren_ue60),
+            aerzte_u60 = as.numeric(aerzte_u60),
+            aerzte_ue60 = as.numeric(aerzte_ue60))
+  
+# ---- Hessen isolieren ----
+  msg("Hessen-Daten bauen")
+  impf_df <- impfen_alle_df %>%
+    # nur Hessen
+    filter(as.numeric(ID) == 6) %>%
+    select(-ID,-Bundesland) 
+
 
 # Impfdaten archivieren für Vergleich
 
 # ---- Vergleichskarte D generieren ----
+write_sheet(impfen_alle_df %>%
+              mutate(erst=zentren_erst+aerzte_erst,
+                     zweit=zentren_zweit+aerzte_zweit,
+                     ue60 = zentren_ue60+aerzte_ue60,
+                     u60 = zentren_u60+aerzte_u60,
+                     neu = zentren_neu+aerzte_neu,
+                     zweit_neu = zentren_zweit_neu+aerzte_zweit_neu,
+                     zentren_ue60q = zentren_ue60/(zentren_ue60+zentren_u60),
+                     aerzte_ue60q = aerzte_ue60/(aerzte_ue60+aerzte_u60)) %>%
+              select(am, Bundesland,
+                     erst, impfquote_erst,
+                     zweit, impfquote_zweit,
+                     neu,zentren_neu,aerzte_neu,
+                     zweit_neu,zentren_zweit_neu,aerzte_zweit_neu,
+                     u60,ue60,
+                     zentren_ue60q,aerzte_ue60q),
+                aaa_id,sheet = "ImpfzahlenNational")
+  
 msg("Deutschland-Karte aktualisieren...")
 dw_publish_chart("6PRAe") # Basisdaten-Seite
 
 
-# ---- Hessen isolieren, Basisdaten anpassen, Impfdaten-Seite ----
-msg("Hessen-Daten bauen")
-impf_df <- impfen_alle_df %>%
-  # nur Hessen
-  filter(as.numeric(ID) == 6) %>%
-  select(-ID,-Bundesland) %>%
-  mutate(durchgeimpft_quote = personen_durchgeimpft / hessen * 100)
-
-# Basisdaten-Seite anpassen und aktualisieren
+# ---- Basisdaten-Seite anpassen und aktualisieren ----
 msg("Impfzahlen und Immunisierungsquote")
 # Geimpft (Zeile 8)
 range_write(aaa_id,as.data.frame(paste0("Geimpft (",
                                         format.Date(impf_df$am,"%d.%m."),")")),
             range="Basisdaten!A8",col_names=FALSE,reformat=FALSE)
 range_write(aaa_id, as.data.frame(paste0(
-  format(impf_df$personen,big.mark=".",decimal.mark = ","),
-  " (+", format(impf_df$differenz_zum_vortag_erstimpfung,big.mark = ".", decimal.mark = ",", nsmall =0),
+  format((impf_df$zentren_erst+impf_df$aerzte_erst),
+         big.mark=".",decimal.mark = ","),
+  " (+", format((impf_df$zentren_neu+impf_df$aerzte_neu),
+                big.mark = ".", decimal.mark = ",", nsmall =0),
   ")")),
   range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
 dw_publish_chart("OXn7r") # Basisdaten-Seite
 
-# ---- Tag archivieren ----
-
-msg("Archivdaten schreiben")
-#impf_tabelle <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen")
-if (as.Date(impf_df$am) %in% as.Date(impf_tabelle$am)) {
-  impf_tabelle[impf_tabelle$am == impf_df$am,] <- impf_df
-} else {
-  impf_tabelle <- rbind(impf_tabelle,impf_df)
-}
-
-write_sheet(impf_tabelle,aaa_id,sheet = "ArchivImpfzahlen")
 # ---- Impfzahlen-Seite ----
 
 # Geimpfte Personen - Zeile 2
 range_write(aaa_id,as.data.frame(paste0(
-  format(impf_df$personen,big.mark=".",decimal.mark = ","))),
+  format(impf_df$zentren_erst+impf_df$aerzte_erst,big.mark=".",decimal.mark = ","))),
   range="Impfzahlen!A2", col_names = FALSE, reformat=FALSE)
 
 range_write(aaa_id,as.data.frame(paste0(
@@ -179,18 +206,22 @@ range_write(aaa_id,as.data.frame(paste0(
 
 # Geimpfte heute (und Datum) - Zeile 3
 range_write(aaa_id,as.data.frame(paste0(
-  format(impf_df$differenz_zum_vortag_erstimpfung,big.mark=".",decimal.mark = ","))),
+  format((impf_df$zentren_neu+impf_df$aerzte_neu),big.mark=".",decimal.mark = ","))),
   range="Impfzahlen!A3", col_names = FALSE, reformat=FALSE)
 
 range_write(aaa_id,as.data.frame(paste0(
   "sind <strong>am ",
   format.Date(impf_df$am,"%d.%m."),
-  "</strong> dazugekommen.")),
+  "</strong> dazugekommen - ",
+  format(impf_df$zentren_neu,big.mark=".",decimal.mark = ","),
+  " in Impfzentren bzw. durch mobile Impfteams, ",
+  format(impf_df$aerzte_neu,big.mark=".",decimal.mark = ","),
+  " bei den Hausärzten")),
   range="Impfzahlen!B3", col_names = FALSE, reformat=FALSE)
 
 # Impfquote - Zeile 4
 range_write(aaa_id,as.data.frame(paste0(
-  format(impf_df$impfquote,big.mark=".",decimal.mark = ",",nsmall = 2))),
+  format(impf_df$impfquote_erst,big.mark=".",decimal.mark = ",",nsmall = 2))),
   range="Impfzahlen!A4", col_names = FALSE, reformat=FALSE)
 
 range_write(aaa_id,as.data.frame(paste0(
@@ -200,54 +231,116 @@ range_write(aaa_id,as.data.frame(paste0(
 
 # Durchgeimpfte - Zeile 5
 range_write(aaa_id,as.data.frame(paste0(
-  format(impf_df$personen_durchgeimpft,big.mark=".",decimal.mark = ","))),
+  format(impf_df$aerzte_zweit+impf_df$zentren_zweit,big.mark=".",decimal.mark = ","))),
   range="Impfzahlen!A5", col_names = FALSE, reformat=FALSE)
 
 range_write(aaa_id,as.data.frame(paste0(
-  "(",format(impf_df$personen_durchgeimpft/hessen*100,big.mark=".",decimal.mark = ",",digits=3),
+  "(",format(impf_df$impfquote_zweit,big.mark=".",decimal.mark = ",",digits=3),
   "%) haben <strong>beide Impfdosen</strong> erhalten und sind damit durchgeimpft.")),
   range="Impfzahlen!B5", col_names = FALSE, reformat=FALSE)
 
 
-# Time to tier two - Zeile 6
+# Anteil nicht geimpfte Ü60 - Zeile 6
 
-range_write(aaa_id,as.data.frame(paste0(
-  format(((prio1-impf_df$personen) %/% 1000) * 1000,big.mark=".",decimal.mark = ","))),
-  range="Impfzahlen!A6", col_names = FALSE, reformat=FALSE)
+# range_write(aaa_id,as.data.frame(paste0(
+#   format(((ue60-impf_df$zentren_ue60-impf_df$aerzte_ue60) %/% 1000) * 1000,
+#          big.mark=".",decimal.mark = ","))),
+#   range="Impfzahlen!A6", col_names = FALSE, reformat=FALSE)
 
 # Impfgeschwindigkeit letzte 5 Tage
 geschwindigkeit = mean(impf_tabelle$differenz_zum_vortag_erstimpfung[nrow(impf_tabelle)-4:nrow(impf_tabelle)])
-tage_bis_x = (prio1-impf_df$personen)/geschwindigkeit
+tage_bis_x = (hessen-impf_df$erst)/geschwindigkeit
   
-range_write(aaa_id,as.data.frame(paste0(
-  "Menschen mit der höchsten Priorität sind noch nicht geimpft - ",
-  "sie könnten beim derzeitigen Impftempo bis <strong>",
-  format.Date(today()+tage_bis_x,"%d.%m.%Y"),
-  "</strong> alle an der Reihe gewesen sein.")),
-  range="Impfzahlen!B6", col_names = FALSE, reformat=FALSE)
+# range_write(aaa_id,as.data.frame(paste0(
+#   "Menschen über 60 sind noch nicht geimpft. In den Impfzentren sind bislang ",
+#   format(impf_df$zentren_ue60/(impf_df$zentren_ue60+impf_df$zentren_u60)*100,
+#          big.mark=".",decimal.mark = ",",digits=3),
+#   "% der Erstgeimpften über 60, bei den Hausärzten ",
+#   format(impf_df$aerzte_ue60/(impf_df$aerzte_ue60+impf_df$aerzte_u60)*100,
+#          big.mark=".",decimal.mark = ",",digits=3),
+#   "%.")),
+#   range="Impfzahlen!B6", col_names = FALSE, reformat=FALSE)
 
 faelle_df <- read_sheet(aaa_id,sheet="Fallzahl4Wochen")
 impf_tabelle <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen") %>% filter(am <= today()-14)
 
 hoffnung_str = paste0("<h4>",
                       format((max(impf_tabelle$personen)+max(faelle_df$gsum))/hessen*100,big.mark=".",decimal.mark = ",",digits = 2),
-                " % der Menschen in Hessen sind inzwischen wahrscheinlich gegen ",
+                "% der Menschen in Hessen sind inzwischen wahrscheinlich gegen ",
                 "das Coronavirus immunisiert, weil sie eine Infektion überstanden oder ",
                 "vor 14 Tagen die erste Impfung erhalten haben.</h4>")
 dw_edit_chart(chart_id ="l5KKN", intro = hoffnung_str)
 dw_publish_chart("l5KKN")
 
-# ---- Generiere Anteile Gruppen ----
 
-# Erstimpfungs-Indikationen umformatieren
+# ---- Impfstoffe ----
+# Tagestabelle schreiben
+write_sheet(impf_df,ss=aaa_id,sheet="ImpfenTagestabelle")
 
-indikation_df <- impf_df %>% select(7,8,9,10) %>% pivot_longer(cols=1:4,names_to = "Kategorie",values_to="Menschen")
+impfstoffe_df <- impf_df %>%
+  select(zentren_biontech,
+         zentren_moderna,
+         zentren_az) %>%
+  pivot_longer(everything(),names_prefix="zentren_",values_to="Impfzentren") %>%
+  left_join(impf_df %>% select(aerzte_biontech,aerzte_moderna,aerzte_az) %>%
+              pivot_longer(everything(),names_prefix="aerzte_",values_to="Hausärzte"),
+            by="name")
 
-indikation_str <- paste0("Impfgründe nach Zahlen, Stand: ",
-                         format.Date(impf_df$am,"%d.%m.%Y"))
-dw_data_to_chart(indikation_df,chart_id = "69Q8q")
-dw_edit_chart(chart_id ="69Q8q", intro = indikation_str)
-dw_publish_chart(chart_id= "69Q8q")
+  
+write_sheet(impfstoffe_df,ss=aaa_id,sheet="Impfstoffe")
+dw_edit_chart(chart_id="BfPeh",intro=paste0("Wie oft kam welcher Impfstoff zum Einsatz? Stand: ",
+                           format.Date(impf_df$am,"%d.%m.")))
+dw_publish_chart(chart_id="BfPeh")
+
+# ---- Tag archivieren ----
+
+msg("Archivdaten schreiben")
+
+# Hessen-Daten auf das alte Format umlügen
+
+hessen_archiv_df <- impf_df %>% 
+  mutate(indikation_nach_alter=NA,
+         berufliche_indikation=NA,
+         medizinische_indikation=NA,
+         pflegeheimbewohnerin=NA) %>%
+  mutate(erst = zentren_erst+aerzte_erst,
+         zweit = zentren_zweit+aerzte_zweit,
+         neu = zentren_neu+aerzte_neu,
+         zweit_neu = zentren_zweit_neu+aerzte_zweit_neu,
+         zentren_impfdosen_neu = zentren_neu+zentren_zweit_neu,
+         aerzte_impfdosen_neu = aerzte_neu+aerzte_zweit_neu) %>%
+  select(am,
+         personen=erst,
+         differenz_zum_vortag_erstimpfung = neu,
+         impfquote = impfquote_erst,
+         personen_durchgeimpft = zweit,
+         differenz_zum_vortag_zweitimpfung = zweit_neu,
+         indikation_nach_alter,
+         berufliche_indikation,
+         medizinische_indikation,
+         pflegeheimbewohnerin,
+         Biontech= zentren_biontech,
+         Moderna=zentren_moderna,
+         AstraZeneca=zentren_az,
+         durchgeimpft_quote= impfquote_zweit,
+         aerzte_biontech,
+         aerzte_moderna,
+         aerzte_az,
+         zentren_impfdosen_neu,
+         aerzte_impfdosen_neu)
+         
+
+impf_tabelle <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen")
+if (as.Date(hessen_archiv_df$am) %in% as.Date(impf_tabelle$am)) {
+  impf_tabelle[impf_tabelle$am == hessen_archiv_df$am,] <- hessen_archiv_df
+} else {
+  impf_tabelle <- rbind(impf_tabelle,hessen_archiv_df)
+}
+
+write_sheet(impf_tabelle,aaa_id,sheet = "ArchivImpfzahlen")
+
+# Impftempo-Kurve aktualisieren - aus dem Google Sheet
+dw_publish_chart(chart_id="SS8ta")
 
 
 msg("OK")
@@ -256,6 +349,7 @@ msg("OK")
 # ---- Tabelle Impfzahlen neu bauen - als Funktion ----
 # Die Impfzahlen holen wir einfach beim BR - soll sich Michael mit den Format-
 # änderungen des RKI rumschlagen :) 
+# Wird nicht mehr funktionieren!!!
 konstruiere_impftabelle_alt <- function() {
   impf_data_url <- ("https://raw.githubusercontent.com/ard-data/2020-rki-impf-archive/master/data/")
   dir_json_url <- "https://api.github.com/repos/ard-data/2020-rki-impf-archive/contents/data/1_parsed?recursive=0"

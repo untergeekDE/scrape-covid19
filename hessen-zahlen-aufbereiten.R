@@ -25,13 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 20.4.2021
-
-# TODO: 
-# - Visualisierung der Impfstoff-Vorräte und -Käufe
-# - JSON-Direktabfrage der ESRI-Datenbank anpassen
-# - Visualisierung 3 Tage 
-# - evtl. DIVI-Intensivbetten-Modell
+# Stand: 27.4.2021
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -287,7 +281,7 @@ if (faelle_gesamt_direkt - faelle_gestern > 50000) {
 rki_df <- data.frame(2,2)
 
 # Daten lesen; wenn noch Daten von gestern, warten. 
-use_json <- TRUE
+use_json <- FALSE
 if (use_json) msg("Daten vom RKI via JSON anfordern...") else msg("RKI-CSV lesen...")
 
 rki_df <- read_rki_data(use_json)
@@ -697,13 +691,25 @@ dw_publish_chart(chart_id = "U89m9")
 msg("Aufbereitung nach Kreisen...")
 
 # Änderung: Als "Notizen" evtl. Ausgangssperren vermerken
+# (aus dem Sperren-Dokument)
 # Das letzte Kreis-Dokument ziehen und die Notizen isolieren
 
 sperren_id = "1zdR1rDOt0H6THUke_W6Hb-Lt3luzh0ZJtBPxvf3cZbI"
 
-notizen_df <- range_read(sperren_id, sheet = "Ausgangssperren") %>% 
-  select (AGS, notizen = Infos) %>%
-  mutate(notizen = ifelse(notizen != "",paste0("<strong>Ausgangssperre: ",notizen,"</strong><br>"),"&nbsp;"))
+notizen_df <- range_read(sperren_id, sheet = "Ausgangssperren") %>%
+  mutate(Infolink = ifelse(!is.na(Infolink),Infolink,Gesundheitsamt)) %>%
+  mutate(Infos = ifelse(!is.na(Infos),
+                        paste0("<a href=\'",
+                               Infolink,
+                               "\' target=\'_blank\'>",
+                               Infos,
+                               "</a>"),
+                        paste0("<a href=\'",
+                               Infolink,
+                               "\' target=\'_blank\'>",
+                               "[Kreisinfos]",
+                               "</a>"))) %>%
+  select (AGS, notizen = Infos)
 
 # für die Inzidenz: Letzte 7 Tage filtern
 f7tage_df <- rki_he_df %>%
@@ -914,6 +920,140 @@ hsum_df$Datum <- as_date(hsum_df$Datum)+1
 # Als Excel-Blatt exportieren
 write_sheet(hsum_df,ss=aaa_id,sheet="ArchivKreisInzidenz")
 write_csv2(hsum_df,"daten/ArchivKreisInzidenz.csv")
+
+# ---- Tabelle Inzidenz-Ampel erstellen ----
+
+
+sperren_df <- kreise %>% select(kreis)
+
+
+for (i in 1:26) {
+  # Alle Kreise durchgehen
+  inz7t_v <- hsum_df %>% filter(Datum > today()-8) %>% 
+    select(all_of(sperren_df$kreis[i])) %>% pull(.)
+  # Jetzt die Variablen setzen: 
+  v100 <- ""
+  v150 <- ""
+  v165 <- ""
+  for (j in inz7t_v) {
+    v100 <- paste0(v100,ifelse(j>100,"X","-"))
+    v150 <- paste0(v150,ifelse(j>150,"X","-"))
+    v165 <- paste0(v165,ifelse(j>165,"X","-"))
+  }
+  # Ersetze X durch schwarzen großen Unicode-Punkt, 
+  # den - durch weißen kleinen. 
+  sperren_df$ü100[i] <- paste0(
+    "<b style=\'font-family:courier;\'>",
+    v100,
+    "</b>"  )
+  sperren_df$ü150[i] <- paste0(
+    "<b style=\'font-family:courier;\'>",
+    v150,
+    "</b>"  )
+  
+  sperren_df$ü165[i] <- paste0(
+    "<b style=\'font-family:courier;\'>",
+    v165,
+    "</b>"  )
+    # str_replace_all(str_replace_all(v165,"X","\u25CF"),"-","\u25E6") 
+  sperren_df$text100[i] <- "aufgehoben"
+  sperren_df$text150[i] <- "aufgehoben"
+  sperren_df$text165[i] <- "aufgehoben"
+  if(str_detect(v100,"XXX..")) sperren_df$text100[i] <- "aktiv"
+  if(str_detect(v100,"----XXX.")) sperren_df$text100[i] <- " kommen"
+  if(str_detect(v100,"-----XXX")) sperren_df$text100[i] <- " kommen"
+  if(str_detect(v100,"..XXX---")) sperren_df$text100[i] <- " könnten auslaufen"
+  if(str_detect(v100,"XXX-----")) sperren_df$text100[i] <- " laufen aus"
+  if(str_detect(v150,"XXX..")) sperren_df$text150[i] <- "aktiv"
+  if(str_detect(v150,"----XXX.")) sperren_df$text150[i] <- " kommen"
+  if(str_detect(v150,"-----XXX")) sperren_df$text150[i] <- " kommen"
+  if(str_detect(v150,"..XXX---")) sperren_df$text150[i] <- " könnten auslaufen"
+  if(str_detect(v150,"XXX-----")) sperren_df$text150[i] <- " laufen aus"
+  if(str_detect(v165,"XXX..")) sperren_df$text165[i] <- "aktiv"
+  if(str_detect(v165,"----XXX.")) sperren_df$text165[i] <- " kommen"
+  if(str_detect(v165,"-----XXX")) sperren_df$text165[i] <- " kommen"
+  if(str_detect(v165,"..XXX---")) sperren_df$text165[i] <- " könnten auslaufen"
+  if(str_detect(v165,"XXX-----")) sperren_df$text165[i] <- " laufen aus"
+  # 
+  if (sperren_df$text100[i] =="aufgehoben") {
+    sperren_df$text[i] <- "--"
+  } else {
+    t <- paste0("<a href=\'",
+          "https://www.hessenschau.de/politik/bundesnotbremse-kommt-das-aendert-sich-jetzt-in-hessen,infektionsschutzgesetz-hessen-100.html#Ausgangssperre",
+          "\'>Ausgangssperren</a>",
+         ifelse(sperren_df$text100[i]!="aktiv",sperren_df$text100,""))
+    # Wird nur überprüft, wenn ohnehin 100er: 150er Grenze erreicht?
+    if (sperren_df$text150[i] !="aufgehoben") {
+      t <- paste0(t,", ",
+                  "<a href=\'",
+                  "https://www.hessenschau.de/politik/bundesnotbremse-kommt-das-aendert-sich-jetzt-in-hessen,infektionsschutzgesetz-hessen-100.html#Geschaefte",
+                  "\'>Geschäftsschließungen</a>",
+                  ifelse(sperren_df$text150[i]!="aktiv",sperren_df$text150[i],""))
+      # wird nur überprüft, wenn 150er Grenze erreicht: 165er Grenze?
+      if (sperren_df$text165[i] !="aufgehoben") {
+        t <- paste0(t,", ",
+                    "<a href=\'",
+                    "https://www.hessenschau.de/politik/bundesnotbremse-kommt-das-aendert-sich-jetzt-in-hessen,infektionsschutzgesetz-hessen-100.html#Schulen",
+                    "\'>Schulschließungen</a>",
+                    ifelse(sperren_df$text165[i]!="aktiv",sperren_df$text165[i],""))
+        
+      }
+    }
+      sperren_df$text[i] <- t
+  } # end else (wenn irgendwas ist)
+}
+
+# Schnell noch einen Datumsstring konstruieren
+
+#saveRDS(sperren_df,"sperren_df.rds")
+
+
+sperren_id <- "1zdR1rDOt0H6THUke_W6Hb-Lt3luzh0ZJtBPxvf3cZbI"
+sperren_info_df <- read_sheet(ss=sperren_id,sheet="Ausgangssperren") %>% 
+  mutate(Infolink = ifelse(!is.na(Infolink),Infolink,Gesundheitsamt)) %>%
+  mutate(Infos = ifelse(!is.na(Infos),
+                        paste0("<a href=\'",
+                               Infolink,
+                               "\' target=\'_blank\'>",
+                               Infos,
+                               "</a>"),
+                        paste0("<a href=\'",
+                               Infolink,
+                               "\' target=\'_blank\'>",
+                               "[Link]",
+                               "</a>"))) %>%
+  mutate(Infos = ifelse(is.na(Infos),"",Infos)) %>%
+  select(kreis,Infos)
+sperren_df <- sperren_df %>% left_join(sperren_info_df,by="kreis") 
+
+dw_data_to_chart(sperren_df,chart_id="NV9FT")
+dw_edit_chart(chart_id="NV9FT",annotate = paste0("Stand: ",format(heute, "%d.%m.%Y")))
+dw_publish_chart(chart_id="NV9FT")
+
+write_sheet(sperren_df,ss=sperren_id,sheet="Sperren-Tabelle")
+
+# experimentelle andere Darstellungsform: 
+
+inz7t_df <- hsum_df %>% filter(Datum>today()-7) %>% # 7 Tage 
+  # Transponieren: 
+  # erst in lange Tabelle verwandeln
+  pivot_longer(cols=-Datum,names_to="Kreis",values_to="inz7t") %>%
+  mutate(Datum = wday(Datum,label=TRUE,abbr=TRUE,locale="de_DE")) %>%
+  pivot_wider(names_from=Datum,values_from=inz7t) %>%
+  left_join(sperren_df %>% select(kreis,text100,text150,text165,Infos),
+            by=c("Kreis" = "kreis")) %>%
+  mutate(Infos = paste0(ifelse(text100!="aufgehoben",
+                               ifelse(text100=="aktiv","A","(A)"),""),
+                        ifelse(text150!="aufgehoben",
+                               ifelse(text150=="aktiv","/G","/(G)"),""),
+                        ifelse(text100!="aufgehoben",
+                               ifelse(text100=="aktiv","/S","/(S)"),""),
+                        " ",Infos))
+
+dw_data_to_chart(inz7t_df,chart_id="psn2l")
+
+
+dw_publish_chart(chart_id="psn2l")
 
 # ---- Archivdaten in die GSheets ArchivKreisFallzahl, (...Tote, ...Genesen) -----
 

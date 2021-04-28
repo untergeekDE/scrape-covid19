@@ -1,7 +1,7 @@
 ##################################### hole-impfzahlen.R #########################
 # - Impfzahlen 
 
-# Stand: 8.4.2021
+# Stand: 28.4.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -100,28 +100,29 @@ impfen_alle_df <- tabelle3 %>%
   
   mutate(Bundesland = str_replace(Bundesland,"\\*","")) %>%
   inner_join(tabelle2 %>% select(-Bundesland),by = "RS") %>%
-  # Offset für tabelle2 ist 21
+  # Offset für tabelle2 ist 22
   select(am, ID=RS, Bundesland,
          zentren_erst = 3, # Erstimpfung nur Impfzentren
          zentren_neu = 7,
          zentren_zweit = 8,
-         zentren_zweit_neu = 12,
+         zentren_zweit_neu = 13,
          zentren_biontech = 4,
          zentren_moderna = 5,
          zentren_az = 6,
-         aerzte_erst = 13,
-         aerzte_neu = 17,
-         aerzte_zweit = 18,
-         aerzte_zweit_neu = 22,
-         aerzte_biontech = 14,
-         aerzte_moderna = 15,
-         aerzte_az = 16,
-         impfquote_erst = 27, 
-         impfquote_zweit = 30, 
-         zentren_u60 = 33,   # Erstimpfung!
-         zentren_ue60 = 34,
-         aerzte_u60 = 37,
-         aerzte_ue60 = 38) %>%
+         zentren_janssen = 12,
+         aerzte_erst = 14,
+         aerzte_neu = 18,
+         aerzte_zweit = 19,
+         aerzte_zweit_neu = 23,
+         aerzte_biontech = 15,
+         aerzte_moderna = 16,
+         aerzte_az = 17,
+         impfquote_erst = 28, 
+         impfquote_zweit = 31, 
+         zentren_u60 = 34,   # Erstimpfung!
+         zentren_ue60 = 35,
+         aerzte_u60 = 38,
+         aerzte_ue60 = 39) %>%
     mutate(zentren_erst = as.numeric(zentren_erst), # Erstimpfung nur Impfzentren
             zentren_neu = as.numeric(zentren_neu),
             zentren_zweit = as.numeric(zentren_zweit),
@@ -129,6 +130,7 @@ impfen_alle_df <- tabelle3 %>%
             zentren_biontech = as.numeric(zentren_biontech),
             zentren_moderna = as.numeric(zentren_moderna),
             zentren_az = as.numeric(zentren_az),
+            zentren_janssen = as.numeric(zentren_janssen),
             aerzte_erst = as.numeric(aerzte_erst),
             aerzte_neu = as.numeric(aerzte_neu),
             aerzte_zweit = as.numeric(aerzte_zweit),
@@ -155,8 +157,10 @@ impfen_alle_df <- tabelle3 %>%
 
 # ---- Vergleichskarte D generieren ----
 write_sheet(impfen_alle_df %>%
-              mutate(erst=zentren_erst+aerzte_erst,
-                     zweit=zentren_zweit+aerzte_zweit,
+              # Wichtig: Janssen zählen zu den Durchgeimpften, müssen
+              # aber auch den Erstgeimpften zugeschlagen werden (weil: geimpfte Personen.)
+              mutate(personen=zentren_erst+zentren_janssen+aerzte_erst,
+                     durchgeimpft=zentren_zweit+aerzte_zweit,
                      ue60 = zentren_ue60+aerzte_ue60,
                      u60 = zentren_u60+aerzte_u60,
                      neu = zentren_neu+aerzte_neu,
@@ -164,12 +168,12 @@ write_sheet(impfen_alle_df %>%
                      zentren_ue60q = zentren_ue60/(zentren_ue60+zentren_u60),
                      aerzte_ue60q = aerzte_ue60/(aerzte_ue60+aerzte_u60)) %>%
               select(am, Bundesland,
-                     erst, impfquote_erst,
-                     zweit, impfquote_zweit,
+                     personen, impfquote_erst,
+                     durchgeimpft, impfquote_zweit,
                      neu,zentren_neu,aerzte_neu,
                      zweit_neu,zentren_zweit_neu,aerzte_zweit_neu,
                      u60,ue60,
-                     zentren_ue60q,aerzte_ue60q),
+                     zentren_ue60q,aerzte_ue60q,zentren_janssen),
                 aaa_id,sheet = "ImpfzahlenNational")
   
 msg("Deutschland-Karte aktualisieren...")
@@ -183,19 +187,29 @@ range_write(aaa_id,as.data.frame(paste0("Geimpft (",
                                         format.Date(impf_df$am,"%d.%m."),")")),
             range="Basisdaten!A8",col_names=FALSE,reformat=FALSE)
 range_write(aaa_id, as.data.frame(paste0(
-  format((impf_df$zentren_erst+impf_df$aerzte_erst),
+  format((impf_df$zentren_erst+impf_df$zentren_janssen+impf_df$aerzte_erst),
          big.mark=".",decimal.mark = ","),
-  " (+", format((impf_df$zentren_neu+impf_df$aerzte_neu),
+  " (+", format((impf_df$zentren_neu+impf_df$aerzte_neu+impf_df$zentren_janssen),
                 big.mark = ".", decimal.mark = ",", nsmall =0),
   ")")),
   range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
 dw_publish_chart("OXn7r") # Basisdaten-Seite
 
+
 # ---- Impfzahlen-Seite ----
 
+# Janssen-Neuimpfungen berechnen - Differenz zum kumulativen Stand gestern, 
+# anders geht nicht. 
+
+tmp <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen")$Janssen
+tmp <- tmp[length(tmp)]
+tmp <- ifelse(is.na(tmp),0,tmp)
+janssen_neu <- impf_df$zentren_janssen - tmp
+
 # Geimpfte Personen - Zeile 2
+# Gesamtzahl der Janssen-Geimpften dazu, weil die buchhalterisch als Zweitgeimpfte zählen. 
 range_write(aaa_id,as.data.frame(paste0(
-  format(impf_df$zentren_erst+impf_df$aerzte_erst,big.mark=".",decimal.mark = ","))),
+  format(impf_df$zentren_erst+impf_df$aerzte_erst+impf_df$zentren_janssen,big.mark=".",decimal.mark = ","))),
   range="Impfzahlen!A2", col_names = FALSE, reformat=FALSE)
 
 range_write(aaa_id,as.data.frame(paste0(
@@ -206,14 +220,24 @@ range_write(aaa_id,as.data.frame(paste0(
 
 # Geimpfte heute (und Datum) - Zeile 3
 range_write(aaa_id,as.data.frame(paste0(
-  format((impf_df$zentren_neu+impf_df$aerzte_neu),big.mark=".",decimal.mark = ","))),
+  format((impf_df$zentren_neu+janssen_neu+impf_df$aerzte_neu),big.mark=".",decimal.mark = ","))),
   range="Impfzahlen!A3", col_names = FALSE, reformat=FALSE)
+
+
+# Kleines konzeptionelles Problem: Der Janssen-Impfstoff. 
+# Zählt in den Zweitimpfungen/Impfzentren, müsste aber eigentlich
+# in den Erstimpfungen zählen. 
+# Für die Zahl der neu geimpften Personen brauchen wir also
+# die Zahl der neu hinzugekommenen Janssen-Impflinge. 
+
+# janssen_neu - vorher aus dem Archivdatum von gestern als Differenz berechnen. 
+
 
 range_write(aaa_id,as.data.frame(paste0(
   "sind <strong>am ",
   format.Date(impf_df$am,"%d.%m."),
   "</strong> dazugekommen - ",
-  format(impf_df$zentren_neu,big.mark=".",decimal.mark = ","),
+  format(impf_df$zentren_neu+janssen_neu,big.mark=".",decimal.mark = ","),
   " in Impfzentren bzw. durch mobile Impfteams, ",
   format(impf_df$aerzte_neu,big.mark=".",decimal.mark = ","),
   " bei den Hausärzten")),
@@ -221,7 +245,7 @@ range_write(aaa_id,as.data.frame(paste0(
 
 # Impfquote - Zeile 4
 range_write(aaa_id,as.data.frame(paste0(
-  format(impf_df$impfquote_erst,big.mark=".",decimal.mark = ",",nsmall = 2))),
+  format((impf_df$zentren_erst+impf_df$aerzte_erst+janssen_neu)/hessen*100,big.mark=".",decimal.mark = ",",nsmall = 2))),
   range="Impfzahlen!A4", col_names = FALSE, reformat=FALSE)
 
 range_write(aaa_id,as.data.frame(paste0(
@@ -236,7 +260,7 @@ range_write(aaa_id,as.data.frame(paste0(
 
 range_write(aaa_id,as.data.frame(paste0(
   "(",format(impf_df$impfquote_zweit,big.mark=".",decimal.mark = ",",digits=3),
-  "%) haben <strong>beide Impfdosen</strong> erhalten und sind damit durchgeimpft.")),
+  "%) sind durchgeimpft.")),
   range="Impfzahlen!B5", col_names = FALSE, reformat=FALSE)
 
 
@@ -280,7 +304,8 @@ write_sheet(impf_df,ss=aaa_id,sheet="ImpfenTagestabelle")
 impfstoffe_df <- impf_df %>%
   select(zentren_biontech,
          zentren_moderna,
-         zentren_az) %>%
+         zentren_az,
+         zentren_janssen) %>%
   pivot_longer(everything(),names_prefix="zentren_",values_to="Impfzentren") %>%
   left_join(impf_df %>% select(aerzte_biontech,aerzte_moderna,aerzte_az) %>%
               pivot_longer(everything(),names_prefix="aerzte_",values_to="Hausärzte"),
@@ -303,14 +328,16 @@ hessen_archiv_df <- impf_df %>%
          berufliche_indikation=NA,
          medizinische_indikation=NA,
          pflegeheimbewohnerin=NA) %>%
-  mutate(erst = zentren_erst+aerzte_erst,
+  mutate(Janssen_neu =janssen_neu) %>%
+  # Wieder: Personen, also Janssen dazuzählen 
+  mutate(erst = zentren_erst+aerzte_erst+zentren_janssen,
          zweit = zentren_zweit+aerzte_zweit,
-         neu = zentren_neu+aerzte_neu,
+         neu = zentren_neu+aerzte_neu+janssen_neu,
          zweit_neu = zentren_zweit_neu+aerzte_zweit_neu,
          zentren_impfdosen_neu = zentren_neu+zentren_zweit_neu,
          aerzte_impfdosen_neu = aerzte_neu+aerzte_zweit_neu) %>%
   select(am,
-         personen=erst,
+         personen = erst,
          differenz_zum_vortag_erstimpfung = neu,
          impfquote = impfquote_erst,
          personen_durchgeimpft = zweit,
@@ -322,6 +349,7 @@ hessen_archiv_df <- impf_df %>%
          Biontech= zentren_biontech,
          Moderna=zentren_moderna,
          AstraZeneca=zentren_az,
+         Janssen = zentren_janssen,
          durchgeimpft_quote= impfquote_zweit,
          aerzte_biontech,
          aerzte_moderna,

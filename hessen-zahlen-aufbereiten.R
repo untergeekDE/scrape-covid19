@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 27.4.2021
+# Stand: 28.4.2021
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -1026,13 +1026,14 @@ sperren_info_df <- read_sheet(ss=sperren_id,sheet="Ausgangssperren") %>%
   select(kreis,Infos)
 sperren_df <- sperren_df %>% left_join(sperren_info_df,by="kreis") 
 
-dw_data_to_chart(sperren_df,chart_id="NV9FT")
-dw_edit_chart(chart_id="NV9FT",annotate = paste0("Stand: ",format(heute, "%d.%m.%Y")))
-dw_publish_chart(chart_id="NV9FT")
+# Grafik mit den Xen für die überschrittenen Grenzen: 
+# dw_data_to_chart(sperren_df,chart_id="NV9FT")
+# dw_edit_chart(chart_id="NV9FT",annotate = paste0("Stand: ",format(heute, "%d.%m.%Y")))
+# dw_publish_chart(chart_id="NV9FT")
 
 write_sheet(sperren_df,ss=sperren_id,sheet="Sperren-Tabelle")
 
-# experimentelle andere Darstellungsform: 
+# Darstellungsform: 
 
 inz7t_df <- hsum_df %>% filter(Datum>today()-7) %>% # 7 Tage 
   # Transponieren: 
@@ -1046,7 +1047,7 @@ inz7t_df <- hsum_df %>% filter(Datum>today()-7) %>% # 7 Tage
                                ifelse(text100=="aktiv","A","(A)"),""),
                         ifelse(text150!="aufgehoben",
                                ifelse(text150=="aktiv","/G","/(G)"),""),
-                        ifelse(text100!="aufgehoben",
+                        ifelse(text165!="aufgehoben",
                                ifelse(text100=="aktiv","/S","/(S)"),""),
                         " ",Infos))
 

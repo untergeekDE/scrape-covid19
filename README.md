@@ -68,6 +68,8 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 26.4.: Bundesnotbremse visualisiert (Anzahl von Tagen über der jeweiligen Grenze)
+* (diverse Anpassungen bei den Impfungen) 
 * 28.1.: Impfquoten und -zahlen; Prognose zur Durchimpfung der Hochrisiko-Gruppe
 * 12.1.: Überblick Todesfälle je Woche; Integration der Impfzahlen in die Basisdaten
 * 10.12.: Helfer-Skripte aktualisieren COVID-Simulator-Prognose und RKI-Testdaten automatisch

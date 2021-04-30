@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 28.4.2021
+# Stand: 30.4.2021
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -44,7 +44,10 @@ if (file.exists("./server-msg-googlesheet-include.R")) {
 
 library(hystReet) # Zugriff auf Hystreet-Passantendaten
 
+# JSON-Schnittstelle für Datenimport nutzen? CSV geht schneller, 
+# ist aber ab und zu fehleranfällig. 
 
+use_json <- FALSE
 
 # ---- Start, RKI-Daten lesen, Hessen-Fälle filtern, Kopie schreiben ----
 
@@ -113,7 +116,7 @@ read_rki_data <- function(use_json = TRUE) {
                             "&returnGeometry=false",
                             "&cacheHint=true",
                             "&f=json",
-                            "&resultRecordCount=2000")  # 2000 Fälle pro Abfrage (Maximum sind 5k)
+                            "&resultRecordCount=5000")  # 5000 Fälle pro Abfrage (Maximum sind 5k)
     
     
     # ---- GRABSTEIN für rekursiver_offset() ----
@@ -241,8 +244,10 @@ od <- old_data %>% filter(str_detect(x,"Fälle gesamt"))
 od2 <- str_remove(od$y," \\(ca.+\\)")
 faelle_gestern <- as.integer(str_remove(od2,"[^0-9]"))
 
+
 # Test auf gleiches Ergebnis nur, wenn die Basisdaten alt sind
-if (as.Date(old_data$x[1],format="%d.%m.%y%y") < today()) {
+
+if (as.Date(str_extract(old_data$x[1],"[0-9]+\\.[0-9]+\\.[0-9]+"),format="%d.%m.%y%y") < today()) {
   # Gleiche Daten wie gestern??? Warte. 
   starttime <- now()
   while (faelle_gesamt_direkt == faelle_gestern) {
@@ -272,6 +277,212 @@ if (faelle_gesamt_direkt - faelle_gestern > 50000) {
   quit()
 }
 
+# ---- ESRI-Daten vorläufig in die Dokumente schreiben ----
+
+esri_he <- esri_daten_tabelle %>% filter(AdmUnitId == 6)
+
+msg("ESRI-Tabelle direkt: ",esri_he$AnzFall," Fälle gesamt, ",
+    esri_he$AnzFallNeu," heute -- werte aus")
+
+# Basisdaten
+
+datumsstring = paste0(format(today(),"%d.%m.%y%y")," (VORLÄUFIG)")
+
+# Datumsstring schreiben (Zeile 2)
+range_write(aaa_id,as.data.frame(datumsstring),range="Basisdaten!A2",
+            col_names = FALSE, reformat=FALSE)
+
+# Neufälle heute (Zeile 3)
+#range_write(aaa_id,as.data.frame('neue Fälle'),range="Basisdaten!A3")
+range_write(aaa_id,as.data.frame(esri_he$AnzFallNeu),
+            range="Basisdaten!B3", col_names = FALSE, reformat=FALSE)
+
+# Neufälle letzte 7 Tage - (Zeile 4)
+range_write(aaa_id,as.data.frame(esri_he$AnzFall7T),
+            range="Basisdaten!B4", col_names = FALSE, reformat=FALSE)
+
+# Vergleich Vorwoche (Zeile 5)
+#range_write(aaa_id,as.data.frame("Vergleich Vorwoche"),range="Basisdaten!A5")
+f4w_df <- read_sheet(ss=aaa_id,sheet="Fallzahl4Wochen") 
+steigerung_7t_vorwoche <- sum(f4w_df$neu[17:23])
+steigerung_prozent_vorwoche <- (esri_he$AnzFall7T/steigerung_7t_vorwoche*100)-100
+
+trend_string <- "&#9632;"
+if (steigerung_prozent_vorwoche < -10) # gefallen
+  trend_string <- "<b style='color:#019b72'>&#9660;</b><!--gefallen-->"
+if (steigerung_prozent_vorwoche > 10) # gestiegen
+  trend_string <- "<b style='color:#cc1a14'>&#9650;</b><!--gestiegen-->"
+if (steigerung_prozent_vorwoche < -50) # stark gefallen
+  trend_string <- "<b style='color:#019b72'>&#9660;&#9660;</b><!--stark gefallen-->"
+if (steigerung_prozent_vorwoche > 50) # stark gestiegen
+  trend_string <- "<b style='color:#cc1a14'>&#9650;&#9650;</b><!--stark gestiegen-->"
+
+range_write(aaa_id,as.data.frame(
+  paste0(format(steigerung_7t_vorwoche,big.mark = ".", decimal.mark = ",", nsmall =0),
+         " (",ifelse(esri_he$AnzFall7T-steigerung_7t_vorwoche > 0,"+",""),
+         format(esri_he$AnzFall7T - steigerung_7t_vorwoche,big.mark = ".", decimal.mark = ",", nsmall =0),
+         trend_string,")")),
+  range="Basisdaten!B5", col_names = FALSE, reformat=FALSE)
+
+# Inzidenz (Zeile 6)
+
+range_write(aaa_id,as.data.frame(format(esri_he$Inz7T,big.mark = ".",decimal.mark=",",nsmall=1)),
+            range="Basisdaten!B6", col_names = FALSE, reformat=FALSE)
+
+# Gesamt und aktiv (Zeile 7)
+# range_write(aaa_id,as.data.frame(paste0("Fälle gesamt/aktiv")),range="Basisdaten!A7")
+aktiv_str <- format(round((esri_he$AnzAktiv)/100) * 100,
+                    big.mark = ".", decimal.mark = ",", nsmall =0)
+range_write(aaa_id,as.data.frame(paste0(format(esri_he$AnzFall,big.mark = ".", decimal.mark = ",", nsmall =0),
+                                        " (ca. ",aktiv_str,")")),
+            range="Basisdaten!B7", col_names = FALSE, reformat=FALSE)
+
+# Immunisiert und geimpft (Zeile 8 und 9)
+
+msg("Impfzahlen und Immunisierungsquote")
+# Geimpft (Zeile 8)
+impfen_df <- read_sheet(ss=aaa_id,sheet = "ArchivImpfzahlen") %>%
+  filter(am == max(am))
+range_write(aaa_id,as.data.frame(paste0("Geimpft (",
+                                        format.Date(impfen_df$am,"%d.%m."),")")),
+            range="Basisdaten!A8",col_names=FALSE,reformat=FALSE)
+range_write(aaa_id, as.data.frame(paste0(
+  format(impfen_df$personen,big.mark=".",decimal.mark = ","),
+  " (+", format(impfen_df$differenz_zum_vortag_erstimpfung,big.mark = ".", decimal.mark = ",", nsmall =0),
+  ")")),
+  range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
+
+# Immun (Zeile 9)
+impf_alt_df <- read_sheet(ss=aaa_id,sheet="ArchivImpfzahlen") %>% filter(am <= today()-14)
+immun <- max(as.numeric(impf_alt_df$personen)) + esri_he$AnzGenesen
+hessen=sum(read.xlsx("index/kreise-index-pop.xlsx") %>% select(pop))
+
+range_write(aaa_id,as.data.frame("Immunisiert sind ca. "),range="Basisdaten!A9", col_names=FALSE,reformat=FALSE)
+immun_str <- paste0(format(round(immun/hessen*100,1),
+                           big.mark = ".", decimal.mark = ",", nsmall =0),
+                    " %")
+range_write(aaa_id,as.data.frame(immun_str),
+            range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
+
+
+# Todesfälle heute (Zeile 10)
+#range_write(aaa_id,as.data.frame("neue Todesfälle"),range="Basisdaten!A10")
+range_write(aaa_id,as.data.frame(esri_he$AnzTodesfallNeu),
+            range="Basisdaten!B10",col_names = FALSE, reformat=FALSE)
+
+# Todesfälle gesamt (Zeile 11)
+#range_write(aaa_id,as.data.frame("Todesfälle gesamt"),range="Basisdaten!A11")
+range_write(aaa_id,as.data.frame(format(esri_he$AnzTodesfall,big.mark=".",decimal.mark = ",")),
+            range="Basisdaten!B11",
+            col_names = FALSE,reformat=FALSE)
+
+dw_publish_chart(chart_id = "OXn7r") # Basisdaten
+
+msg("Basisdaten OK, Verlaufstabelle aus ESRI-Tabelle aktualisieren...")
+
+# Fallzahl und Fallzahl4Wochen aktualisieren
+
+msg("Berechne vorläufig ESRI-fallzahl und fallzahl4w...")
+fallzahl_df <- read_sheet(aaa_id,sheet="FallzahlVerlauf")
+
+fallzahl_df$datum <- as_date(fallzahl_df$datum)
+fallzahl_ofs <- as.numeric(today() - fallzahl_df$datum[1]) + 1
+
+# Neue Zeile?
+if (fallzahl_ofs > nrow(fallzahl_df)) {
+  fallzahl_df[fallzahl_ofs,]<- NA
+  fallzahl_df$datum[fallzahl_ofs] <- as_date(today())
+  
+}
+# Werte für heute
+
+fallzahl_df$gsum[fallzahl_ofs] <- esri_he$AnzGenesen
+fallzahl_df$faelle[fallzahl_ofs] <- esri_he$AnzFall
+fallzahl_df$steigerung[fallzahl_ofs] <- esri_he$AnzFall/(esri_he$AnzFall-esri_he$AnzFallNeu)-1
+fallzahl_df$tote[fallzahl_ofs] <- esri_he$AnzTodesfall
+fallzahl_df$tote_steigerung[fallzahl_ofs] <- esri_he$AnzTodesfallNeu
+fallzahl_df$aktiv[fallzahl_ofs] <- esri_he$AnzAktiv
+fallzahl_df$neu[fallzahl_ofs] <- esri_he$AnzFallNeu
+fallzahl_df$aktiv_ohne_neu[fallzahl_ofs] <- esri_he$AnzAktiv-esri_he$AnzFallNeu
+
+# 4-Wochen-Fallzahl darstellen
+
+#7-Tage-Trend der Neuinfektionen
+fall4w_df <- fallzahl_df %>% mutate(neu7tagemittel = (lag(neu)+
+                                                        lag(neu,n=2)+
+                                                        lag(neu,n=3)+
+                                                        lag(neu,n=4)+
+                                                        lag(neu,n=5)+
+                                                        lag(neu,n=6)+
+                                                        neu)/7) 
+fall4w_df <- fall4w_df[(nrow(fall4w_df)-27):nrow(fall4w_df),]
+
+write_sheet(fallzahl_df, ss=aaa_id, sheet="FallzahlVerlauf")
+range_write(fall4w_df,ss = aaa_id, sheet = "Fallzahl4Wochen",reformat=FALSE)
+
+# Prognose-Sheet updaten
+
+msg("Fallzahlen geschrieben, Verlaufskurve mit Prognose aktualisieren")
+
+neu_p_df <- read_sheet(aaa_id,sheet = "NeuPrognose")
+
+# Prognosen dranhängen
+
+#Etwas übersichtlicher
+f4w_neu_df <- fall4w_df %>%
+  select(datum, neu, neu7tagemittel)
+
+neu_p_df <- neu_p_df %>%
+  select(datum, min, mean, max, prognosedatum) %>%
+  left_join(f4w_neu_df, by="datum") %>%
+  select(datum,neu,neu7tagemittel, min, mean, max, prognosedatum) 
+# In Sheet "NeuPrognose" ausgeben
+
+write_sheet(neu_p_df,ss=aaa_id,sheet="NeuPrognose")  
+dw_publish_chart(chart_id = "NrBYs")  # Neufälle und Trend letzte 4 Wochen
+
+# Kreisdaten-Tabelle aktualisieren (experimentell)
+
+esri_kreis <- read_sheet(ss=aaa_id,sheet="KreisdatenAktuell") %>%
+  left_join(esri_daten_tabelle %>% mutate(ags_kreis = paste0("0",AdmUnitId)),
+            by="ags_kreis") %>%
+  mutate(stand=datumsstring) %>%
+  mutate(inzidenz = AnzFall/pop*100000) %>%
+  mutate(TotProz = round(AnzTodesfall/AnzFall*100,1),
+         GenesenProz = round(AnzGenesen/AnzFall*100,1),
+         AktivProz = round(AnzAktiv/AnzFall*100,1)) %>%
+  select(ags_kreis,
+         kreis,
+         gesamt = AnzFall,
+         stand,
+         pop,
+         inzidenz,
+         tote = AnzTodesfall,
+         neu7tage = AnzFall7T,
+         inz7t = Inz7T, #Achtung: kleines t = meine Daten, großes T = ESRI-Daten
+         AnzahlGenesen = AnzGenesen, 
+         AnzahlAktiv = AnzAktiv,
+         notizen, 
+         TotProz,
+         GenesenProz,
+         GA_link,
+         AktivProz,
+         f28_21,
+         f21_14,
+         f14_7,
+         neu = AnzFallNeu,
+         w1, w2, w3, w4, 
+         rt, 
+         vom,
+         vzeit, 
+         rrt,
+         Abk)
+        
+# Tabelle schreiben, Grafik aktualisieren
+
+write_sheet(esri_kreis,ss=aaa_id,sheet="KreisdatenAktuell")
+  
+dw_publish_chart(chart_id="m7sqt")
 
 # ---- Kompletten Datensatz herunterladen ----
 # RKI-Daten lesen und auf Hessen filtern
@@ -281,7 +492,7 @@ if (faelle_gesamt_direkt - faelle_gestern > 50000) {
 rki_df <- data.frame(2,2)
 
 # Daten lesen; wenn noch Daten von gestern, warten. 
-use_json <- FALSE
+
 if (use_json) msg("Daten vom RKI via JSON anfordern...") else msg("RKI-CSV lesen...")
 
 rki_df <- read_rki_data(use_json)
@@ -306,19 +517,19 @@ ts <- rki_df$Datenstand[1]
 starttime <- now()
 while (ts < today()) {
   msg("!!!RKI-Daten sind Stand ",ts)
-  Sys.sleep(60)   # Warte eine Minute
+  Sys.sleep(300)   # Warte fünf Minuten
   if (now() > starttime+36000) {
     msg("--- TIMEOUT ---")
     simpleError("Timeout, keine aktuellen RKI-Daten nach 10 Stunden")
     quit()
   }
-  rki_df <- read_rki_data(use_json)
-  # alternierend versuchen, das CSV zu lesen
+   # alternierend versuchen, das CSV zu lesen
   use_json <- !use_json
-  # Nur, wenn Anzahl der Zeilen laut Statusabfrage der Anzahl der Zeilen
-  # via JSON entspricht, weitermachen
-  if (get_esri_status)
+  rki_df <- read_rki_data(use_json)
+  # Datum auslesen; was uns hierher gebracht hat, ist schließlich die Beobachtung, 
+  # dass der Datensatz von gestern ist. 
   ts <- rki_df$Datenstand[1]
+  # und nochmal in die while()-Bedingung. 
 }
 
 # Plausibilität: Datensätze per JSON 

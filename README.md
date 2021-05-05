@@ -4,6 +4,7 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des Robert-Koch-I
 ## Die Daten
 
 - Quelle RKI (Aktuelle Fallzahlen): https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0 und API
+- RKI-Tagesmeldungen, auf dem Server archiviert
 - Quelle RKI (für den R-Wert): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Projekte_RKI/Nowcasting_Zahlen.xlsx?__blob=publicationFile
 - Quelle RKI (für Testzahlen): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Testzahlen-gesamt.html;jsessionid=EF5B74A0B2AEE46C92BE7A6C719305A9.internet082?nn=13490888
 - Quelle RKI (für Impfzahlen): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquoten-Tab.html;jsessionid=63BB094C521A1D8D2E1767E9A97F2699.internet061 und z.T. via [diesem Repository von ard-data](https://github.com/ard-data/2020-rki-impf-archive/tree/master/data/2_csv)
@@ -31,6 +32,7 @@ Die tägliche Übersicht der Fallzahlen, Inzidenzen, Neufälle in den letzten 7 
 * hole-impfzahlen.R - liest ein XLSX mit aktuellen Impfzahlen von der RKI-Seite
 * meldeverzug-inzidenz.R - schaut für die zurückliegenden Wochen nach der prozentualen Veränderung der Inzidenz durch Meldeverzug und versucht einen "Datenqualitäts-Index" - Anteil der Daten in der letzten Woche, der mehr als 3 Tage zu spät kam
 * server-msg-googlesheet-include.R - enthält Code, den fast alle Skripte brauchen: die Ausgabe von Statusmeldungen über GoogleSheets, den JSON-Code zum Einlesen der RKI-Daten, Unterscheidung Server/lokal, etc. 
+* berechne-bundesnotbremse.R - wertet Archivmeldungen für die vergangenen Tage aus und schaut, ob die Kreise 3 Tage über/5 Werktage über der Grenze waren
 
 ### veraltet: 
 * scrape-jhu.R - baut aus RKI-Daten via API und JHU-Daten via Github ein Google Sheet für die logarithmische Inzidenz-Wachstumskurve

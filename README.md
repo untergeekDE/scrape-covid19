@@ -25,6 +25,7 @@ Die tägliche Übersicht der Fallzahlen, Inzidenzen, Neufälle in den letzten 7 
   
 ## Die Skripte
 * hessen-zahlen-aufbereiten.R - holt morgens die RKI-Daten, rechnet ein paar Auswertungen, beschreibt Tabellen und erneuert die Grafiken
+* lies-esri-tabelle-direkt.R - Daten der Auswertung des Datendienstleisters ESRI als Fallback, falls der Gesamt-Datensatz nicht kommt
 * scrape-helmholtz.R - liest die Reproduktionswert-Daten des SECIR-Modells der Helmholtz-Gesellschaft für Hessen
 * divi-zahlen-aufbereiten.R - liest morgens die Einzelmeldungen (JSON) und das Überblicks-Blatt (CSV) zur Intensivbettenauslastung
 * hole-rki-testzahlen.R - liest ein XLSX mit den nationalen Testzahlen von der RKI-Seite
@@ -32,7 +33,7 @@ Die tägliche Übersicht der Fallzahlen, Inzidenzen, Neufälle in den letzten 7 
 * hole-impfzahlen.R - liest ein XLSX mit aktuellen Impfzahlen von der RKI-Seite
 * meldeverzug-inzidenz.R - schaut für die zurückliegenden Wochen nach der prozentualen Veränderung der Inzidenz durch Meldeverzug und versucht einen "Datenqualitäts-Index" - Anteil der Daten in der letzten Woche, der mehr als 3 Tage zu spät kam
 * server-msg-googlesheet-include.R - enthält Code, den fast alle Skripte brauchen: die Ausgabe von Statusmeldungen über GoogleSheets, den JSON-Code zum Einlesen der RKI-Daten, Unterscheidung Server/lokal, etc. 
-* berechne-bundesnotbremse.R - wertet Archivmeldungen für die vergangenen Tage aus und schaut, ob die Kreise 3 Tage über/5 Werktage über der Grenze waren
+* berechne-bundesnotbremse.R - wertet Archivmeldungen für die vergangenen Tage aus und schaut, ob die Kreise 3 Tage über/5 Werktage über der Grenze waren, und wann ein Kreis in eine der hessischen Lockerungsstufen rutscht.
 
 ### veraltet: 
 * scrape-jhu.R - baut aus RKI-Daten via API und JHU-Daten via Github ein Google Sheet für die logarithmische Inzidenz-Wachstumskurve
@@ -70,6 +71,8 @@ Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, we
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 21.5.: Regelungen des Landes Hessen für Lockerungs-Stufen 1 und 2 in Code übersetzt. 
+* 14.5.: Tabelle mit den gemeldeten Inzidenzen ("Briefkastenmeldungen") als Archiv anlegen, weil daraus die Notbremse bestimmt wird
 * 5.5.: Bundesnotbremse korrekt aus Archivdaten berechnet
 * 30.4.: ESRI-Tabelle wird für Vorab-Daten genutzt 
 * 26.4.: Bundesnotbremse visualisiert (Anzahl von Tagen über der jeweiligen Grenze)

@@ -44,6 +44,8 @@ Eines der schönsten Features von Datawrapper ist [die Möglichkeit, Daten dynam
 
 Da eine Stunde zu lang ist für den Produktiveinsatz, wurde die Kombination gewählt: Google Sheets aktualisieren, Datawrapper-Aktualisierung über Datawrapper-API-Zugriff anstoßen. 
 
+[Details hier in der Datawrapper Academy.](https://academy.datawrapper.de/article/60-external-data-sources)
+
 ### Funktionskontrolle
 
 Die Scraper schreiben ihren Status in [dieses Google-Sheet](https://docs.google.com/spreadsheets/d/1Q5rCvvSUn6WGcsCnKwGJ0y9PwbiML-34kyxYSYX2Qjk/edit#gid=0). 
@@ -57,16 +59,6 @@ Die Scraper schreiben ihren Status in [dieses Google-Sheet](https://docs.google.
 Die Scraper setzen i.d.R. ein Google-Helper-Account und einen lokalen Key dazu voraus, um auf die Google-Sheets zugreifen zu können. 
 
 Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umgebung aufrufen - dann wird der API-Key im R-Environment gespeichert. 
-
-## Es geht auch ohne Datawrapper-API...
-
-Eins der schönsten Features von Datawrapper ist die Möglichkeit, Daten dynamisch anzeigen zu können - dass Grafiken ohne unser Zutun aktualisiert werden, wenn die Daten sich geändert haben. Dazu muss man entweder
-* eine CSV-Datei auf einem dafür geeigneten Server hinterlegen
-* ein via URL öffentlich einsehbares Google Sheet ([Beispieldatei](https://docs.google.com/spreadsheets/d/1OhMGQJXe2rbKg-kCccVNpAMc3yT2i3ubmCndf-zX0JU/edit#gid=1805279723)) als Quelle angeben
-* eine CSV-Datei auf Github hochladen und die Github-Adresse an Datawrapper übergeben
-Die zweite bzw. dritte Methode hat einen Nachteil: Um hohe Last zu vermeiden, werden die Daten auf dem Datawrapper-Server zwischengespeichert und nur in Abständen aktualisiert - in der Regel stündlich. Wem das nicht schnell genug geht - und mir geht es nicht schnell genug - der muss entweder über die Datawrapper-API oder von Hand eine Neu-Veröffentlichung der betreffenden Grafik auslösen; so macht es mein Code. Oder eben die Server-Lösung bauen - dann sind sowohl die datawRappr- als auch die googlesheets4-Library verzichtbar. 
-
-[Details hier in der Datawrapper Academy.](https://academy.datawrapper.de/article/60-external-data-sources)
 
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 

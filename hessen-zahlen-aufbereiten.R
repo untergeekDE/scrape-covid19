@@ -25,7 +25,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 5.5.2021
+# Stand: 14.5.2021
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -191,298 +191,10 @@ read_rki_data <- function(use_json = TRUE) {
 }
 
 
+
 # ---- Datenabfrage ESRI: -----
 
-# Wenn ESRI-Datenbank noch nicht OK, warte!
-# while(get_esri_status()$Status != "OK") {
-#   msg("ESRI-Status: ", get_esri_status()$Status)
-#   Sys.sleep(60)
-# }
-
-
-# Sicherheitscheck: Neue Daten? ----
-
-#RKI-Abfragestring für die Länder konstruieren
-
-esri_url <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/"
-
-esri_service <- "rki_key_data_v/"
-
-rki_rest_query1 <- paste0(esri_url,esri_service,
-                         "FeatureServer/0/",
-                         "query?f=json&",
-                         "where=1%3D1&",
-                         "outFields=*")
-
-# rki_rest_query <- paste0(esri_url,
-#                          "Coronaf%C3%A4lle_in_den_Bundesl%C3%A4ndern/FeatureServer/0/",
-#                          "query?f=json&where=1%3D1",
-#                          "&returnGeometry=false&spatialRel=esriSpatialRelIntersects",
-#                          "&outFields=*&groupByFieldsForStatistics=LAN_ew_GEN&orderByFields=LAN_ew_GEN%20asc",
-#                          "&outStatistics=%5B%7B%22statisticType%22%3A%22max%22%2C%22onStatisticField%22%3A%22Fallzahl%22%2C%22outStatisticFieldName%22%3A%22value%22%7D%5D",
-#                          "&outSR=102100&cacheHint=true")
-
-# Das JSON einlesen. Gibt eine ziemlich chaotische Liste zurück.
-# Tabelle für alle Länder und Kreise ist in daten_liste$features$attributes.
-esri_daten_tabelle <- read_json(rki_rest_query1, simplifyVector = TRUE)$features$attributes
-faelle_gesamt_direkt <- esri_daten_tabelle$AnzFall[esri_daten_tabelle$AdmUnitId==6]
-
-hessen_esri_df <- esri_daten_tabelle %>% filter(BundeslandId==6)
-msg("Schreibe ESRI-Tabelle für Land und Kreise...")
-write.csv(hessen_esri_df,"daten/esri-tabelle-hessen.csv")
-write_sheet(hessen_esri_df,ss=aaa_id,sheet="ESRI direkt")
-if (server) {
-  # Google-Bucket befüllen
-  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/esri-tabelle-hessen.csv gs://d.data.gcp.cloud.hr.de/esri-tabelle-hessen.csv')
-}  
-msg("Geschrieben. ESRI-Status: ",get_esri_status()$Status)
-
-# Was wo liegt, bekommt man über daten_liste$features$attributes$LAN_ew_GEN
-# Daten von gestern holen und vergleichen
-old_data <- read_sheet(aaa_id,sheet="Basisdaten") %>% select(x=1,y=2)
-od <- old_data %>% filter(str_detect(x,"Fälle gesamt"))
-od2 <- str_remove(od$y," \\(ca.+\\)")
-faelle_gestern <- as.integer(str_remove(od2,"[^0-9]"))
-
-
-# Test auf gleiches Ergebnis nur, wenn die Basisdaten alt sind
-
-if (as.Date(str_extract(old_data$x[1],"[0-9]+\\.[0-9]+\\.[0-9]+"),format="%d.%m.%y%y") < today()) {
-  # Gleiche Daten wie gestern??? Warte. 
-  starttime <- now()
-  while (faelle_gesamt_direkt == faelle_gestern) {
-    msg("!!!JSON-Direktabfrage ergibt keine Veränderung zu gestern!!!")
-    Sys.sleep(300) # 5min schlafen
-    daten_liste <- read_json(rki_rest_query, simplifyVector = TRUE)
-    faelle_gesamt_direkt <- daten_liste$features$attributes$value[7]
-    if (now() > starttime+10800) {
-      msg("JSON: Keine neue Fallzahl")
-      simpleError("Timeout, keine aktuellen RKI-Daten nach 3 Stunden")
-      quit()
-    }
-  }
-}
-
-# Plausibilitätsprüfung 1: Fehler, wenn neue Fallzahl kleiner als die gestern
-if (faelle_gesamt_direkt < faelle_gestern) {
-  msg("!!!Fälle heute < Fälle gestern!!!")
-  simpleError("Fälle heute < Fälle gestern")
-  quit()
-}
-
-# Plausibilitätsprüfung 2: Fehler, Absurd hohe Steigerung
-if (faelle_gesamt_direkt - faelle_gestern > 50000) {
-  msg("!!!Wirklich mehr als 50k neue Fälle in Hessen?!!!")
-  simpleError(">50k Neufälle")
-  quit()
-}
-
-# ---- ESRI-Daten vorläufig in die Dokumente schreiben ----
-
-esri_he <- esri_daten_tabelle %>% filter(AdmUnitId == 6)
-
-msg("ESRI-Tabelle direkt: ",esri_he$AnzFall," Fälle gesamt, ",
-    esri_he$AnzFallNeu," heute -- werte aus")
-
-# Basisdaten
-
-datumsstring = paste0(format(today(),"%d.%m.%y%y")," (VORLÄUFIG)")
-
-# Datumsstring schreiben (Zeile 2)
-range_write(aaa_id,as.data.frame(datumsstring),range="Basisdaten!A2",
-            col_names = FALSE, reformat=FALSE)
-
-# Neufälle heute (Zeile 3)
-#range_write(aaa_id,as.data.frame('neue Fälle'),range="Basisdaten!A3")
-range_write(aaa_id,as.data.frame(esri_he$AnzFallNeu),
-            range="Basisdaten!B3", col_names = FALSE, reformat=FALSE)
-
-# Neufälle letzte 7 Tage - (Zeile 4)
-range_write(aaa_id,as.data.frame(esri_he$AnzFall7T),
-            range="Basisdaten!B4", col_names = FALSE, reformat=FALSE)
-
-# Vergleich Vorwoche (Zeile 5)
-#range_write(aaa_id,as.data.frame("Vergleich Vorwoche"),range="Basisdaten!A5")
-f4w_df <- read_sheet(ss=aaa_id,sheet="Fallzahl4Wochen") 
-steigerung_7t_vorwoche <- sum(f4w_df$neu[17:23])
-steigerung_prozent_vorwoche <- (esri_he$AnzFall7T/steigerung_7t_vorwoche*100)-100
-
-trend_string <- "&#9632;"
-if (steigerung_prozent_vorwoche < -10) # gefallen
-  trend_string <- "<b style='color:#019b72'>&#9660;</b><!--gefallen-->"
-if (steigerung_prozent_vorwoche > 10) # gestiegen
-  trend_string <- "<b style='color:#cc1a14'>&#9650;</b><!--gestiegen-->"
-if (steigerung_prozent_vorwoche < -33) # stark gefallen
-  trend_string <- "<b style='color:#019b72'>&#9660;&#9660;</b><!--stark gefallen-->"
-if (steigerung_prozent_vorwoche > 33) # stark gestiegen
-  trend_string <- "<b style='color:#cc1a14'>&#9650;&#9650;</b><!--stark gestiegen-->"
-
-range_write(aaa_id,as.data.frame(
-  paste0(format(steigerung_7t_vorwoche,big.mark = ".", decimal.mark = ",", nsmall =0),
-         " (",ifelse(esri_he$AnzFall7T-steigerung_7t_vorwoche > 0,"+",""),
-         format(esri_he$AnzFall7T - steigerung_7t_vorwoche,big.mark = ".", decimal.mark = ",", nsmall =0),
-         trend_string,")")),
-  range="Basisdaten!B5", col_names = FALSE, reformat=FALSE)
-
-# Inzidenz (Zeile 6)
-
-range_write(aaa_id,as.data.frame(format(esri_he$Inz7T,big.mark = ".",decimal.mark=",",nsmall=1)),
-            range="Basisdaten!B6", col_names = FALSE, reformat=FALSE)
-
-# Gesamt und aktiv (Zeile 7)
-# range_write(aaa_id,as.data.frame(paste0("Fälle gesamt/aktiv")),range="Basisdaten!A7")
-aktiv_str <- format(round((esri_he$AnzAktiv)/100) * 100,
-                    big.mark = ".", decimal.mark = ",", nsmall =0)
-range_write(aaa_id,as.data.frame(paste0(format(esri_he$AnzFall,big.mark = ".", decimal.mark = ",", nsmall =0),
-                                        " (ca. ",aktiv_str,")")),
-            range="Basisdaten!B7", col_names = FALSE, reformat=FALSE)
-
-# Immunisiert und geimpft (Zeile 8 und 9)
-
-msg("Impfzahlen und Immunisierungsquote")
-# Geimpft (Zeile 8)
-impfen_df <- read_sheet(ss=aaa_id,sheet = "ArchivImpfzahlen") %>%
-  filter(am == max(am))
-range_write(aaa_id,as.data.frame(paste0("Geimpft (",
-                                        format.Date(impfen_df$am,"%d.%m."),")")),
-            range="Basisdaten!A8",col_names=FALSE,reformat=FALSE)
-range_write(aaa_id, as.data.frame(paste0(
-  format(impfen_df$personen,big.mark=".",decimal.mark = ","),
-  " (+", format(impfen_df$differenz_zum_vortag_erstimpfung,big.mark = ".", decimal.mark = ",", nsmall =0),
-  ")")),
-  range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
-
-# Immun (Zeile 9)
-impf_alt_df <- read_sheet(ss=aaa_id,sheet="ArchivImpfzahlen") %>% filter(am <= today()-14)
-immun <- max(as.numeric(impf_alt_df$personen)) + esri_he$AnzGenesen
-hessen=sum(read.xlsx("index/kreise-index-pop.xlsx") %>% select(pop))
-
-range_write(aaa_id,as.data.frame("Immunisiert sind ca. "),range="Basisdaten!A9", col_names=FALSE,reformat=FALSE)
-immun_str <- paste0(format(round(immun/hessen*100,1),
-                           big.mark = ".", decimal.mark = ",", nsmall =0),
-                    " %")
-range_write(aaa_id,as.data.frame(immun_str),
-            range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
-
-
-# Todesfälle heute (Zeile 10)
-#range_write(aaa_id,as.data.frame("neue Todesfälle"),range="Basisdaten!A10")
-range_write(aaa_id,as.data.frame(esri_he$AnzTodesfallNeu),
-            range="Basisdaten!B10",col_names = FALSE, reformat=FALSE)
-
-# Todesfälle gesamt (Zeile 11)
-#range_write(aaa_id,as.data.frame("Todesfälle gesamt"),range="Basisdaten!A11")
-range_write(aaa_id,as.data.frame(format(esri_he$AnzTodesfall,big.mark=".",decimal.mark = ",")),
-            range="Basisdaten!B11",
-            col_names = FALSE,reformat=FALSE)
-
-dw_publish_chart(chart_id = "OXn7r") # Basisdaten
-
-msg("Basisdaten OK, Verlaufstabelle aus ESRI-Tabelle aktualisieren...")
-
-# Fallzahl und Fallzahl4Wochen aktualisieren
-
-msg("Berechne vorläufig ESRI-fallzahl und fallzahl4w...")
-fallzahl_df <- read_sheet(aaa_id,sheet="FallzahlVerlauf")
-
-fallzahl_df$datum <- as_date(fallzahl_df$datum)
-fallzahl_ofs <- as.numeric(today() - fallzahl_df$datum[1]) + 1
-
-# Neue Zeile?
-if (fallzahl_ofs > nrow(fallzahl_df)) {
-  fallzahl_df[fallzahl_ofs,]<- NA
-  fallzahl_df$datum[fallzahl_ofs] <- as_date(today())
-  
-}
-# Werte für heute
-
-fallzahl_df$gsum[fallzahl_ofs] <- esri_he$AnzGenesen
-fallzahl_df$faelle[fallzahl_ofs] <- esri_he$AnzFall
-fallzahl_df$steigerung[fallzahl_ofs] <- esri_he$AnzFall/(esri_he$AnzFall-esri_he$AnzFallNeu)-1
-fallzahl_df$tote[fallzahl_ofs] <- esri_he$AnzTodesfall
-fallzahl_df$tote_steigerung[fallzahl_ofs] <- esri_he$AnzTodesfallNeu
-fallzahl_df$aktiv[fallzahl_ofs] <- esri_he$AnzAktiv
-fallzahl_df$neu[fallzahl_ofs] <- esri_he$AnzFallNeu
-fallzahl_df$aktiv_ohne_neu[fallzahl_ofs] <- esri_he$AnzAktiv-esri_he$AnzFallNeu
-
-# 4-Wochen-Fallzahl darstellen
-
-#7-Tage-Trend der Neuinfektionen
-fall4w_df <- fallzahl_df %>% mutate(neu7tagemittel = (lag(neu)+
-                                                        lag(neu,n=2)+
-                                                        lag(neu,n=3)+
-                                                        lag(neu,n=4)+
-                                                        lag(neu,n=5)+
-                                                        lag(neu,n=6)+
-                                                        neu)/7) 
-fall4w_df <- fall4w_df[(nrow(fall4w_df)-27):nrow(fall4w_df),]
-
-write_sheet(fallzahl_df, ss=aaa_id, sheet="FallzahlVerlauf")
-range_write(fall4w_df,ss = aaa_id, sheet = "Fallzahl4Wochen",reformat=FALSE)
-
-# Prognose-Sheet updaten
-
-msg("Fallzahlen geschrieben, Verlaufskurve mit Prognose aktualisieren")
-
-neu_p_df <- read_sheet(aaa_id,sheet = "NeuPrognose")
-
-# Prognosen dranhängen
-
-#Etwas übersichtlicher
-f4w_neu_df <- fall4w_df %>%
-  select(datum, neu, neu7tagemittel)
-
-neu_p_df <- neu_p_df %>%
-  select(datum, min, mean, max, prognosedatum) %>%
-  left_join(f4w_neu_df, by="datum") %>%
-  select(datum,neu,neu7tagemittel, min, mean, max, prognosedatum) 
-# In Sheet "NeuPrognose" ausgeben
-
-write_sheet(neu_p_df,ss=aaa_id,sheet="NeuPrognose")  
-dw_publish_chart(chart_id = "NrBYs")  # Neufälle und Trend letzte 4 Wochen
-
-# Kreisdaten-Tabelle aktualisieren (experimentell)
-
-esri_kreis <- read_sheet(ss=aaa_id,sheet="KreisdatenAktuell") %>%
-  left_join(esri_daten_tabelle %>% mutate(ags_kreis = paste0("0",AdmUnitId)),
-            by="ags_kreis") %>%
-  mutate(stand=datumsstring) %>%
-  mutate(inzidenz = AnzFall/pop*100000) %>%
-  mutate(TotProz = round(AnzTodesfall/AnzFall*100,1),
-         GenesenProz = round(AnzGenesen/AnzFall*100,1),
-         AktivProz = round(AnzAktiv/AnzFall*100,1)) %>%
-  select(ags_kreis,
-         kreis,
-         gesamt = AnzFall,
-         stand,
-         pop,
-         inzidenz,
-         tote = AnzTodesfall,
-         neu7tage = AnzFall7T,
-         inz7t = Inz7T, #Achtung: kleines t = meine Daten, großes T = ESRI-Daten
-         AnzahlGenesen = AnzGenesen, 
-         AnzahlAktiv = AnzAktiv,
-         notizen, 
-         TotProz,
-         GenesenProz,
-         GA_link,
-         AktivProz,
-         f28_21,
-         f21_14,
-         f14_7,
-         neu = AnzFallNeu,
-         w1, w2, w3, w4, 
-         rt, 
-         vom,
-         vzeit, 
-         rrt,
-         Abk)
-        
-# Tabelle schreiben, Grafik aktualisieren
-
-write_sheet(esri_kreis,ss=aaa_id,sheet="KreisdatenAktuell")
-  
-dw_publish_chart(chart_id="m7sqt")
+source("./lies-esri-tabelle-direkt.R")
 
 # ---- Kompletten Datensatz herunterladen ----
 # RKI-Daten lesen und auf Hessen filtern
@@ -497,10 +209,22 @@ if (use_json) msg("Daten vom RKI via JSON anfordern...") else msg("RKI-CSV lesen
 
 rki_df <- read_rki_data(use_json)
 
+# ---- FALLBACK ----
+# Der NDR pflegt ein Repository, wo er alle Briefkastenmeldungen ablegt - als TSV. (!)
+# Dummerweise auch noch komprimiert. 
+# https://storage.googleapis.com/public.ndrdata.de/rki_covid_19_bulk/daily/covid_19_daily_2021-04-09.tsv.gz
+
 # Fallback: Von Hand laden
 fallback <- FALSE
 if (fallback) {
-  rki_df <- read.csv("~/Downloads/RKI_COVID19.csv")
+  # Eierlegende Wollmilchsau beim Datenimport
+  heute <- today()
+  fallback_url <- paste0("https://storage.googleapis.com/public.ndrdata.de/",
+                         "rki_covid_19_bulk/daily/covid_19_daily_", heute,
+                         ".tsv.gz")
+  library(data.table)
+  rki_df <- fread(fallback_url) # Entpackt und liest das TSV des NDR-Archivs
+#  rki_df <- read.csv("~/Downloads/RKI_COVID19.csv")
   # Sollte die Spalte mit der Landkreis kein String sein, umwandeln und mit führender 0 versehen
   if(class(rki_df$IdLandkreis) != "character") {
     rki_df$IdLandkreis <- paste0("0",rki_df$IdLandkreis)
@@ -510,6 +234,7 @@ if (fallback) {
     rki_df$Datenstand <- parse_date(rki_df$Datenstand[1],format = "%d.%m.%y%H, %M:%S Uhr")
   }
 }
+
 
 ts <- rki_df$Datenstand[1]
 
@@ -1132,6 +857,48 @@ hsum_df$Datum <- as_date(hsum_df$Datum)+1
 write_sheet(hsum_df,ss=aaa_id,sheet="ArchivKreisInzidenz")
 write_csv2(hsum_df,"daten/ArchivKreisInzidenz.csv")
 
+# Jetzt: Heutige Inzidenzen als Zeile im Archiv der Meldedaten ablegen
+msg("Archivierte Briefkasten-Inzidenzen ergänzen...")
+
+# 
+inz_wt_df <- read_sheet(aaa_id,sheet="ArchivInzidenzGemeldet") %>%
+  mutate(datum = as_date(datum))
+
+ref7tage_df <- rki_he_df %>%
+  mutate(datum = as_date(Meldedatum)) %>%
+  filter(datum > as_date(heute-8) & datum < as_date(heute)) %>%
+  # Auf die Summen filtern?
+  filter(NeuerFall %in% c(0,1)) %>%
+  select(AGS = IdLandkreis,AnzahlFall) %>%
+  # gruppiere nach Kreis
+  group_by(AGS) %>%
+  #pivot_wider(names_from = datum, values_from = AnzahlFall)
+  # Summen für Fallzahl, Genesen, Todesfall bilden
+  summarize(AnzahlFall = sum(AnzahlFall)) %>%
+  ungroup() %>%
+  # jetzt die Bevölkerungszahlen dazuladen
+  full_join(kreise,by="AGS") %>%
+  mutate(inz7t = AnzahlFall/pop*100000) %>%
+  # Unter dem Datum des Datenstandes (Briefkastendatum) ablegen
+  mutate(datum = as_date(heute)) %>%
+  select(datum,kreis,inz7t) %>%
+  pivot_wider(names_from = kreis, values_from = inz7t)
+
+# Wenn das Datum schon existiert, überschreiben, 
+# sonst an Tabelle anfügen
+if (as_date(heute) %in% inz_wt_df$datum) {
+  inz_wt_df[inz_wt_df$datum == as_date(heute),] <- ref7tage_df
+} else {
+  inz_wt_df <- rbind(inz_wt_df,ref7tage_df)
+}
+
+# Daten aufsteigend sortieren
+inz_wt_df <- inz_wt_df %>% arrange(datum)
+
+write_csv2(inz_wt_df,"./archiv/ArchivInzidenzGemeldet.xlsx")
+write_sheet(inz_wt_df,ss=aaa_id,sheet="ArchivInzidenzGemeldet")
+  
+
 # ---- Archivdaten in die GSheets ArchivKreisFallzahl, (...Tote, ...Genesen) -----
 
 msg("Archivdaten Fallzahl, Tote, Genesen nach Kreis...")
@@ -1364,6 +1131,7 @@ alter_woche_df <- rki_he_df %>%
 range_write(alter_woche_df,ss=aaa_id,sheet="NeufaelleAlterProzentWoche", reformat=FALSE)
 write_csv2(alter_woche_df,"daten/alter-woche.csv")
 
+# ---- Teststellen aktualisieren ----
 
 # ---- Aufräumarbeiten, Grafiken pingen ---- 
 

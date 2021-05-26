@@ -63,6 +63,7 @@ Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umg
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 26.5.: Code, der die Testzentren-Liste des Landes übernimmt und einbaut
 * 21.5.: Regelungen des Landes Hessen für Lockerungs-Stufen 1 und 2 in Code übersetzt. 
 * 14.5.: Tabelle mit den gemeldeten Inzidenzen ("Briefkastenmeldungen") als Archiv anlegen, weil daraus die Notbremse bestimmt wird
 * 5.5.: Bundesnotbremse korrekt aus Archivdaten berechnet

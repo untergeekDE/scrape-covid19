@@ -1,7 +1,7 @@
 ###################### berechne-notbremse.R ######################
 # Wird vom hessen-zahlen-aufbereiten.R aufgerufen
 #
-# Stand: 21.5.2021
+# Stand: 24.5.2021
 
 
 
@@ -136,8 +136,10 @@ for (k in kreise$kreis) {
     if (v < 50) unter50 = unter50+1 else unter50 = 0
     if (v < 100) unter100 = unter100+1 else unter100=0
     if (d == as_date("2021-05-16") ) { 
-      if (!str_detect(status,"tufe")) unter50 = 0
-      unter100 = 0
+      if (!str_detect(status,"tufe")) {
+        unter50 = 0
+        unter100 = 0
+      }
     } 
     
     # Für Unterschreitung der BNB-Grenzen nur Werktage zählen.
@@ -182,9 +184,11 @@ for (k in kreise$kreis) {
       countdown = 2      
     }
     # Bundesnotbremse aktiv, und 5 Werktage unter 100? 
-    if (str_detect(status,"A") & unter100w == 5) {
+    if (str_detect(status,"^A") & unter100w == 5) {
       status = "<A>>Stufe 1<"
-      countdown = 2      
+      countdown = 2 
+      unter100 = 1 - countdown # Reset Tageszählung Stufe 1
+      unter50 = 1 - countdown
     }
     if (status %in% c("Stufe 1","<A>>Stufe 1<") & (unter50 == 5 | unter100 == 14)) {
       status = "Stufe >2<"
@@ -192,7 +196,8 @@ for (k in kreise$kreis) {
     }
   # Tagestabelle ergänzen
   inz_work_df$status[inz_work_df$datum == as_date(d) &
-                       inz_work_df$kreis == k] <- status
+                       inz_work_df$kreis == k] <- 
+    ifelse(status=="Stufe 1",paste0(status,"(",unter100,")"),status)
     
   }
 }
@@ -233,7 +238,8 @@ msg("Schreibe Tabellen in die Grafik...")
 dw_data_to_chart(inz_df,chart_id="psn2l")
 # ...einmal ins Google Sheet. 
 sheet_write(inz_df,ss=sperren_id,sheet="Sperren-Tabelle")
-sheet_write(inz_df,ss=sperren_id,sheet="Sperren-Status-Tabelle")
+sheet_write(inz_status_df,ss=sperren_id,sheet="Sperren-Status-Tabelle")
+sheet_write(inz_archiv_df,ss=sperren_id,sheet="Sperren-Inzidenz-Tabelle")
 
 dw_publish_chart(chart_id="psn2l")
 

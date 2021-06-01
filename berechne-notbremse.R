@@ -51,7 +51,8 @@ msg("Lies index/kreise-index-pop.xlsx","...")
 # Jeweils aktuelle Bevölkerungszahlen; zuletzt aktualisiert Juli 2020
 kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
   mutate(AGS = paste0("06",str_replace(AGS,"000",""))) %>%
-  select(AGS,kreis,pop)
+  select(AGS,kreis,pop) %>%
+  arrange(kreis)
 
 
 # Daten holen - werden von Skript hessen-daten-aufbereiten.R in 
@@ -72,15 +73,20 @@ inz_archiv_df <- read_sheet(ss=aaa_id, sheet="ArchivInzidenzGemeldet") %>%
   mutate(feiertag = (wday(datum) == 1) | 
            (as_date(datum) %in% feiertage)) 
 
+
 # Lange Tabelle der Kreise
 inz_work_df <- inz_archiv_df %>% 
   pivot_longer(cols = -c("datum","feiertag"),names_to="kreis") %>% 
-  mutate(status = NA)
+  mutate(status = NA) %>%
+  arrange(kreis)
 
 tage <- nrow(inz_archiv_df)
 
 msg("Notbremsen-Tabelle lesen...")
 for (k in kreise$kreis) {
+  # Aus den Inzidenzen für den jeweiligen Kreis einen Vektor machen
+  # Auswahl über den Kreisnamen (also: den Spaltennamen), deshalb
+  # funktioniert es unabhängig von der Sortierung. 
   vector = pull(inz_archiv_df,var = !!k)
   # Zählvariablen für die State Machine
   über100 = 0

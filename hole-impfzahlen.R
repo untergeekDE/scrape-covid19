@@ -1,7 +1,7 @@
 ##################################### hole-impfzahlen.R #########################
 # - Impfzahlen 
 
-# Stand: 8.6.2021
+# Stand: 10.6.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -35,8 +35,12 @@ rki_xlsx_url <- "https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Da
 
 msg("Impfzahlen vom RKI lesen...")
 impf_tabelle <- read_sheet(aaa_id,sheet="ArchivImpfzahlen")
+# Datum tolerant auswerten - das RKI variiert gern ein wenig. 
+
 tryCatch(impfen_meta_df <- read.xlsx(rki_xlsx_url,sheet=4) %>% 
-  mutate(Datum = as.Date(as.numeric(Datum),origin="1899-12-30")) %>%
+  mutate(Datum = parse_date_time(Datum,
+                                 orders=c("ymd","%Y-%m-%d","%d.%m.%Y","%d/%m/%y"),
+                                 quiet=TRUE)) %>%
   na.omit())
 
 ts <- now()
@@ -51,7 +55,7 @@ while (
   # letztes archiviertes. 
   #   impfen_df$am == max(impfen_meta_df$Datum) &
   # Noch keine Datei mit Datum von gestern?
-       today() > max(impfen_meta_df$Datum)+1) {
+       today()-1 > max(impfen_meta_df$Datum)) {
 
   Sys.sleep(60)
   # Abbruchbedingung: 6x3600 Sekunden vergangen?
@@ -64,7 +68,9 @@ while (
   # Tabelle mit den (Meta-)Daten und Impfzahlen lesen; Spalte Datum ist das
   # Stichdatum
   tryCatch(impfen_meta_df <- read.xlsx(rki_xlsx_url,sheet=4) %>% 
-             mutate(Datum = as.Date(as.numeric(Datum),origin="1899-12-30")) %>%
+             mutate(Datum = parse_date_time(Datum,
+                                            orders=c("ymd","%Y-%m-%d","%d.%m.%Y","%d/%m/%y"),
+                                            quiet=TRUE)) %>%
              na.omit())
   # Plausibilitätsprüfung: Wenn Zahl der Geimpften der von gestern entspricht. 
   # lieber nochmal lesen. 
@@ -72,7 +78,6 @@ while (
 }
 if (!server) beepr::beep(2)
 msg("Daten bis ",max(impfen_meta_df$Datum)," gelesen - überprüfen...")
-
 # Archivkopie
 
 pp2 <- read.csv2("daten/impfen-gestern-2.csv")
@@ -287,7 +292,7 @@ range_write(aaa_id,as.data.frame(paste0(
 # Durchgeimpfte - Zeile 3
 range_write(aaa_id,as.data.frame(paste0(
   format(impf_df$durchgeimpft,big.mark=".",decimal.mark = ","),
-  " (",format(impf_df$quote_zweit,big.mark=".",decimal.mark = ",",digits=3),"%)"
+  " (",format(impf_df$quote_zweit,big.mark=".",decimal.mark = ",",digits=4),"%)"
   )),
   range="Impfzahlen!A3", col_names = FALSE, reformat=FALSE)
 
@@ -302,9 +307,9 @@ range_write(aaa_id,as.data.frame(paste0(
 
 
 range_write(aaa_id,as.data.frame(paste0(
-  "sind am ",
+  "<strong>Erstgeimpfte / Zweitgeimpfte</strong> sind am ",
   format.Date(impf_df$am,"%d.%m."),
-  "<strong> dazugekommen</strong>.")),
+  " dazugekommen.")),
   range="Impfzahlen!B4", col_names = FALSE, reformat=FALSE)
 
 

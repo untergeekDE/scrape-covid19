@@ -518,20 +518,30 @@ msg("Aufbereitung nach Kreisen...")
 
 sperren_id = "1zdR1rDOt0H6THUke_W6Hb-Lt3luzh0ZJtBPxvf3cZbI"
 
-notizen_df <- range_read(sperren_id, sheet = "Ausgangssperren") %>%
-  mutate(Infolink = ifelse(!is.na(Infolink),Infolink,Gesundheitsamt)) %>%
-  mutate(Infos = ifelse(!is.na(Infos),
-                        paste0("<a href=\'",
-                               Infolink,
-                               "\' target=\'_blank\'>",
-                               Infos,
-                               "</a>"),
-                        paste0("<a href=\'",
-                               Infolink,
-                               "\' target=\'_blank\'>",
-                               "[Kreisinfos]",
-                               "</a>"))) %>%
-  select (AGS, notizen = Infos)
+# notizen_df <- range_read(sperren_id, sheet = "Ausgangssperren") %>%
+#   mutate(Infolink = ifelse(!is.na(Infolink),Infolink,Gesundheitsamt)) %>%
+#   mutate(Infos = ifelse(!is.na(Infos),
+#                         paste0("<a href=\'",
+#                                Infolink,
+#                                "\' target=\'_blank\'>",
+#                                Infos,
+#                                "</a>"),
+#                         paste0("<a href=\'",
+#                                Infolink,
+#                                "\' target=\'_blank\'>",
+#                                "[Kreisinfos]",
+#                                "</a>"))) %>%
+#   select (AGS, notizen = Infos)
+
+# brauchen wir nicht; Sperren-Dokument einstweilen abschalten. Nur 
+# GA-Link aus dem Kreise-Dokument
+
+notizen_df <- kreise %>%
+  mutate(GA_link = paste0("<a href=\'",GA_link,
+                          "\' target=\'_blank\'>",
+                          "[Kreisinfos]</a>")) %>% 
+  select(AGS, notizen = GA_link)
+
 
 # für die Inzidenz: Letzte 7 Tage filtern
 f7tage_df <- rki_he_df %>%
@@ -766,6 +776,11 @@ ref7tage_df <- rki_he_df %>%
   ungroup() %>%
   # jetzt die Bevölkerungszahlen dazuladen
   full_join(kreise,by="AGS") %>%
+  # Inzidenz 0? Kommt vor - erstmalig am 20.6.2021. 
+  # In diesem Fall ist die sum(AnzahlFall) == NA, also
+  # jetzt alle NA durch 0 ersetzen. 
+  mutate(AnzahlFall = ifelse(is.na(AnzahlFall),0,AnzahlFall)) %>%  
+  # Inzidenz berechnen
   mutate(inz7t = AnzahlFall/pop*100000) %>%
   # Unter dem Datum des Datenstandes (Briefkastendatum) ablegen
   mutate(datum = as_date(heute)) %>%

@@ -5,7 +5,7 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des Robert-Koch-I
 
 - Quelle RKI (Aktuelle Fallzahlen): https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0 und API
 - RKI-Tagesmeldungen, auf dem Server archiviert
-- Quelle RKI (für den R-Wert): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Projekte_RKI/Nowcasting_Zahlen.xlsx?__blob=publicationFile
+- Quelle RKI-Github (für den R-Wert): https://github.com/robert-koch-institut/SARS-CoV-2-Nowcasting_und_-R-Schaetzung
 - Quelle RKI (für Testzahlen): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Testzahlen-gesamt.html;jsessionid=EF5B74A0B2AEE46C92BE7A6C719305A9.internet082?nn=13490888
 - Quelle RKI (für Impfzahlen): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquoten-Tab.html;jsessionid=63BB094C521A1D8D2E1767E9A97F2699.internet061 und z.T. via [diesem Repository von ard-data](https://github.com/ard-data/2020-rki-impf-archive/tree/master/data/2_csv)
 - Quelle DIVI: Endpunkt https://diviexchange.blob.core.windows.net/%24web/DIVI_Intensivregister_Auszug_pro_Landkreis.csv und API
@@ -63,6 +63,8 @@ Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umg
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 4.7.: RKI-Github als Datenquelle, zunächst für die R-Schätzung/Nowcasting
+* 20.6.: Über die teamR-Library kleine Nachrichten in einen hr-MS-Teams-Channel absetzen, wenn neue Daten vorliegen
 * 26.5.: Code, der die Testzentren-Liste des Landes übernimmt und einbaut
 * 21.5.: Regelungen des Landes Hessen für Lockerungs-Stufen 1 und 2 in Code übersetzt. 
 * 14.5.: Tabelle mit den gemeldeten Inzidenzen ("Briefkastenmeldungen") als Archiv anlegen, weil daraus die Notbremse bestimmt wird

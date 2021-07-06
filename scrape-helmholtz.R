@@ -12,7 +12,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 4.7.2021
+# Stand: 6.7.2021
 
 # Alles weg, was noch im Speicher rumliegt
 rm(list=ls())
@@ -30,7 +30,7 @@ if (file.exists("./server-msg-googlesheet-include.R")) {
 
 # Tabelle: Sheet "rt-helmholtz" aus dem AAA-Dokument
 # Vergleichsdaten vom Google Sheet: letztes gelesenes Datum
-fallzahl_df <- read_sheet(aaa_id,sheet ="rt-helmholtz")
+fallzahl_df <- read_sheet(aaa_id,sheet ="r_rki_helmholtz")
 lastdate <- max(as.Date(fallzahl_df$date))
 
 msg("Helmholtz-R holen - zuletzt ",lastdate)
@@ -97,13 +97,13 @@ rt_df <- brics_df %>%
   mutate(date = as.Date(date)) %>%
   filter(date > as.Date("2020-03-08"))
 
-msg("Schreibe Daten ins Google Sheet")
-sheet_write(rt_df,ss = aaa_id, sheet = "rt-helmholtz")
+# sheet_write(rt_df,ss = aaa_id, sheet = "rt-helmholtz")
 
 # ---- Jetzt noch die RKI-Tabelle für R dazuholen ----
 # Seit Juli 2021 liegen die Daten nicht mehr als XLSX auf der 
 # Webseite des RKI, sondern in einem Github-Repository. 
 
+msg("Nach aktualisierten RKI-R-Daten suchen")
 
 repo <- "robert-koch-institut/SARS-CoV-2-Nowcasting_und_-R-Schaetzung/"
 path <- "Nowcast_R_aktuell.csv"

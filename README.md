@@ -28,7 +28,7 @@ Die tägliche Übersicht der Fallzahlen, Inzidenzen, Neufälle in den letzten 7 
 ## Die Skripte
 * hessen-zahlen-aufbereiten.R - holt morgens die RKI-Daten, rechnet ein paar Auswertungen, beschreibt Tabellen und erneuert die Grafiken
 * lies-esri-tabelle-direkt.R - Daten der Auswertung des Datendienstleisters ESRI als Fallback, falls der Gesamt-Datensatz nicht kommt
-* scrape-helmholtz.R - liest die Reproduktionswert-Daten des SECIR-Modells der Helmholtz-Gesellschaft für Hessen
+* hole-r-rki-helmholtz.R - liest die Reproduktionswert-Daten des SECIR-Modells der Helmholtz-Gesellschaft für Hessen
 * divi-zahlen-aufbereiten.R - liest morgens die Einzelmeldungen (JSON) und das Überblicks-Blatt (CSV) zur Intensivbettenauslastung
 * hole-rki-testzahlen.R - liest ein XLSX mit den nationalen Testzahlen von der RKI-Seite
 * hole-covid-simulator.R - liest ein CSV mit der wöchentlichen Simulation des COVID-Simulators der Universität des Saarlandes für Hessen 

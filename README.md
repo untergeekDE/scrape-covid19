@@ -1,16 +1,18 @@
 # scrape-covid19
+
 Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des Robert-Koch-Instituts (RKI) auszulesen und gemeinsam mit einigen anderen Quellen für hessenschau.de zu verarbeiten. 
 
 ## Die Daten
 
-- Quelle RKI (Aktuelle Fallzahlen): https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0 und API
+- Quelle RKI: [Falldaten auf Github]  (https://github.com/robert-koch-institut/SARS-CoV-2_Infektionen_in_Deutschland)
+- Quelle ESRI: [Data Warehouse für die RKI-Falldaten] (https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0 und API)
 - RKI-Tagesmeldungen, auf dem Server archiviert
-- Quelle RKI-Github (für den R-Wert): https://github.com/robert-koch-institut/SARS-CoV-2-Nowcasting_und_-R-Schaetzung
-- Quelle RKI (für Testzahlen): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Testzahlen-gesamt.html;jsessionid=EF5B74A0B2AEE46C92BE7A6C719305A9.internet082?nn=13490888
-- Quelle RKI (für Impfzahlen): https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquoten-Tab.html;jsessionid=63BB094C521A1D8D2E1767E9A97F2699.internet061 und z.T. via [diesem Repository von ard-data](https://github.com/ard-data/2020-rki-impf-archive/tree/master/data/2_csv)
-- Quelle DIVI: Endpunkt https://diviexchange.blob.core.windows.net/%24web/DIVI_Intensivregister_Auszug_pro_Landkreis.csv und API
-- Quelle Helmholtz: https://gitlab.com/simm/covid19/secir/-/tree/master/img/dynamic/Rt_rawData
-- Quelle JHU: https://gitlab.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/
+- Quelle RKI: [Nowcast und 7-Tage-R auf Github](https://github.com/robert-koch-institut/SARS-CoV-2-Nowcasting_und_-R-Schaetzung)
+- Quelle RKI: [Testzahlen donnerstags als Excel-Tabelle](https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Testzahlen-gesamt.html;jsessionid=EF5B74A0B2AEE46C92BE7A6C719305A9.internet082?nn=13490888)
+- Quelle RKI: [Impfzahlen Mo-Fr als Excel-Tabelle](https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquoten-Tab.html;jsessionid=63BB094C521A1D8D2E1767E9A97F2699.internet061) und z.T. via [diesem Repository von ard-data](https://github.com/ard-data/2020-rki-impf-archive/tree/master/data/2_csv)
+- Quelle DIVI: Intensivregister via [CSV]h(ttps://diviexchange.blob.core.windows.net/%24web/DIVI_Intensivregister_Auszug_pro_Landkreis.csv) und API
+- Quelle Helmholtz-Zentrum für Infektologie: [R-Wert-Schätzungen für Hessen als CSV](https://gitlab.com/simm/covid19/secir/-/tree/master/img/dynamic/Rt_rawData)
+- Quelle Johns-Hopkins-Universität: [Länder als CSV](https://gitlab.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/)
 
 Die [Quelle "Hessisches Sozialministerium"](https://soziales.hessen.de/gesundheit/infektionsschutz/coronavirus-sars-cov-2/taegliche-uebersicht-der-bestaetigten-sars-cov-2-faelle-hessen) wurde wegen mangelnder Zuverlässigkeit und fehlender API/CSV zum 21.5. aussortiert. 
 

@@ -1,7 +1,7 @@
 ##################################### hole-impfzahlen.R #########################
 # - Impfzahlen 
 
-# Stand: 10.6.2021
+# Stand: 6.7.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -28,6 +28,9 @@ u60 = hessen - ue60
 # Auskunft Innenministerium an Tobias Lübben 15.1.2021
 
 # ---- Ich bin genervt, ich arbeite mit den RKI-Daten jetzt. ----
+# Seit Juli 2021 werden die Daten nicht mehr als XLSX-Datei auf der
+# Website veröffentlicht, sondern im Github-Repository des RKI. 
+
 
 # XLSX vom Tage
 rki_xlsx_url <- "https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquotenmonitoring.xlsx?__blob=publicationFile"
@@ -58,8 +61,8 @@ while (
        today()-1 > max(impfen_meta_df$Datum)) {
 
   Sys.sleep(60)
-  # Abbruchbedingung: 6x3600 Sekunden vergangen?
-  if (now() > ts+(6*3600)) {
+  # Abbruchbedingung: 8x3600 Sekunden vergangen?
+  if (now() > ts+(8*3600)) {
     msg("KEINE NEUEN DATEN GEFUNDEN")
     stop("Timeout")
   }
@@ -89,7 +92,8 @@ write.csv2(tabelle2,file = "daten/impfen-gestern-2.csv",row.names=FALSE)
 write.csv2(tabelle3,file = "daten/impfen-gestern-3.csv",row.names=FALSE)
 write.csv2(tabelle4,file = "daten/impfen-gestern-4.csv",row.names=FALSE)
 
-msg("Ländertabelle vom ",max(impfen_meta_df$Datum)," lesen")
+impf_datum <- max(impfen_meta_df$Datum)
+msg("Ländertabelle vom ",format.Date(impf_datum,"%d.%m.")," lesen")
 # Tabelle 2 war seit dem 8.4. nicht mehr wirklich sinnvoll zu nutzen. 
 # Seit dem 7.6. enthält sie die Altersaufschlüsselung )Impfquoten
 # Deswegen: Gesamt-Tabelle machen mit den Impfquoten
@@ -117,8 +121,8 @@ if (any((tabelle2 %>% rename(RS=1) %>%
      filter(!is.na(RS)) %>%
      arrange(RS) %>%
      select(erst = 3)))) {
-  View(tabelle2)
-  View(tabelle3)
+  if (!server) View(tabelle2)
+  if (!server) View(tabelle3)
   stop("!!!Abweichung Erstimpfungen")
 }
 
@@ -133,9 +137,9 @@ if (any((tabelle2 %>% rename(RS=1) %>%
          filter(!is.na(RS)) %>%
          arrange(RS) %>%
          select(zweit = 9)))) {
-  View(tabelle2)
-  View(tabelle3)
-  stop("!!!Abweichung Erstimpfungen")
+  if (!server) View(tabelle2)
+  if (!server) View(tabelle3)
+  stop("!!!Abweichung Zweitimpfungen")
 }
 
 
@@ -448,6 +452,65 @@ write_sheet(archiv_tabelle,aaa_id,sheet = "ArchivImpfzahlen")
 # Impftempo-Kurve aktualisieren - aus dem Google Sheet
 dw_publish_chart(chart_id="SS8ta")
 
+# ---- Experimentell: Generiere Infokarte in Teams ----
+
+# Legt eine Karte mit den aktuellen Impfzahlen im Teams-Team "hr-Datenteam", 
+# Channel "Corona" an. 
+
+# Erster Versuch, damnit. 
+
+library(teamr)
+library(magick)
+
+cc <- connector_card$new(hookurl = Sys.getenv("WEBHOOK_CORONA"))
+cc$text(paste0("RKI-Impfdaten nach dem ",format.Date(lastdate,"%d.%m.%y")))
+
+sec <- card_section$new()
+
+sec$text(paste0("<h4>",format(impf_df$quote_erst,decimal.mark=",",big.mark=".",
+                       digits=4),
+                "% mindestens einmal geimpft; ",
+                format(impf_df$quote_zweit,decimal.mark=",",big.mark=".",
+                       digits=4),
+                "% durchgeimpft</h4>"))
+  
+
+sec$add_fact("Erstgeimpfte: ",format(impf_df$personen,decimal.mark=",",big.mark="."))
+sec$add_fact("Zweitgeimpfte: ",format(impf_df$durchgeimpft,decimal.mark=",",big.mark="."))
+sec$add_fact(paste0("Erstimpfungen ",format.Date(impf_datum,"%d.%m.:")),
+             format(impf_df$neu,decimal.mark=",",big.mark="."))
+sec$add_fact(paste0("Zweitimpfungen ",format.Date(impf_datum,"%d.%m.:")),
+             format(impf_df$neu_zweit,decimal.mark=",",big.mark="."))
+sec$add_fact("Impfdosen: ",format(impf_df$impfdosen,decimal.mark=",",big.mark="."))
+sec$add_fact("Impfquote Ü60: ",
+             paste0(format(impf_df$quote_erst_ue60,big.mark=".",
+                           decimal.mark = ",",digits=4),"%"))
+# Bisschen fieses Base R: Hessen ist der 7. Wert, gib dessen (umgekehrten) Rang aus.
+sec$add_fact("Hessens Rang Erstimpfungen: ",rank(-impfen_alle_df$quote_erst,
+                                                 ties.method = "min")[7])
+sec$add_fact("Hessens Rang Zweitimpfungen: ",rank(-impfen_alle_df$quote_zweit,
+                                                     ties.method = "min")[7])
+sec$add_fact("Immunisierung: ",hoffnung_str %>% str_replace_all("h4>","small>"))
+             
+
+# Wenn du auf dem Server bist: 
+# Importiere eine PNG-Version des Impffortschritts, 
+# schiebe sie auf den Google-Bucket, und 
+# übergib die URL an die Karte. 
+
+
+if (server) {
+  # Google-Bucket befüllen
+  png <- dw_export_chart(chart_id = "SS8ta",type = "png",unit="px",mode="rgb", scale = 1, 
+                         width = 600, height = 360, plain = FALSE)
+  image_write(png,"./png/impf-tmp.png")
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./png/impf-tmp.png gs://d.data.gcp.cloud.hr.de/impf-tmp.png')
+  sec$add_image(sec_image="https://d.data.gcp.cloud.hr.de/impf-tmp.png", sec_title="Impffortschritt")
+}
+  
+# Karte vorbereiten und abschicken. 
+cc$add_section(new_section = sec)
+cc$send()
 
 msg("OK")
 ### Ergänzen: Archivdaten bauen

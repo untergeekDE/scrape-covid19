@@ -315,7 +315,7 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
   # Archivkopie ablegen
   write_csv(sim_df,paste0("./daten/cosim-",prog_d,".csv"))
   
-  
+   
   # ---- Rufe Animation-Skript und Teams-Karten-Generierung auf ----
   # Erstellt ein GIF, das die Veränderung der Inzidenzen in den Kreisen
   # in den letzten 4 Wochen animiert - und mit dem derzeitigen Trend

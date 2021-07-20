@@ -92,21 +92,28 @@ if (dir.exists("/home/jan_eggers_hr_de/rscripts/")) {
   server <- TRUE
 } else {
   # Etwas umständlich: Die Pfade zu den beiden Entwicklungs-Rechnern...
+
+  # ...mein privates Macbook: 
+  if (dir.exists("~/Nextcloud2/hr-DDJ/projekte/covid-19")) {
+    setwd("~/Nextcloud2/hr-DDJ/projekte/covid-19/scrape-covid19")
+    sheets_keypath <- "~/key/"
+  }  
   
-  # ...mein privater Laptop: 
-  if (dir.exists("D:/Nextcloud/hr-DDJ/projekte/covid-19")) {
-    setwd("D:/Nextcloud/hr-DDJ/projekte/covid-19")
+  # ...mein privater Windows-Laptop: 
+  if (dir.exists("D:/Nextcloud2/hr-DDJ/projekte/covid-19")) {
+    setwd("D:/Nextcloud2/hr-DDJ/projekte/covid-19/scrape-covid19")
     sheets_keypath <- "D:/key/"
   }  
-  
+
+    
   # ...mein Datenteam-Laptop im Sender: 
-  if (dir.exists("F:/projekte/covid-19")) {
-    setwd("F:/projekte/covid-19")
-    sheets_keypath <- "F:/creds/"
+  if (dir.exists("D:/Nextcloud/hr-DDJ/projekte/covid-19")) {
+    setwd("D:/Nextcloud/hr-DDJ/projekte/covid-19/scrape-covid19")
+    sheets_keypath <- "D:/key/"
   }  
 
-  if (dir.exists("E:/projekte/covid-19")) {
-    setwd("E:/projekte/covid-19")
+  if (dir.exists("F:/projekte/covid-19")) {
+    setwd("F:/projekte/covid-19/scrape-covid19")
     sheets_keypath <- "E:/creds/"
   }  
   

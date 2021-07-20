@@ -6,8 +6,6 @@
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
-# Alles weg, was noch im Speicher rumliegt
-rm(list=ls())
 
 # Definiere Messaging, Server-Parameter, RKI-Lese-Funktion
 # Im WD, bitte!
@@ -224,6 +222,10 @@ inz_df <- inz_work_df %>%
   left_join(read_sheet(ss=sperren_id,sheet="Ausgangssperren") %>% 
               mutate(Infolink = ifelse(!is.na(Infolink),Infolink,Gesundheitsamt)) %>%
               select(kreis,Infolink),by="kreis") %>%
+  # 30.6.2021: Bundesnotbremse läuft aus. 
+  # Nur noch allgemeine Maßnahmen gültig.
+  # Einstweilen: String "Stufe 2" einfach rausnehmen.
+  mutate(text = str_replace(text,"Stufe 2","")) %>%
   mutate(text = paste0(text,"<br>","<a href=\'",
                         Infolink,
                         "\' target=\'_blank\'>",

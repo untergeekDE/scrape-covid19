@@ -5,7 +5,7 @@
 # und 
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 12.3.2020
+# Stand: 31.3.2020
 
 
 
@@ -22,8 +22,6 @@ if (file.exists("./server-msg-googlesheet-include.R")) {
 } else {
   source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
 }
-
-aaasheet_id <- "17s82vieTzxblhzqNmHw814F0xWN0ruJkqnFB1OpameQ"
 
 msg("Starte DIVI-Abfrage... \n")
 
@@ -74,7 +72,7 @@ divi_k_df <- divi_kreise_df %>%
 msg("DIVI-Kreisdaten nach hess. VG aufbereitet")
 
 write.csv(divi_k_df, "daten/divi_kreise.csv", fileEncoding = "UTF-8", row.names = F)
-sheet_write(divi_k_df, ss = aaasheet_id, sheet = "DIVI Kreise")
+sheet_write(divi_k_df, ss = aaa_id, sheet = "DIVI Kreise")
 if (server) {
   # Google-Bucket befüllen
   system('gsutil -h "Cache-Control:no-cache, max_age=0" cp daten/divi_kreise.csv gs://d.data.gcp.cloud.hr.de/')
@@ -98,7 +96,7 @@ laender_df <- divi_kreise_df %>%
   select(-anzahl_standorte,-anzahl_meldebereiche,-AGS) %>%
   group_by(bundesland) %>%
   summarize(faelle_covid_aktuell = sum(faelle_covid_aktuell),
-            faelle_covid_aktuell_beatmet = sum(faelle_covid_aktuell_beatmet),
+            faelle_covid_aktuell_invasiv_beatmet = sum(faelle_covid_aktuell_invasiv_beatmet),
             betten = sum(betten_frei)+sum(betten_belegt),
             betten_frei = sum(betten_frei),
             betten_belegt = sum(betten_belegt),
@@ -111,7 +109,7 @@ laender_df <- divi_kreise_df %>%
 laender_df <- rbind(laender_df,
   tibble(bundesland="Deutschland",
          faelle_covid_aktuell = sum(laender_df$faelle_covid_aktuell),
-         faelle_covid_aktuell_beatmet = sum(laender_df$faelle_covid_aktuell_beatmet),
+         faelle_covid_aktuell_invasiv_beatmet = sum(laender_df$faelle_covid_aktuell_invasiv_beatmet),
          betten=sum(laender_df$betten),
          betten_frei=sum(laender_df$betten_frei),
          betten_belegt=sum(laender_df$betten_belegt),
@@ -120,7 +118,8 @@ laender_df <- rbind(laender_df,
 
 hessen_df <- laender_df %>%
   filter(bundesland %in% c("Deutschland","Hessen")) %>%
-  select(bundesland,betten,betten_frei,faelle_covid_aktuell,auslastung,faelle_covid_aktuell_beatmet)
+  select(bundesland,betten,betten_frei,faelle_covid_aktuell,auslastung,
+         faelle_covid_aktuell_invasiv_beatmet)
 
 msg("Ländertabelle errechnet")
 
@@ -133,8 +132,8 @@ if (server) {
   system('gsutil -h "Cache-Control:no-cache, max_age=0" cp daten/divi_hessen.csv gs://d.data.gcp.cloud.hr.de/')
 }  
 
-sheet_write(laender_df, ss = aaasheet_id, sheet = "DIVI Bundesländer")
-sheet_write(hessen_df, ss = aaasheet_id, sheet = "DIVI nur Hessen")
+sheet_write(laender_df, ss = aaa_id, sheet = "DIVI Bundesländer")
+sheet_write(hessen_df, ss = aaa_id, sheet = "DIVI nur Hessen")
 
 
 msg("Daten Länder und Hessen gepusht")
@@ -152,7 +151,7 @@ nur_hessen_df <- laender_df %>%
   filter(bundesland == "Hessen") %>%
   select(Datum = daten_stand,
          faelle_covid_aktuell,
-         faelle_covid_aktuell_beatmet,
+         faelle_covid_aktuell_beatmet=faelle_covid_aktuell_invasiv_beatmet,
          betten,
          betten_frei,
         auslastung) %>%
@@ -161,7 +160,7 @@ nur_hessen_df <- laender_df %>%
 
 # Tabelle vom GSheet laden
 
-hessen_archiv_df <- read_sheet(ss = aaasheet_id, sheet = "DIVI Hessen-Archiv")
+hessen_archiv_df <- read_sheet(ss = aaa_id, sheet = "DIVI Hessen-Archiv")
 hessen_archiv_df$Datum <- as_date(hessen_archiv_df$Datum)
 # Daten ergänzen
 
@@ -171,7 +170,7 @@ if (nur_hessen_df$Datum %in% hessen_archiv_df$Datum) {
   hessen_archiv_df <- rbind(hessen_archiv_df,nur_hessen_df)
 }
 
-sheet_write(hessen_archiv_df, ss = aaasheet_id, sheet = "DIVI Hessen-Archiv")
+sheet_write(hessen_archiv_df, ss = aaa_id, sheet = "DIVI Hessen-Archiv")
 write.csv(hessen_archiv_df, "archiv/divi_hessen_archiv.csv", fileEncoding = "UTF-8", row.names = F)
 
 msg("Archivdaten geschrieben")
@@ -184,10 +183,10 @@ msg("Archivdaten geschrieben")
 # Kapazitätsprognose: 
 max_beds <- nur_hessen_df$faelle_covid_aktuell+nur_hessen_df$betten_frei
 
-prognose_df <- read_sheet(ss="12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4","ICUPrognose") %>%
+prognose_df <- read_sheet(ss=aaa_id,"ICUPrognose") %>%
   select(-intensiv,-`ungefähre derzeitige Kapazität`)
 
-icu_df <- read_sheet(ss=aaasheet_id,sheet="DIVI Hessen-Archiv") %>%
+icu_df <- read_sheet(ss=aaa_id,sheet="DIVI Hessen-Archiv") %>%
   select(datum = 1,intensiv = 2) %>%
   mutate(datum = as_date(datum))
 
@@ -210,7 +209,7 @@ icu_df <- icu_df %>%
   select(1,2,3,4,5,`ungefähre derzeitige Kapazität` = kapazitaet)
 
 
-write_sheet(icu_df,ss="12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4","ICUPrognose")
+write_sheet(icu_df,ss=aaa_id,"ICUPrognose")
 
 msg("Intensivbetten-Chart-Daten aktualisiert")
 
@@ -222,8 +221,11 @@ dw_publish_chart("kc2ot")
 
 d_json <- read_json("https://www.intensivregister.de/api/public/intensivregister", simplifyVector = T)
 
+# Angepasst an neue Struktur. 
+msg("Hole Einzelinfos zu Krankenhäusern als JSON...")
+
 d_tbl <- tibble(
-  id = d_json[["data"]]$id,
+  id = d_json[["data"]][["krankenhausStandort"]]$id,
   ik_nummer = d_json[["data"]][["krankenhausStandort"]]$ikNummer,
   name = d_json[["data"]][["krankenhausStandort"]]$bezeichnung,
   address = str_c(d_json[["data"]][["krankenhausStandort"]]$strasse, " ", 
@@ -234,10 +236,10 @@ d_tbl <- tibble(
   state = d_json[["data"]][["krankenhausStandort"]]$bundesland,
   lat = d_json[["data"]][["krankenhausStandort"]][["position"]]$latitude,
   long = d_json[["data"]][["krankenhausStandort"]][["position"]]$longitude,
-  timestamp = d_json[["data"]]$meldezeitpunkt,
-  icu_low = d_json[["data"]][["bettenStatus"]]$statusLowCare,
-  icu_high = d_json[["data"]][["bettenStatus"]]$statusHighCare,
-  ecmo = d_json[["data"]][["bettenStatus"]]$statusECMO,
+  timestamp = d_json[["data"]]$letzteMeldezeitpunkt,
+  icu_low = d_json[["data"]]$maxBettenStatusEinschaetzungLowCare,
+  icu_high = d_json[["data"]]$maxBettenStatusEinschaetzungHighCare,
+  ecmo = d_json[["data"]]$maxBettenStatusEinschaetzungEcmo,
   scraped = ts(now(tzone = "CET"))
 )
 # ---- Daten putzen ----
@@ -245,9 +247,12 @@ d_tbl <- tibble(
 d_tbl <- d_tbl %>%
   mutate(state = str_to_title(state),
          timestamp = str_replace_all(timestamp, c("T"=" ", ":\\d\\dZ" = "")),
-         icu_low = str_replace_all(icu_low, c("NICHT_VERFUEGBAR"="ausgelastet", "VERFUEGBAR"="verfügbar", "BEGRENZT"="begrenzt")),
-         icu_high = str_replace_all(icu_high, c("NICHT_VERFUEGBAR"="ausgelastet", "VERFUEGBAR"="verfügbar", "BEGRENZT"="begrenzt")),
-         ecmo = str_replace_all(ecmo, c("NICHT_VERFUEGBAR"="ausgelastet", "VERFUEGBAR"="verfügbar", "BEGRENZT"="begrenzt"))
+         icu_low = str_replace_all(icu_low, c("NICHT_VERFUEGBAR"="ausgelastet", "VERFUEGBAR"="verfügbar", 
+                                              "BEGRENZT"="begrenzt", "KEINE_ANGABE" ="k. A.")),
+         icu_high = str_replace_all(icu_high, c("NICHT_VERFUEGBAR"="ausgelastet", "VERFUEGBAR"="verfügbar",
+                                                "BEGRENZT"="begrenzt", "KEINE_ANGABE" ="k. A.")),
+         ecmo = str_replace_all(ecmo, c("NICHT_VERFUEGBAR"="ausgelastet", "VERFUEGBAR"="verfügbar", 
+                                        "BEGRENZT"="begrenzt", "KEINE_ANGABE" ="k. A."))
   ) %>%
   mutate(icu_low = ifelse(is.na(icu_low), "k. A.", icu_low),
          icu_high = ifelse(is.na(icu_high), "k. A.", icu_high),
@@ -263,8 +268,8 @@ dh_tbl <- d_tbl %>%
   left_join(plz_df,by=c("PLZ" = "PLZ")) %>%
   group_by(AGS) 
 
+msg("Geputzte Einzelmeldungen archivieren...")
 write.csv(d_tbl, format(Sys.time(), "archiv/divi_%Y%m%d_%H%M.csv"), fileEncoding = "UTF-8", row.names = F)
-
 
 
 # ---- Alles OK, melde dich ab ----

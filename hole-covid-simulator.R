@@ -6,7 +6,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 25.2.2021
+# Stand: 1.7.2021
 
 rm(list=ls())
 msgTarget <- "B13:C13"
@@ -123,10 +123,10 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
   
   # Google Sheet mit Krankenhausdaten
   
-  p_str <- paste0("Prognose vom ",day(prog_d),".",month(prog_d),".")
+  p_str <- paste0("Trend vom ",day(prog_d),".",month(prog_d),".")
   
   # GSheet AAA
-  hosp_id = "12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4"
+#  hosp_id = "12S4ZSLR3H7cOd9ZsHNmxNnzKqZcbnzShMxaWUcB9Zj4"
   aaa_id = "17s82vieTzxblhzqNmHw814F0xWN0ruJkqnFB1OpameQ"
   # Fallzahl 4 Wochen vom Google Bucket holen
   
@@ -180,7 +180,7 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
     full_join(daily_df, by = c("datum" = "date")) %>%
     full_join(daily_dead_df, by = c("datum" = "date")) %>%
     # Prognose zwei Wochen in die Zukunft
-    filter(datum <= end_date) %>%
+    #filter(datum <= end_date) %>%
     select(datum,neu,neu7tagemittel,min = neu7_min, neu7_mean, max = neu7_max, icu) %>%
     # ICU-Prognose dranhängen
     full_join(icu_df, by = c("datum" = "date")) %>%
@@ -200,27 +200,28 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
   
   msg("Prognoseseite generiert, schreiben...")
   
-  write_sheet(neuprognose_df,ss=hosp_id,sheet="NeuPrognose")  
+  write_sheet(neuprognose_df,ss=aaa_id,sheet="NeuPrognose")  
   
   # Früher: rename(!!p_str:=neu7_mean), das hat aber den Nachteil, dass man in Datawrapper
   # die Gestaltung der Zeile von Hand umkonfigurieren muss. 
   # Besser: Über die API die entsprechende Datenreihe umbenennen. 
+  # --- GEKILLT: Bezeichung "Trendlinie" reicht! ---
   
   # ---- Neufall-Prognose-Chart ----
   
-  prog_chart_id = "g2CwK" # Neufälle-Prognose
-  chart_data <- dw_retrieve_chart_metadata(prog_chart_id)
-  # chart_data$content$metadata$data$changes
-  # Liste der Änderungen durchgehen, die mit dem Wort "Prognose" finden und updaten
-  for (i in 1:length(chart_data$content$metadata$data$changes)) {
-    if (str_detect(chart_data$content$metadata$data$changes[[i]]$value,"Prognose")) chart_data$content$metadata$data$changes[[i]]$value = p_str
-  }
-  pp_str <- paste0("Trendlinie ist der gleitende Mittelwert über 7 Tage<br>",
+  prog_chart_id = "eTpGf" # Neufälle-Prognose
+  # chart_data <- dw_retrieve_chart_metadata(prog_chart_id)
+  # # chart_data$content$metadata$data$changes
+  # # Liste der Änderungen durchgehen, die mit dem Wort "Prognose" finden und updaten
+  # for (i in 1:length(chart_data$content$metadata$data$changes)) {
+  #   if (str_detect(chart_data$content$metadata$data$changes[[i]]$value,"Prognose")) chart_data$content$metadata$data$changes[[i]]$value = p_str
+  # }
+  pp_str <- paste0("Die dicke Linie ist der gleitende Mittelwert über 7 Tage. ",
                    p_str, " - beruht auf dem SEIR-Modell der Universität des ",
                    "Saarlandes, Forschungsgruppe von Prof. Thorsten Lehr")
   
   dw_edit_chart(chart_id = prog_chart_id,annotate = pp_str)
-  dw_edit_chart(chart_id = prog_chart_id, data = chart_data$content$metadata)
+  # dw_edit_chart(chart_id = prog_chart_id, data = chart_data$content$metadata$visualize)
   dw_publish_chart(prog_chart_id)
   # DIVI-freie Betten - Hypothese: maximale Kapazität entspricht
   # der Anzahl der derzeit freien Betten plus der COVID-Intensivfälle
@@ -246,11 +247,11 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
   
   msg("Intensivbetten-Prognose erstellt, schreiben...")
   
-  write_sheet(divi_df, ss=hosp_id, sheet="ICUPrognose")
+  write_sheet(divi_df, ss=aaa_id, sheet="ICUPrognose")
   
   # Grafik anpassen
   
-  intensiv_chart_id = "kc2ot" # Neufälle-Prognose
+  intensiv_chart_id = "kc2ot" # Intensivbetten mit Prognose
 
   msg("Grafik Intensivbetten (",intensiv_chart_id,") aktualisieren")
   
@@ -313,6 +314,13 @@ if (file.exists(paste0("./daten/cosim-",prog_d,".csv"))) {
   msg("Archivkopie schreiben...")
   # Archivkopie ablegen
   write_csv(sim_df,paste0("./daten/cosim-",prog_d,".csv"))
+  
+  
+  # ---- Rufe Animation-Skript und Teams-Karten-Generierung auf ----
+  # Erstellt ein GIF, das die Veränderung der Inzidenzen in den Kreisen
+  # in den letzten 4 Wochen animiert - und mit dem derzeitigen Trend
+  # des COVID-Simulators 2 Wochen vorausschaut.
+  source("./animiere-prognose-kreise.R")
   msg("OK!")
 } 
 

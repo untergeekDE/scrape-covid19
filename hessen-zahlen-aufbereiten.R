@@ -18,6 +18,11 @@
 # CSVs der hessischen Fälle, der Kreisdaten und der letzten 4 Wochen werden archiviert und 
 # als Aktuell-Kopie auf den Google-Bucket geschoben. 
 #
+# Wenn der Zugriff auf das Github-Repository und alternative
+# Datenquellen misslingt bzw. die gelesenen Daten nicht plausibel
+# sind, führe das Skript lies-esri-tabelle-direkt.R aus - 
+# das aufgearbeitete Daten direkt von der ESRI-Quelle zieht.
+#
 # Weiter NICHT von diesem Skript betreut sind:
 # - die DIVI-Daten (-> divi-zahlen-aufbereiten.R)
 # - die Reproduktionszahlen-Daten (->scrape-helmholtz.R)
@@ -26,7 +31,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 10.6.2021
+# Stand: 20.7.2021
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -43,12 +48,10 @@ if (file.exists("./server-msg-googlesheet-include.R")) {
   source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
 }
 
-# JSON-Schnittstelle für Datenimport nutzen? CSV geht schneller, 
-# ist aber ab und zu fehleranfällig. 
+library(teamr)
+library(magick)
 
-use_json <- FALSE
-
-# ---- Start, RKI-Daten lesen, Hessen-Fälle filtern, Kopie schreiben ----
+# ---- Zur Vorbereitung: Kreisdaten einlesen ----
 
 msg("\n\n-- START ",as.character(today())," --")
 
@@ -58,10 +61,58 @@ msg("Lies index/kreise-index-pop.xlsx","...")
 kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
   mutate(AGS = paste0("06",str_replace(AGS,"000","")))
 
-# ---- Funktion RKI-Daten lesen ----
+# ---- Funktionen RKI-Daten lesen ----
 
-# Die Daten liegen nicht bei der RKI, sondern im Data Warehouse des Daten-Dienstleisters ESRI,
-# der auch das Dashboard betreibt. 
+# Seit Mitte 2021 publiziert das RKI die Tagestabelle
+# in einem Github-Repository. 
+
+read_github_rki_data <- function() {
+  # Repository auf Github
+  repo <- "robert-koch-institut/SARS-CoV-2_Infektionen_in_Deutschland/"
+  path <- "Aktuell_Deutschland_SarsCov2_Infektionen.csv"
+  # Wann war der letzte Commit des Github-Files? Das als Prognosedatum prog_d.
+  
+  github_api_url <- paste0("https://api.github.com/repos/",
+                           repo,
+                           "commits?path=",path,
+                           "&page=1&per_page=1")
+  github_data <- read_json(github_api_url, simplifyVector = TRUE)
+  d <- as_date(github_data$commit$committer$date)
+  if (d<today()) {
+    warning("Keine aktuellen Daten im Github-Repository")
+    return(NULL)
+  }
+  msg("Aktuelle Daten vom ",d)
+  path <- paste0("https://github.com/",
+                 repo,
+                 "raw/master/",
+                 path)
+  rki_ <- read_csv(path)
+  # Einfacher Check: Jüngste Fälle mit Meldedatum gestern?
+  # (Oh, dass dieser Check eines Tages scheitern möge!)
+  if (max(rki_$Meldedatum) != d-1) {
+    warning("Keine Neufälle von gestern")
+  }
+  # Daten in der Tabelle ergänzen, um kompatibel zu bleiben
+  rki_ <- rki_ %>% 
+    # Datenstand (heute!)
+    mutate(Datenstand = d) %>% 
+    # IdLandkreis in char, Landkreis-Namen für Hessen ergänzen
+    mutate(IdLandkreis =ifelse(IdLandkreis>9999,
+                               as.character(IdLandkreis),
+                               paste0("0",IdLandkreis))) %>% 
+    left_join(kreise %>% select(AGS,Landkreis=kreis),
+              by=c("IdLandkreis"="AGS")) %>% 
+    # IdBundesland numerisch; Hessen ergänzen
+    mutate(IdBundesland = as.numeric(str_sub(IdLandkreis,1,2))) %>% 
+    mutate(Bundesland = ifelse(IdBundesland == 6,"Hessen",""))
+  # Raus damit. 
+  return(rki_)
+}
+
+# Datenabfrage der RKI-Daten aus dem Data Warehouse 
+# des Daten-Dienstleisters ESRI,der auch das Dashboard 
+# betreibt - dies war von Mai 2020-Juli 2021 die Hauptquelle
 
 # ESRI-Status-Abfrage; danke Björn Schwendker, NDR
 
@@ -91,7 +142,7 @@ get_esri_status <- function() {
 # get_esri_status()$Status # -> "Ok"
 
 
-read_rki_data <- function(use_json = TRUE) {
+read_esri_rki_data <- function(use_json = TRUE) {
   
   # Wenn ESRI-Datenbank noch nicht OK, warte!
   
@@ -169,6 +220,7 @@ read_rki_data <- function(use_json = TRUE) {
     ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
     # Zwei Schritte: Erst der Download, dann einlesen
     download.file(rki_url,"RKI_COVID19.csv",method="curl")
+    msg("RKI_COVID19.CSV einlesen...")
     rki_ = read.csv("RKI_COVID19.csv") 
     if (ncol(rki_)> 17 & nrow(rki_) > 100000) {
       msg("Daten erfolgreich vom RKI-CSV gelesen")
@@ -189,26 +241,48 @@ read_rki_data <- function(use_json = TRUE) {
   return(rki_)
 }
 
-
-
-# ---- Datenabfrage ESRI: -----
-
-source("./lies-esri-tabelle-direkt.R")
-
-# ---- Kompletten Datensatz herunterladen ----
+# ---- RKI-Falldatensatz komplett laden ----
 # RKI-Daten lesen und auf Hessen filtern
-# Wird vom RKI-Scraper hier abgelegt. 
 
-# rki_df anlegen, damit er sie als globale Variable kennt
-rki_df <- data.frame(2,2)
+# rki_df vom Repository lesen. 
+rki_df <- read_github_rki_data()
+
+# Wenn noch keine Daten da sind: 
+# Starte alternative Datenabfrage bei der ESRI
+
+# JSON-Schnittstelle für Datenimport nutzen? CSV geht schneller, 
+# ist aber ab und zu fehleranfällig. 
+
+use_json <- FALSE
+
+if (is.null(rki_df)) {
+  if (use_json) msg("Daten vom RKI via JSON anfordern...") else msg("RKI-CSV lesen...")
+  rki_df <- read_esri_rki_data(use_json)
+  # Alte Daten? 
+  ts <- rki_df$Datenstand[1]
+  starttime <- now()
+  while (ts < today()) {
+    msg("!!!RKI-Daten sind Stand ",ts)
+    Sys.sleep(300)   # Warte fünf Minuten
+    if (now() > starttime+36000) {
+      msg("--- TIMEOUT ---")
+      simpleError("Timeout, keine aktuellen RKI-Daten nach 10 Stunden")
+      quit()
+    }
+    # alternierend versuchen, das CSV zu lesen
+    use_json <- !use_json
+    rki_df <- read_rki_data(use_json)
+    # Datum auslesen; was uns hierher gebracht hat, ist schließlich die Beobachtung, 
+    # dass der Datensatz von gestern ist. 
+    ts <- rki_df$Datenstand[1]
+    # und nochmal in die while()-Bedingung. 
+  }
+}
 
 # Daten lesen; wenn noch Daten von gestern, warten. 
 
-if (use_json) msg("Daten vom RKI via JSON anfordern...") else msg("RKI-CSV lesen...")
 
-rki_df <- read_rki_data(use_json)
-
-# ---- FALLBACK ----
+# FALLBACK ----
 # Der NDR pflegt ein Repository, wo er alle Briefkastenmeldungen ablegt - als TSV. (!)
 # Dummerweise auch noch komprimiert. 
 # https://storage.googleapis.com/public.ndrdata.de/rki_covid_19_bulk/daily/covid_19_daily_2021-04-09.tsv.gz
@@ -234,63 +308,86 @@ if (fallback) {
   }
 }
 
-
 ts <- rki_df$Datenstand[1]
-
-# Alte Daten? 
-starttime <- now()
-while (ts < today()) {
-  msg("!!!RKI-Daten sind Stand ",ts)
-  Sys.sleep(300)   # Warte fünf Minuten
-  if (now() > starttime+36000) {
-    msg("--- TIMEOUT ---")
-    simpleError("Timeout, keine aktuellen RKI-Daten nach 10 Stunden")
-    quit()
-  }
-   # alternierend versuchen, das CSV zu lesen
-  use_json <- !use_json
-  rki_df <- read_rki_data(use_json)
-  # Datum auslesen; was uns hierher gebracht hat, ist schließlich die Beobachtung, 
-  # dass der Datensatz von gestern ist. 
-  ts <- rki_df$Datenstand[1]
-  # und nochmal in die while()-Bedingung. 
-}
 
 # Plausibilität: Datensätze per JSON 
 
 msg("RKI-Daten gelesen - ",nrow(rki_df)," Zeilen ",ncol(rki_df)," Spalten - ",ts)
 
-# Daten für Hessen filtern; tagesaktuelle Kopie lokal ablegen
+# Daten für Hessen filtern; später tagesaktuelle Kopie lokal ablegen
 
 rki_he_df <- rki_df %>%
   filter(Bundesland == "Hessen") %>% 
-  # wenn die AGS-Spalte eine Zahl ist, mit führender Null versehen
   group_by(Meldedatum)
+
+# ---- Plausibilitätsprüfung und ggf. ESRI-Ersatzdaten ----
+
+# Basisdaten aus der letzten Zeile des lokalen Archivs lesen
+
+if (!file.exists("daten/hessen_rki_df.csv")) {
+  # aus dem Google-Bucket lesen - da liegt immer was
+  check_df <- read_csv2("https://d.data.gcp.cloud.hr.de/hessen_rki_df.csv")
+} else {
+  check_df <- read_csv2("daten/hessen_rki_df.csv")
+}
+
+heute_df <- rki_he_df %>%
+  filter(NeuerFall %in% c(0,1))
+check_heute_df <- check_df %>%
+  filter(NeuerFall %in% c(0,1))
+
+# Neue Daten, aber merkwürdig?
+# Anzahl Fälle rückläufig oder unverändert?
+
+if ((as_date(heute_df$Datenstand[1]) > 
+             as_date(check_df$Datenstand[1])) &
+     (sum(heute_df$AnzahlFall) <= sum(check_heute_df$AnzahlFall) |
+     # Tabelle gegenüber gestern um mehr als 10% gewachsen?
+    (nrow(heute_df)/nrow(check_df) > 1.1))) {
+  msg("ESRI-Fallback")
+  # ESRI-Datenauswertung als vorläufige Tabelle auslesen
+  source("./lies-esri-tabelle-direkt.R")
+  # Generiert eine Liste namens esri_he
+  # Karte über Teams-Webhook absenden
+  cc <- connector_card$new(hookurl = Sys.getenv("WEBHOOK_CORONA"))
+  cc$text(paste0("Vorläufige RKI-Corona-Datenabfrage, Stand: ",now()))
+  
+  sec <- card_section$new()
+  
+  sec$text("<strong>Direkt-Datenabfrage ergab heute keine Neufälle in Hessen!</strong> Ersatzweise ESRI-Datentabelle gelesen und als vorläufig publiziert.")
+  sec$add_fact("Fälle gesamt",format(esri_he$AnzFall,big.mark=".",
+                                 decimal.mark = ","))
+  sec$add_fact("Neufälle",format(esri_he$AnzFallNeu,big.mark=".",decimal.mark=","))
+  sec$add_fact("Tote heute",format(esri_he$AnzTodesfall,
+                                               big.mark = ".", 
+                                               decimal.mark = ",", nsmall =0))
+               
+    # Karte vorbereiten und abschicken. 
+  cc$add_section(new_section = sec)
+  if(cc$send()) msg("OK, Teams-Karte abgeschickt") else msg("OK")
+  # Mach erst mal Schluss hier
+  stop("Keine Neufälle aus Hessen heute")
+  
+}
+
 
 # CSV-Archivkopien von rki_he_df anlegen
 heute <- as_date(ymd(today()))
 write_csv2(rki_he_df,"daten/hessen_rki_df.csv")
 write_csv2(rki_he_df,paste0("archiv/rki-",heute,".csv"))
 
-
-# Paranoia-Polizei: 
-if (nrow(esri_daten_tabelle)<429) {
-  msg("ESRI-Daten-Tabelle unvollständig?")
-  simpleError("ESRI-Daten-Tabelle unvollständig?")
-}
-
-
-# Paranoia-Polizei 22
-heute_df <- rki_he_df %>%
-  filter(NeuerFall %in% c(0,1))
-faelle_gesamt <- sum(heute_df$AnzahlFall)
-if (faelle_gesamt !=faelle_gesamt_direkt)  simpleError("JSON-Summe != CSV-Summe")
+# heute_df wird immer wieder überschrieben, was nicht besonders
+# klar ist - ein alter Zopf. Ich behalte ihn vorerst mal. 
+# Eine Verbesserung pro Schritt. 
 
 heute_df <- rki_he_df %>% 
   filter(NeuerFall %in% c(-1,1))    # so zählt man laut RKI die Summe der Fälle
 faelle_neu <- sum(heute_df$AnzahlFall)
 heute_df <- rki_he_df %>%
-  filter(NeuerFall %in% c(0,1)) 
+  filter(NeuerFall %in% c(0,1))
+faelle_gesamt <- sum(heute_df$AnzahlFall)
+heute_df <- rki_he_df %>% 
+  filter(NeuGenesen %in% c(0,1))
 genesen_gesamt <- sum(heute_df$AnzahlGenesen)
 
 heute_df <- rki_he_df %>% 
@@ -890,7 +987,7 @@ neu7tage_df <- rki_he_df %>%
   # filter(AnzahlTodesfall == 0) %>%
   group_by(Altersgruppe, Geschlecht) %>%
   summarize(AnzahlFall = sum(AnzahlFall)) %>%
-  pivot_wider(names_from = Geschlecht, values_from = AnzahlFall) %>%
+  pivot_wider(names_from = Geschlecht, values_from = AnzahlFall,values_fill=0) %>%
   select(Altersgruppe, männlich = M, weiblich = W) %>%
   ungroup()
 
@@ -931,7 +1028,7 @@ tote_df <- rki_he_df %>%
   group_by(Altersgruppe, Geschlecht) %>%
   summarize(AnzahlFall = sum(AnzahlFall),
             AnzahlTodesfall = sum(AnzahlTodesfall)) %>%
-  pivot_wider(names_from = Geschlecht, values_from = c(AnzahlTodesfall, AnzahlFall)) %>%
+  pivot_wider(names_from = Geschlecht, values_from = c(AnzahlTodesfall, AnzahlFall),values_fill=0) %>%
   mutate(AnzahlFall = AnzahlFall_M+AnzahlFall_W+AnzahlFall_unbekannt) %>%
   mutate(inz = (AnzahlTodesfall_M+AnzahlTodesfall_W+AnzahlTodesfall_unbekannt)/(AnzahlFall)*100) %>%
   select(Altersgruppe,M = AnzahlTodesfall_M, W = AnzahlTodesfall_W,
@@ -1187,7 +1284,6 @@ dw_publish_chart(chart_id = "KyrDx")        # Tabelle Altersschichtung
 msg("Alle Datawrapper-Grafiken aktualisiert.")
 
 
-msg("OK!")
 
 # Die Anschluss-Skripte aufrufen
 
@@ -1196,3 +1292,66 @@ msg("OK!")
 
 # Dies Skript erstellt und aktualisiert die Ampel-Tabelle aus den Archivdaten
 source("./berechne-notbremse.R")
+
+# ---- Experimentell: Generiere Infokarte in Teams ----
+
+# Legt eine Karte mit den aktuellen Kennzahlen im Teams-Team "hr-Datenteam", 
+# Channel "Corona" an. 
+
+
+# Webhook aus dem Environment lesen, Karte generieren
+cc <- connector_card$new(hookurl = Sys.getenv("WEBHOOK_CORONA"))
+cc$text(paste0("RKI-Corona-Datenabfrage, Stand: ",datumsstring))
+
+sec <- card_section$new()
+
+sec$text(paste0("<strong>7-Tage-Inzidenz hessenweit: ",
+                format(steigerung_7t_inzidenz,big.mark = ".",
+                       decimal.mark=",",nsmall=1),
+                "<strong>"))
+sec$add_fact("Neufälle",format(faelle_neu,big.mark=".",
+                               decimal.mark = ","))
+sec$add_fact("7 Tage",format(steigerung_7t,big.mark=".",decimal.mark=","))
+sec$add_fact("7 Tage Vorwoche",paste0(format(steigerung_7t_vorwoche,
+                                             big.mark = ".", 
+                                             decimal.mark = ",", nsmall =0),
+         " (",ifelse(steigerung_7t-steigerung_7t_vorwoche > 0,"+",""),
+         format(steigerung_7t - steigerung_7t_vorwoche,big.mark = ".", decimal.mark = ",", nsmall =0),
+         trend_string,")"))
+
+
+sec$add_fact("Tote heute: ",
+             paste0(format(tote_neu,big.mark=".",
+                           decimal.mark = ",")))
+sec$add_fact("Tote gesamt: ",
+             paste0(format(tote_gesamt,big.mark=".",
+                           decimal.mark = ",")))
+
+sec$add_fact("Gesamtfälle: ",
+             paste0(format(faelle_gesamt,big.mark=".",
+                           decimal.mark = ",")))
+sec$add_fact("Genesen: ",
+             paste0(format(genesen_gesamt,big.mark=".",
+                           decimal.mark = ",")))
+sec$add_fact("Aktive Fälle: ",
+             paste0(format(faelle_gesamt-genesen_gesamt-tote_gesamt,big.mark=".",
+                           decimal.mark = ",")))
+
+# Wenn du auf dem Server bist: 
+# Importiere eine PNG-Version des Impffortschritts, 
+# schiebe sie auf den Google-Bucket, und 
+# übergib die URL an die Karte. 
+
+
+if (server) {
+  # Google-Bucket befüllen
+  png <- dw_export_chart(chart_id = "NrBYs",type = "png",unit="px",mode="rgb", scale = 1, 
+                         width = 360, height = 360, plain = FALSE)
+  image_write(png,"./png/fall4w-tmp.png")
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./png/fall4w-tmp.png gs://d.data.gcp.cloud.hr.de/fall4w-tmp.png')
+  sec$add_image(sec_image="https://d.data.gcp.cloud.hr.de/fall4w-tmp.png", sec_title="Letzte 4 Wochen und Trend")
+}
+
+# Karte vorbereiten und abschicken. 
+cc$add_section(new_section = sec)
+if(cc$send()) msg("OK, Teams-Karte abgeschickt") else msg("OK")

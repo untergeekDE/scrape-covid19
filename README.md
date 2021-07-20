@@ -4,8 +4,8 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des Robert-Koch-I
 
 ## Die Daten
 
-- Quelle RKI: [Falldaten auf Github]  (https://github.com/robert-koch-institut/SARS-CoV-2_Infektionen_in_Deutschland)
-- Quelle ESRI: [Data Warehouse für die RKI-Falldaten] (https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0 und API)
+- Quelle RKI: [Falldaten auf Github](https://github.com/robert-koch-institut/SARS-CoV-2_Infektionen_in_Deutschland)
+- Quelle ESRI: [Data Warehouse für die RKI-Falldaten](https://npgeo-corona-npgeo-de.hub.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0 und API)
 - RKI-Tagesmeldungen, auf dem Server archiviert
 - Quelle RKI: [Nowcast und 7-Tage-R auf Github](https://github.com/robert-koch-institut/SARS-CoV-2-Nowcasting_und_-R-Schaetzung)
 - Quelle RKI: [Testzahlen donnerstags als Excel-Tabelle](https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Testzahlen-gesamt.html;jsessionid=EF5B74A0B2AEE46C92BE7A6C719305A9.internet082?nn=13490888)
@@ -65,6 +65,9 @@ Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umg
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 20.7.: Crontab an neue RKI-Veröffentlichungstermine für Testzahlen (donnerstags) angepasst
+* 20.7.: Github-Repository des RKI als Quelle für die Falldatenbank; Plausibilitätsprüfung vereinfacht
+* 20.7.: R-Wert-Skript umbenannt in hole-r-rki-helmholtz.R, angepasst an geänderte RKI-Quelle ohne 4-Tage-R
 * 4.7.: RKI-Github als Datenquelle, zunächst für die R-Schätzung/Nowcasting
 * 20.6.: Über die teamR-Library kleine Nachrichten in einen hr-MS-Teams-Channel absetzen, wenn neue Daten vorliegen
 * 26.5.: Code, der die Testzentren-Liste des Landes übernimmt und einbaut

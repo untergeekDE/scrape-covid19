@@ -149,34 +149,6 @@ range_write(aaa_id,as.data.frame(paste0(format(esri_he$AnzFall,big.mark = ".", d
                                         " (ca. ",aktiv_str,")")),
             range="Basisdaten!B7", col_names = FALSE, reformat=FALSE)
 
-# Immunisiert und geimpft (Zeile 8 und 9)
-
-msg("Impfzahlen und Immunisierungsquote")
-# Geimpft (Zeile 8)
-impfen_df <- read_sheet(ss=aaa_id,sheet = "ArchivImpfzahlen") %>%
-  filter(am == max(am))
-range_write(aaa_id,as.data.frame(paste0("Geimpft (",
-                                        format.Date(impfen_df$am,"%d.%m."),")")),
-            range="Basisdaten!A8",col_names=FALSE,reformat=FALSE)
-range_write(aaa_id, as.data.frame(paste0(
-  format(impfen_df$personen,big.mark=".",decimal.mark = ","),
-  " (+", format(impfen_df$differenz_zum_vortag_erstimpfung,big.mark = ".", decimal.mark = ",", nsmall =0),
-  ")")),
-  range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
-
-# Immun (Zeile 9)
-impf_alt_df <- read_sheet(ss=aaa_id,sheet="ArchivImpfzahlen") %>% filter(am <= today()-14)
-immun <- max(as.numeric(impf_alt_df$personen)) + esri_he$AnzGenesen
-hessen=sum(read.xlsx("index/kreise-index-pop.xlsx") %>% select(pop))
-
-range_write(aaa_id,as.data.frame("Immunisiert sind ca. "),range="Basisdaten!A9", col_names=FALSE,reformat=FALSE)
-immun_str <- paste0(format(round(immun/hessen*100,1),
-                           big.mark = ".", decimal.mark = ",", nsmall =0),
-                    " %")
-range_write(aaa_id,as.data.frame(immun_str),
-            range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
-
-
 # Todesfälle heute (Zeile 10)
 #range_write(aaa_id,as.data.frame("neue Todesfälle"),range="Basisdaten!A10")
 range_write(aaa_id,as.data.frame(esri_he$AnzTodesfallNeu),

@@ -65,6 +65,7 @@ Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umg
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 22.7.: Neues hessisches Eskalationskonzept umgesetzt - historische Bundesnotbremse- und Lockerungs-Tabelle wird nach alten Regeln bis 30.6. errechnet
 * 20.7.: Crontab an neue RKI-Veröffentlichungstermine für Testzahlen (donnerstags) angepasst
 * 20.7.: Github-Repository des RKI als Quelle für die Falldatenbank; Plausibilitätsprüfung vereinfacht
 * 20.7.: R-Wert-Skript umbenannt in hole-r-rki-helmholtz.R, angepasst an geänderte RKI-Quelle ohne 4-Tage-R

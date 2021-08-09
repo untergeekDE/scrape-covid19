@@ -1,7 +1,14 @@
 ##################################### hole-impfzahlen.R #########################
-# - Impfzahlen 
+# - Impfzahlen holen und ausgeben
+# Dieses Skript ist ein Zwischenstand: Das RKI hat zwar jetzt ein Github-
+# Repository für die Daten angelegt - das ist zuverlässiger, und die Daten
+# sind vollständiger. Leider lässt sich ein Wert - die Quote der Geimpften nach
+# Altersgruppe - aus den Daten nicht richtig angeben, weil sich die Logik der
+# Zählung verändert hat. Deswegen muss dieses Skript einstweilen auch die alte
+# Datenquelle auslesen, die Excel-Datei mit dem "Digitalen Impfquotenmonitoring auf rki.de -
+# ...mit allen ihren Schwierigkeiten und Risiken. 
 
-# Stand: 6.7.2021
+# Stand: 1.8.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -19,129 +26,268 @@ if (file.exists("./server-msg-googlesheet-include.R")) {
   source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
 }
 
-# Bevölkerung nach Altersgruppen
-bev_df= read_sheet(aaa_id,sheet="AltersgruppenPop")
-hessen=sum(bev_df %>% select(pop))
-ue60 = sum(bev_df %>% filter(Altersgruppe %in% c("A60-A79","A80+")) %>% select(pop))
+
+# Bevölkerungstabelle für alle Bundesländer vorbereiten,
+# Altersgruppen: 12-17, 18-59,60+.
+# Ausgangspunkt ist der File aus GENESIS mit der Altersschichtung
+# nach Lebensjahren und Bundesland. 
+library(readr)
+bev_bl_df <- read_delim("index/12411-04-02-4-B.csv", 
+                          delim = ";", escape_double = FALSE, 
+                          locale = locale(date_names = "de",         
+                          decimal_mark = ",", grouping_mark = ".",
+                          encoding = "ISO-8859-1"), trim_ws=TRUE, 
+                          skip = 6) %>%
+  # Länder-ID und Altersgruppen insgesamt/männlich/weiblich nutzen
+  select(id=1,Bundesland=2,ag=3,4:6) %>% 
+  # Datei enthält auch "Insgesamt"-Zeilen mit den Ländersummen - weg damit
+  filter(ag!="Insgesamt") %>% 
+  # Altersgruppen; 90 (die höchste) umfasst alle darüber. 
+  mutate(ag = ifelse(str_detect(ag,"^unter"),0,
+                    as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
+  # Zusätzliche Variable mit der Altersgruppe
+  mutate(Altersgruppe = case_when(
+         ag < 12 ~ "u12",
+         ag < 18 ~ "12-17",
+         ag < 60 ~"18-59",
+         TRUE    ~ "60+")) %>% 
+  select(id,Bundesland,Altersgruppe,Insgesamt) %>% 
+  # Tabelle bauen: Bevölkerung in der jeweiligen Altersgruppe nach BL,
+  # Werte aus der Variable aufsummieren. 
+  pivot_wider(names_from=Altersgruppe, values_from=Insgesamt,values_fn=sum) %>% 
+  # Aus irgendwelchen Gründen enthält die GENESIS-Tabelle die Landesbezeichnung
+  # "Baden-Württemberg, Land". Korrigiere das. 
+  mutate(Bundesland = str_replace(Bundesland,"\\, Land$",""))
+  
+
+
+# Bevölkerung nach Altersgruppen, Hessen
+hessen=sum(bev_bl_df %>% filter(id=="06") %>% select(-id,-Bundesland))
+ue60 = bev_bl_df %>% filter(id=="06") %>% pull(`60+`)
 u60 = hessen - ue60
 # Vergleiche https://corona-impfung.hessen.de/faq/impfstrategie
 # Auskunft Innenministerium an Tobias Lübben 15.1.2021
 
-# ---- Ich bin genervt, ich arbeite mit den RKI-Daten jetzt. ----
+# ---- Daten aus RKI-Github-Repository lesen und aufarbeiten ----
 # Seit Juli 2021 werden die Daten nicht mehr als XLSX-Datei auf der
 # Website veröffentlicht, sondern im Github-Repository des RKI. 
 
+msg("Nach aktualisierten RKI-Impfdaten suchen")
 
-# XLSX vom Tage
-rki_xlsx_url <- "https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquotenmonitoring.xlsx?__blob=publicationFile"
+git_user <- "robert-koch-institut"
+git_repo <- "COVID-19-Impfungen_in_Deutschland"
+git_path <- "Aktuell_Deutschland_Bundeslaender_COVID-19-Impfungen.csv"
 
+# Wann war der letzte Commit des Github-Files? Das als Datum i_d
+github_api_url <- paste0("https://api.github.com/repos/",
+                         git_user,"/",git_repo,"/",
+                         "commits?path=",
+                         git_path)
+github_data <- read_json(github_api_url, simplifyVector = TRUE)
+i_d <- max(as_date(github_data$commit$committer$date))
 
-msg("Impfzahlen vom RKI lesen...")
-impf_tabelle <- read_sheet(aaa_id,sheet="ArchivImpfzahlen")
-# Datum tolerant auswerten - das RKI variiert gern ein wenig. 
-
-tryCatch(impfen_meta_df <- read.xlsx(rki_xlsx_url,sheet=4) %>% 
-  mutate(Datum = parse_date_time(Datum,
-                                 orders=c("ymd","%Y-%m-%d","%d.%m.%Y","%d/%m/%y"),
-                                 quiet=TRUE)) %>%
-  na.omit())
-
-ts <- now()
-# Zahlen aus der Archiv-Tabelle lesen. 
-impfen_df <- read_sheet(ss=aaa_id,sheet = "ArchivImpfzahlen") %>%
-  filter(am == max(am))
-
-
-
-while ( 
-  # Zusätzliche Bedingung ausgeklammert: gelesenes Datum neuer als
-  # letztes archiviertes. 
-  #   impfen_df$am == max(impfen_meta_df$Datum) &
-  # Noch keine Datei mit Datum von gestern?
-       today()-1 > max(impfen_meta_df$Datum)) {
-
-  Sys.sleep(60)
+tsi <- now()
+# Noch keine Daten für heute? Warte, prüfe auf Abbruch; loope
+while(i_d < today()) {
   # Abbruchbedingung: 8x3600 Sekunden vergangen?
-  if (now() > ts+(8*3600)) {
+  if (now() > tsi+(8*3600)) {
     msg("KEINE NEUEN DATEN GEFUNDEN")
     stop("Timeout")
   }
-  # Nochmal versuchen: XLSX neu lesen
-  msg("Gelesenes Datum: ",max(impfen_meta_df$Datum)," - nochmal versuchen...")
-  # Tabelle mit den (Meta-)Daten und Impfzahlen lesen; Spalte Datum ist das
-  # Stichdatum
-  tryCatch(impfen_meta_df <- read.xlsx(rki_xlsx_url,sheet=4) %>% 
-             mutate(Datum = parse_date_time(Datum,
-                                            orders=c("ymd","%Y-%m-%d","%d.%m.%Y","%d/%m/%y"),
-                                            quiet=TRUE)) %>%
-             na.omit())
-  # Plausibilitätsprüfung: Wenn Zahl der Geimpften der von gestern entspricht. 
-  # lieber nochmal lesen. 
-    
+  # Warte 5 Minuten, suche wieder den letzten Commit
+  Sys.sleep(300)
+  github_data <- read_json(github_api_url, simplifyVector = TRUE)
+  i_d <- max(as_date(github_data$commit$committer$date))
 }
-if (!server) beepr::beep(2)
-msg("Daten bis ",max(impfen_meta_df$Datum)," gelesen - überprüfen...")
-# Archivkopie
 
-pp2 <- read.csv2("daten/impfen-gestern-2.csv")
-pp3 <- read.csv2("daten/impfen-gestern-3.csv")
+# Kurz piepsen; auf dem Server geht das natürlich schief, deshalb try. 
+try(beepr::beep(2),silent=TRUE)
+# Zeitstempel erneuern: Das ist das Abfragedatum
+tsi <- now()
+msg("Impfdaten vom ",i_d)
+
+bl_tbl <- read_csv(paste0("https://raw.githubusercontent.com/",
+                git_user,"/",git_repo,"/",
+                "master/",
+                "Aktuell_Deutschland_Bundeslaender_COVID-19-Impfungen.csv")) %>% 
+  select(Datum=1,id=2,3,4,5)
+
+lk_tbl <- read_csv(paste0("https://raw.githubusercontent.com/",
+                          git_user,"/",git_repo,"/",
+                          "master/",
+                          "Aktuell_Deutschland_Landkreise_COVID-19-Impfungen.csv")) %>% 
+  select(Datum=1,id_lk = 2,3,4,5)
+
+# Letzten Datenstand festhalten
+i_d_max <- max(bl_tbl$Datum)
+
+# XLSX-Tabelle dazuholen 
+
+rki_xlsx_url <- "https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquotenmonitoring.xlsx?__blob=publicationFile"
+# Impfquoten nach Altersgruppe
 tabelle2 <- read.xlsx(rki_xlsx_url,sheet=2)
+# Impfquoten nach Impfstoff
 tabelle3 <- read.xlsx(rki_xlsx_url,sheet=3)
+# Zeitreihe Impfungen bundesweit
 tabelle4 <- read.xlsx(rki_xlsx_url,sheet=4)
-write.csv2(tabelle2,file = "daten/impfen-gestern-2.csv",row.names=FALSE)
-write.csv2(tabelle3,file = "daten/impfen-gestern-3.csv",row.names=FALSE)
-write.csv2(tabelle4,file = "daten/impfen-gestern-4.csv",row.names=FALSE)
 
-impf_datum <- max(impfen_meta_df$Datum)
-msg("Ländertabelle vom ",format.Date(impf_datum,"%d.%m.")," lesen")
-# Tabelle 2 war seit dem 8.4. nicht mehr wirklich sinnvoll zu nutzen. 
-# Seit dem 7.6. enthält sie die Altersaufschlüsselung )Impfquoten
-# Deswegen: Gesamt-Tabelle machen mit den Impfquoten
+# Tabelle 2 aufarbeiten
+impfquoten_xlsx_df <- tabelle2 %>% 
+                                   select(ID=1,
+                                          impfdosen = 3, 
+                                          quote_erst = 6,
+                                          quote_erst_u18 = 7,
+                                          quote_erst_18_60 =8, 
+                                          quote_erst_ue60 = 9,
+                                          quote_zweit = 10,
+                                          quote_zweit_u18 = 11,
+                                          quote_zweit_18_60 = 12,
+                                          quote_zweit_ue60 =13) %>%
+                                   filter(as.numeric(ID) %in% 1:16)
 
-# Plausibilität: In beiden Tabellen die gleichen Werte für Impfzahlen? 
-# Sonst stopp.
-#
-# In Tabelle 2 sind es die Spaltennummern
-# - 3 (Impfdosen)
-# - 4 (Erstimpfungen)
-# - 5 (Zweitimpfungen)
-#
-# In Tabelle 3 sind es die Spaltennummern
-# - 3 (Erstimpfungen)
-# - 9 (ZWeitimpfungen)
+# ---- Länder-Vergleichstabelle erstellen ----
+# Erstes Teil-DF: Absolute Summen nach Impfstoff je Land
 
-# Vergleiche Erstimpfungen
-if (any((tabelle2 %>% rename(RS=1) %>% 
-     mutate(RS = as.integer(RS)) %>%
-     filter(!is.na(RS)) %>%
-     arrange(RS) %>%
-     select(erst= 4)) !=
-    (tabelle3 %>% rename(RS=1) %>%
-     mutate(RS = as.integer(RS)) %>%
-     filter(!is.na(RS)) %>%
-     arrange(RS) %>%
-     select(erst = 3)))) {
-  if (!server) View(tabelle2)
-  if (!server) View(tabelle3)
-  stop("!!!Abweichung Erstimpfungen")
-}
+msg("Baue Ländertabelle absolute Zahlen nach Impfstoff...")
+bl_1_df <- bl_tbl %>% 
+  # Tabelle Erst- und Zweitimpfungen nach Land und Impfstoff - Summen
+  pivot_wider(names_from=c(Impfstoff,Impfserie),names_sep="_",values_from=Anzahl) %>% 
+  group_by(id) %>% 
+  summarize(biontech_erst = sum(Comirnaty_1,na.rm=TRUE),
+            moderna_erst = sum(Moderna_1,na.rm=TRUE),
+            az_erst = sum(AstraZeneca_1,na.rm=TRUE),
+            janssen = sum(Janssen_1,na.rm=TRUE),
+            biontech_zweit = sum(Comirnaty_2,na.rm=TRUE),
+            moderna_zweit = sum(Moderna_2,na.rm=TRUE),
+            az_zweit = sum(AstraZeneca_2,na.rm=TRUE)) %>% 
+  # Summen Personen und Durchgeimpfte bilden 
+  # Wie immer zählt Janssen sowohl als Erst- als auch als Durchimpfung
+  mutate(personen = biontech_erst+moderna_erst+az_erst+janssen,
+         durchgeimpft = biontech_zweit+moderna_zweit+az_zweit+janssen) %>% 
+  # Spalten umsortieren: Summen erst/zweit nach vorne
+  relocate(c(personen,durchgeimpft),.after=id) %>% 
+  # Bevölkerungszahlen dazuholen
+  left_join(bev_bl_df, by="id") %>% 
+  mutate(pop=`u12`+`12-17`+`18-59`+`60+`) %>% 
+  # Janssen-Impfstoff wieder zweimal zählen - bei Erst- und Durchgeimpften!
+  mutate(quote_erst=personen/pop*100,
+         quote_zweit=durchgeimpft/pop*100) %>% 
+  # Spalten aus der Bevölkerungstabelle wieder raus
+  select(-Bundesland,-`u12`,-`12-17`,-`18-59`,-`60+`)
 
-# Vergleiche Zweitimpfungen
-if (any((tabelle2 %>% rename(RS=1) %>% 
-         mutate(RS = as.integer(RS)) %>%
-         filter(!is.na(RS)) %>%
-         arrange(RS) %>%
-         select(zweit= 5)) !=
-        (tabelle3 %>% rename(RS=1) %>%
-         mutate(RS = as.integer(RS)) %>%
-         filter(!is.na(RS)) %>%
-         arrange(RS) %>%
-         select(zweit = 9)))) {
-  if (!server) View(tabelle2)
-  if (!server) View(tabelle3)
-  stop("!!!Abweichung Zweitimpfungen")
-}
+# schnell noch: Impfungen gestern
 
+msg("Impfungen am ",i_d_max)
+bl_n_df <- bl_tbl %>% 
+  filter(Datum == i_d_max) %>% 
+  group_by(id, Impfserie) %>% 
+  summarize(neu = sum(Anzahl)) %>% 
+  pivot_wider(names_from=Impfserie,values_from=neu) %>% 
+  rename(neu = `1`, neu_zweit = `2`)
+
+# NEU: Bisher konnte man die neuen Impfungen nur als Differenz errechnen, 
+# und das hieß: Der Janssen-Impfstoff tauchte sowohl in neu als auch neu_zweit auf.
+# Das ist jetzt nicht mehr der Fall - Janssen-Impfungen werden fest der Impfserie 1 zugeordnet.
+# Yay!
+
+
+# Nächste Tabelle: Absolute Summen nach Altersgruppen und Land
+# (Kreis-Infos werden hier nicht genutzt, weil sinnlos: 
+# Angegeben ist der Impfort, nicht der Wohnort der Geimpften - 
+# man kann also keine Impfquote errechnen, und der Wert hängt von 
+# der Zahl der Hausärzte und der Größe des Impfzentrums ab - 
+# lediglich für eine Zeitreihe für den Kreis wäre es nützlich.)
+
+msg("Baue Ländertabelle Impfquoten nach Altersgruppe...")
+
+# Hier stimmt noch was nicht. Die Impfquoten nach AG sind zu niedrig. 
+# Vermutlicher Grund: Die Zählung "Impfschutz" erfasst Vorerkrankte bzw. Janssen-
+# Geimpfte mit Impfstatus 2, auch wenn es erst die erste Impfung ist. 
+# Zitat aus dem RKI-Github-Repository: "Angabe zum Impfschutz - Vollständiger
+# Impfschutz besteht bei zweifacher Impfung, Impfung mit Janssen und einfach 
+# Geimpften mit überstandener SARS-CoV-2 Infektion". Super. 
+
+# Deswegen wird für die Impfquote einstweilen weiter die grausige XLS-Tabelle
+# von der RKI-Website genutzt. 
+
+bl_2_df <- lk_tbl %>% 
+  # id - die ersten zwei Zeichen der AGS enthalten die Länderkennung 
+  mutate(id = str_sub(id_lk,1,2)) %>% 
+  # Tabelle Erst- und Zweitimpfungen nach Land und Altersgruppe  
+  # Es gibt eine Spalte u - für die paar Fälle ohne Altersangabe - 
+  # man darf sie bequem ignorieren. 
+  # In der ZEILE u sind die Impfzentren des Bundes - auch die klammern wir
+  # für den Ländervergleich aus. 
+  # Impfschutz 
+  pivot_wider(names_from=c(Altersgruppe,Impfschutz),values_from=Anzahl) %>% 
+  group_by(id) %>% 
+  # Datum und Landkreis interessieren uns nicht; wir wollen Gesamtsummen
+  select(-Datum,-id_lk) %>% 
+  summarize_all(sum, na.rm=TRUE) %>% 
+  # Bevölkerung Bundesländer dazuholen - die Tabelle, die oben aus dem 
+  # GENESIS-File erstellt wurde
+  left_join(bev_bl_df,by="id") %>% 
+  # Summen für Erst- und Zweitimpfungsquote berechnen
+  mutate(quote_erst_u18 = `12-17_1`/ `12-17` * 100,
+         quote_erst_18_60 = `18-59_1`/ `18-59` * 100,
+         quote_erst_ue60 = `60+_1`/ `60+` * 100,
+         quote_zweit_u18 = `12-17_2`/ `12-17` * 100,
+         quote_zweit_18_60 = `18-59_2`/ `18-59` * 100,
+         quote_zweit_ue60 = `60+_2`/ `60+` * 100) %>% 
+  select(id,starts_with("quote_"))
+
+# 
+
+
+# Jetzt: Die Tabelle zusammenführen. 
+# Die BL-Tabelle, die die Namen der Länder enthält, als Ausgangspunkt,
+# dann Summen nach Wirkstoff Erst/Zweit, 
+# dann Quoten nach Altersgruppe Erst/Zweit
+
+# Tabelle Bundesländer
+
+msg("Bundesländer-Tabelle zusammenführen und schreiben...")
+impfen_alle_df <- bev_bl_df %>%
+  # Datum des letzten gelesenen Tages als erste Spalte
+  mutate(am = i_d_max) %>% 
+  # Bundesländer-Tabelle als Basis; ID und Bundesland-Name behalten
+  select(am,id,Bundesland) %>% 
+  # Nach der id sortieren
+  arrange(id) %>% 
+  # Neue Erst- und Zweitimpfungen
+  left_join(bl_n_df, by="id") %>% 
+  # Die Tabelle mit den Impfstoffen holen
+  left_join(bl_1_df, by="id") %>% 
+  # Die Tabelle mit den Altersgruppen holen
+#  left_join(bl_2_df, by="id") %>% 
+  # Wie oben erklärt: einstweilen sind wir hier auf die XLSX-Tabelle angewiesen
+  # Tabelle hat die gleichen Spaltennahmen; Spalten 
+  left_join(impfquoten_xlsx_df %>% 
+              # Spalten aussortieren, die es in der anderen Tabelle schon gibt
+              select(-quote_erst,-quote_zweit) %>% 
+              # Quoten von Zeichen in Zahlen
+              mutate(across(starts_with("quote_"),as.numeric)) %>% 
+              select(id=ID,starts_with("quote_")),by="id") %>% 
+  # Kompatibilität mit bisherigem Format: 
+  # Spalte umbenennen, personen und durchgeimpft nach vorn sortieren
+  relocate(c(personen,durchgeimpft),.after=Bundesland) %>% 
+  rename (ID = id)
+  
+write_sheet(impfen_alle_df,aaa_id,sheet = "ImpfzahlenNational")
+
+msg("Deutschland-Karte aktualisieren...")
+# dw_data_to_chart(impfen_alle_df,chart_id="6PRAe")
+dw_publish_chart("6PRAe") # Karte mit dem Impffortschritt nach BL
+
+# ---- Hessen isolieren ----
+msg("Hessen-Daten bauen")
+impf_df <- impfen_alle_df %>%
+  # nur Hessen
+  filter(as.numeric(ID) == 6) %>%
+  select(-ID,-Bundesland) 
+
+# Tagestabelle schreiben
+write_sheet(impf_df,ss=aaa_id,sheet="ImpfenTagestabelle")
 
 
 
@@ -174,76 +320,17 @@ if (any((tabelle2 %>% rename(RS=1) %>%
 #
 # - Tabellenspalte für händische Anmerkungen
 
-
-impfen_alle_df <- tabelle3 %>%
-  filter(!is.na(RS) & !is.na(Bundesland)) %>%
-  mutate(am = as.Date(max(impfen_meta_df$Datum))) %>%
-  # Bundesländer auswählen und um Sternchen bereinigen
-  filter(as.numeric(RS) %in% 1:16) %>%
-  mutate(Bundesland = str_replace(Bundesland,"\\*","")) %>%
-  # Sinnvolle Tabellenspalten auswählen und beibehalten
-  select(am, ID=RS, Bundesland,
-         personen = 3,
-         durchgeimpft = 9,
-         neu = 8,
-         neu_zweit =14,
-         biontech_erst = 4,
-         moderna_erst = 5,
-         az_erst = 6,
-         janssen = 7,
-         biontech_zweit = 10,
-         moderna_zweit = 11, 
-         az_zweit = 12) %>%
-  inner_join(tabelle2 %>% 
-               select(ID=1,
-                      impfdosen = 3, 
-                      quote_erst = 6,
-                      quote_erst_u18 = 7,
-                      quote_erst_18_60 =8, 
-                      quote_erst_ue60 = 9,
-                      quote_zweit = 10,
-                      quote_zweit_u18 = 11,
-                      quote_zweit_18_60 = 12,
-                      quote_zweit_ue60 =13) %>%
-               filter(as.numeric(ID) %in% 1:16),by="ID") %>%
-  # alle Spalten außer am, ID und Bundesland in Zahlen umwandeln 
-  mutate_at(4:23,as.numeric)
-               
-
-# ---- Hessen isolieren ----
-  msg("Hessen-Daten bauen")
-  impf_df <- impfen_alle_df %>%
-    # nur Hessen
-    filter(as.numeric(ID) == 6) %>%
-    select(-ID,-Bundesland) %>%
-    # Impfquoten selbst berechnen, genauer
-    mutate(quote_erst = personen/hessen*100,
-           quote_zweit = durchgeimpft/hessen*100)
-  
-  # Tagestabelle schreiben
-  write_sheet(impf_df,ss=aaa_id,sheet="ImpfenTagestabelle")
-
-
-# Impfdaten archivieren für Vergleich
-
-# ---- Vergleichskarte D generieren ----
-write_sheet(impfen_alle_df,aaa_id,sheet = "ImpfzahlenNational")
-  
-msg("Deutschland-Karte aktualisieren...")
-#dw_data_to_chart(impfen_alle_df,chart_id="6PRAe")
-dw_publish_chart("6PRAe") # Basisdaten-Seite
-
-# Janssen-Neuimpfungen berechnen - Differenz zum kumulativen Stand gestern, 
-# anders geht nicht. 
-
 # Alle bis Stand gestern
 tmp <- (read_sheet(aaa_id,sheet = "ArchivImpfzahlen") %>% filter(am < today()-1))$janssen 
 
-# Unterste Zeile
-tmp <- tmp[length(tmp)]
-tmp <- ifelse(is.na(tmp),0,tmp)
-janssen_neu <- impf_df$janssen - tmp
+# Janssen-Neuimpfungen aus der Länder-Tabelle extrahieren
 
+janssen_neu <- sum(bl_tbl %>% 
+                     # verimpft gestern, in Hessen, mit Janssen
+                     filter(Datum == i_d_max) %>% 
+                     filter(id == "06") %>% 
+                     filter(Impfstoff == "Janssen") %>% 
+                     pull(Anzahl))
 
 # ---- Basisdaten-Seite anpassen und aktualisieren ----
 msg("Impfzahlen und Immunisierungsquote")
@@ -253,7 +340,7 @@ range_write(aaa_id,as.data.frame(paste0("Geimpft (",
             range="Basisdaten!A8",col_names=FALSE,reformat=FALSE)
 
 range_write(aaa_id, as.data.frame(paste0(
-  # kumulativ: Erstgeimpfte (also RKI-Zahl plus Janssen)
+  # kumulativ: Erstgeimpfte 
   base::format(impf_df$personen,big.mark=".",decimal.mark = ","),
   # Differenz: Erstgeimpfte neu plus Janssen-Geimpfte neu
   " (", base::format(impf_df$quote_erst,
@@ -262,13 +349,13 @@ range_write(aaa_id, as.data.frame(paste0(
   range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
 
 # Neu dazugekommen
-range_write(aaa_id,as.data.frame("Erst-/Durchimpfungen"),
+range_write(aaa_id,as.data.frame("Erst-/Zweitimpfungen"),
             range="Basisdaten!A9",col_names=FALSE,reformat=FALSE)
 
 range_write(aaa_id, as.data.frame(paste0("+",
   # neu erstgeimpft
   base::format(impf_df$neu,big.mark=".",decimal.mark = ","),
-  # neu durchgeimpft (enhätl auch Janssen)
+  # neu zweitgeimpft (ohne Janssen!)
   " / +", base::format(impf_df$neu_zweit,
                      big.mark = ".", decimal.mark = ",", nsmall =0))),
   range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
@@ -305,13 +392,13 @@ range_write(aaa_id,as.data.frame(paste0("sind <strong>durchgeimpft</strong>.")),
 
 # Neue Impfungen - Zeile 4
 range_write(aaa_id,as.data.frame(paste0(
-  "+",format(impf_df$neu,big.mark="."),
-  " / +",format(impf_df$neu_zweit,big.mark = "."))),
+  "+",format(impf_df$neu,big.mark = ".",decimal.mark=","),
+  " / +",format(impf_df$neu_zweit,big.mark = ".",decimal.mark=","))),
   range="Impfzahlen!A4", col_names = FALSE, reformat=FALSE)
 
 
 range_write(aaa_id,as.data.frame(paste0(
-  "<strong>Erstgeimpfte / Zweitgeimpfte</strong> sind am ",
+  "<strong>Erstimpfungen / Zweitimpfungen</strong> sind am ",
   format.Date(impf_df$am,"%d.%m."),
   " dazugekommen.")),
   range="Impfzahlen!B4", col_names = FALSE, reformat=FALSE)
@@ -319,8 +406,8 @@ range_write(aaa_id,as.data.frame(paste0(
 
 #Impfquote Ü60 - Zeile 5
 range_write(aaa_id,as.data.frame(paste0(
-  format(impf_df$quote_erst_ue60,decimal.mark=","),
-  "% / ",format(impf_df$quote_zweit_ue60,decimal.mark = ","),"%")),
+  format(impf_df$quote_erst_ue60,big.mark = ".",decimal.mark=","),
+  "% / ",format(impf_df$quote_zweit_ue60,big.mark = ".",decimal.mark=","),"%")),
   range="Impfzahlen!A5", col_names = FALSE, reformat=FALSE)
 
 range_write(aaa_id,as.data.frame(paste0("der <strong>besonders gefährdeten Menschen über 60",
@@ -332,12 +419,25 @@ range_write(aaa_id,as.data.frame(paste0("der <strong>besonders gefährdeten Mens
 faelle_df <- read_sheet(aaa_id,sheet="Fallzahl4Wochen")
 impf_tabelle <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen") %>% filter(am <= today()-14)
 
-hoffnung_str = paste0("<h4>",
-                      format((max(impf_tabelle$personen)+max(faelle_df$gsum))/hessen*100,big.mark=".",decimal.mark = ",",digits = 2),
-                "% der Menschen in Hessen sind inzwischen wahrscheinlich gegen ",
-                "das Coronavirus immunisiert, weil sie eine Infektion überstanden oder ",
-                "vor 14 Tagen die erste Impfung erhalten haben.</h4>")
-dw_edit_chart(chart_id ="l5KKN", intro = hoffnung_str)
+fehlen_str = paste0("Noch nicht geimpft in Hessen:<ul><br>- ",
+                    format(100-impf_df$quote_erst_ue60,big.mark=".",decimal.mark = ",",digits = 3),
+                    "% der über 60-Jährigen (",
+                    format(round((100-impf_df$quote_erst_ue60)*ue60/100), 
+                           big.mark=".",decimal.mark = ","),
+                    " Menschen)<br>- ",
+                    format(100-impf_df$quote_erst_18_60,big.mark=".",decimal.mark = ",",digits = 3),
+                    "% der 18-59-Jährigen (",
+                    format(round((100-impf_df$quote_erst_18_60)*ue60/100), 
+                           big.mark=".",decimal.mark = ","),
+                    " Menschen)<br>- ",
+                    format(100-impf_df$quote_erst_u18,big.mark=".",decimal.mark = ",",digits = 3),
+                    "% der 12-17-Jährigen (",
+                    format(round((100-impf_df$quote_erst_u18)*ue60/100), 
+                    big.mark=".",decimal.mark = ","),
+                    " Menschen in Hessen)")
+                    
+# Impfdaten-Tabelle aktualisieren
+dw_edit_chart(chart_id ="l5KKN", intro = fehlen_str)
 dw_publish_chart("l5KKN")
 
 
@@ -363,7 +463,7 @@ impfstoffe_df <- impf_df %>%
 
 write_sheet(impfstoffe_df,ss=aaa_id,sheet="Impfstoffe")
 dw_edit_chart(chart_id="BfPeh",intro=paste0("Wie oft kam in Hessen welcher Impfstoff zum Einsatz? Stand: ",
-                                            format.Date(impf_df$am,"%d.%m.")))
+                                            format.Date(i_d,"%d.%m."),", 8 Uhr"))
 dw_publish_chart(chart_id="BfPeh")
 
 
@@ -372,14 +472,15 @@ dw_publish_chart(chart_id="BfPeh")
 
 
 quoten_alter_df <- impf_df %>%
-  select(quote_erst_u18,
+  select(quote_zweit_u18,
+         quote_zweit_18_60,
+         quote_zweit_ue60,
+         quote_zweit_Hessen = quote_zweit,
+         quote_erst_u18,
          quote_erst_18_60,
          quote_erst_ue60,
          quote_erst_Hessen = quote_erst,
-         quote_zweit_u18,
-         quote_zweit_18_60,
-         quote_zweit_ue60,
-         quote_zweit_Hessen = quote_zweit) %>%
+  ) %>%
   # Aufbereiten in zwei Spalten "Erstgeimpft" und "Zweitgeimpft"
   pivot_longer(everything()) %>%
   mutate(erstzweit = ifelse(str_detect(name,"_erst_"),"nur erstgeimpft","durchgeimpft")) %>%
@@ -392,10 +493,12 @@ quoten_alter_df <- impf_df %>%
 
   
 write_sheet(quoten_alter_df,ss=aaa_id,sheet="ImpfquotenAlter")
-dw_edit_chart(chart_id="vgJSw",annotate = paste0("Janssen-Impfstoff wird in beiden Kategorien ",
-                                                  "gezählt und führt zu leichten Verzerrungen. <br>",
-" Stand: ",
-                           format.Date(impf_df$am,"%d.%m.%Y")))
+dw_edit_chart(chart_id="vgJSw",annotate = paste0(
+  "Mit dem Johnson&Johnson-Impfstoff Geimpfte und Geimpfte mit Vorerkrankung ",
+  "werden seit 1.8.21 als Durchgeimpfte gezählt -",
+  " Stand: ",
+                           format.Date(i_d,"%d.%m.%Y"),
+                            ", 8 Uhr"))
 dw_publish_chart(chart_id="vgJSw")
 
 # ---- Tag archivieren ----
@@ -437,7 +540,7 @@ archiv_tabelle$az_zweit[archiv_tabelle$am==lastdate] <- impf_df$az_zweit
 # Wennde Spass dran hast, rechne noch mal kumulativ die Impfdosen aus. 
 # Ermöglicht Differenzberechnung zum Vortag (und damit u.U. Korrektur der
 # Erstimpfungs- und Zweitimpfungs-Werte)
-archiv_tabelle$impfdosen[archiv_tabelle$am==lastdate] <- impf_df$impfdosen
+archiv_tabelle$impfdosen[archiv_tabelle$am==lastdate] <- impf_df$neu+impf_df$neu_zweit
 #
 archiv_tabelle$quote_erst_u18[archiv_tabelle$am==lastdate] <- impf_df$quote_erst_u18
 archiv_tabelle$quote_erst_18_60[archiv_tabelle$am==lastdate] <- impf_df$quote_erst_18_60
@@ -449,10 +552,49 @@ archiv_tabelle$quote_zweit_ue60[archiv_tabelle$am==lastdate] <- impf_df$quote_zw
   
 write_sheet(archiv_tabelle,aaa_id,sheet = "ArchivImpfzahlen")
 
-# Impftempo-Kurve aktualisieren - aus dem Google Sheet
+# ---- Impftempo ----
+# Impftempo-Kurve aktualisieren - aus dem Google Sheet "ArchivImpfzahlen"
 dw_publish_chart(chart_id="SS8ta")
 
-# ---- Experimentell: Generiere Infokarte in Teams ----
+# Tabelle mit allen Wochenwerten generieren
+impftempo_df <- bl_tbl %>%
+  # nur Hessen
+  filter(id == "06") %>% 
+  # Woche errechnen; Jahr mitnehmen
+  # mit isoweek/isoyear, das den Versatz 2020/2021 in Betracht zieht
+  mutate(woche = paste0(isoyear(Datum),"_",
+                        ifelse(isoweek(Datum)<10,"0",""),isoweek(Datum))) %>% 
+  group_by(woche) %>% 
+  pivot_wider(names_from=Impfserie,values_from=Anzahl) %>%
+  summarize(Datum=max(Datum),
+            erstgeimpft=sum(`1`,na.rm = TRUE),
+            zweitgeimpft=sum(`2`,na.rm = TRUE),
+            p=0) 
+
+# Jetzt ganz stumpf aus dem Trend der letzten 7 Tage im Vergleich zur Vorwoche
+# eine Prognose errechnen
+
+n <- nrow(impftempo_df)
+# Nimm die Werte für die letzte Woche, 
+# verändere sie im Verhältnis zur Vorwoche, 
+# nimm das als Prognose, und zieh die schon verimpften Dosen davon ab. 
+# p ist das, was man dann noch anzeigen kann. 
+impftempo_df$p[n] <- 
+  (impftempo_df$erstgeimpft[n-1]* (impftempo_df$erstgeimpft[n-1]/impftempo_df$erstgeimpft[n-2])) +
+  (impftempo_df$zweitgeimpft[n-1]* (impftempo_df$zweitgeimpft[n-1]/impftempo_df$zweitgeimpft[n-2])) - 
+  (impftempo_df$erstgeimpft[n]+impftempo_df$zweitgeimpft[n])
+
+
+dw_data_to_chart(impftempo_df %>% select(-woche),"Lch5F")
+dw_publish_chart("Lch5F")
+
+# ---- Baue eine Gesamt-Tabelle mit den vorliegenden Impfdaten ----
+
+# zum Vergleich mit den gemeldeten "Briefkastendaten"
+# TODO
+
+
+# ---- Generiere Infokarte in Teams ----
 
 # Legt eine Karte mit den aktuellen Impfzahlen im Teams-Team "hr-Datenteam", 
 # Channel "Corona" an. 
@@ -513,70 +655,3 @@ cc$add_section(new_section = sec)
 cc$send()
 
 msg("OK")
-### Ergänzen: Archivdaten bauen
-
-# ---- Tabelle Impfzahlen neu bauen - als Funktion ----
-# Die Impfzahlen holen wir einfach beim BR - soll sich Michael mit den Format-
-# änderungen des RKI rumschlagen :) 
-# Wird nicht mehr funktionieren!!!
-konstruiere_impftabelle_alt <- function() {
-  impf_data_url <- ("https://raw.githubusercontent.com/ard-data/2020-rki-impf-archive/master/data/")
-  dir_json_url <- "https://api.github.com/repos/ard-data/2020-rki-impf-archive/contents/data/1_parsed?recursive=0"
-  impf_json_dir <- read_json(dir_json_url,simplifyVector =TRUE)
-  impf_tabelle <- NULL
-  impf_files_list <- impf_json_dir$tree$path
-  for (f in impf_json_dir$name) {
-    impf_json <- read_json(paste0(impf_data_url,"1_parsed/",f),simplifyVector = TRUE)
-    impf_df <- data.frame(t(unlist(impf_json$states$HE))) %>%
-      # Ländercodes raus
-      select(-code,-title) %>%
-      mutate(date = as.Date(str_extract(f,"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"))) %>%
-      mutate(am = date-1) 
-    
-    if(is.null(impf_tabelle)) {
-      impf_tabelle <- impf_df
-    } else {
-      impf_tabelle <- bind_rows(impf_tabelle,impf_df)
-    }
-  }
-  # Jetzt den alten Kram in der Tabelle umformatieren
-  impf_tabelle <- impf_tabelle %>%
-    filter(am != lag(am)) %>%
-    # Differenz zum Vortag aus Erstimpfung errechnen
-    mutate(differenz_zum_vortag_erstimpfung =as.numeric( 
-             ifelse(is.na(dosen_differenz_zum_vortag),
-                    dosen_erst_differenz_zum_vortag,dosen_differenz_zum_vortag))) %>%
-    mutate(personen = as.numeric(ifelse(is.na(personen_erst_kumulativ),
-                            dosen_kumulativ,
-                            personen_erst_kumulativ))) %>%
-    mutate(impfquote = as.numeric(personen)/hessen*100) %>%
-    # Indikationen
-    mutate(indikation_nach_alter = as.numeric(ifelse(is.na(indikation_alter_erst),
-                                          indikation_alter_dosen,
-                                          indikation_alter_erst))) %>%
-    mutate(berufliche_indikation = as.numeric(ifelse(is.na(indikation_beruf_dosen),
-                                          indikation_beruf_erst,
-                                          indikation_beruf_dosen))) %>%
-    mutate(medizinische_indikation = as.numeric(ifelse(is.na(indikation_medizinisch_erst),
-                                          indikation_medizinisch_dosen,
-                                          indikation_medizinisch_erst))) %>%
-    mutate(pflegeheimbewohnerin = as.numeric(ifelse(is.na(indikation_pflegeheim_erst),
-                                          indikation_pflegeheim_dosen,
-                                          indikation_pflegeheim_erst))) %>%
-    select(am,personen,differenz_zum_vortag_erstimpfung,impfquote,
-           personen_durchgeimpft = personen_voll_kumulativ,
-           differenz_zum_vortag_zweitimpfung = dosen_voll_differenz_zum_vortag,
-           indikation_nach_alter,
-           berufliche_indikation,
-           medizinische_indikation,
-           pflegeheimbewohnerin,
-           Biontech = dosen_erst_biontech_kumulativ,
-           Moderna = dosen_erst_moderna_kumulativ) %>%
-    mutate(Moderna = as.numeric(ifelse(is.na(Moderna),0,Moderna))) %>%
-    mutate(Biontech = as.numeric(ifelse(is.na(Biontech),personen,Biontech))) %>%
-    mutate(personen_durchgeimpft = as.integer(personen_durchgeimpft)) %>%
-    mutate(durchgeimpft_quote = personen_durchgeimpft/hessen*100)
-    
-    write_sheet(impf_tabelle,aaa_id,sheet="ArchivImpfzahlen")
-    return(impf_tabelle)
-}

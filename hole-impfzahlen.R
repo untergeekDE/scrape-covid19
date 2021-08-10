@@ -588,12 +588,29 @@ n <- nrow(impftempo_df)
 # verändere sie im Verhältnis zur Vorwoche, 
 # nimm das als Prognose, und zieh die schon verimpften Dosen davon ab. 
 # p ist das, was man dann noch anzeigen kann. 
-impftempo_df$p[n] <- 
+impftempo_df$p[n] <- round(
   (impftempo_df$erstgeimpft[n-1]* (impftempo_df$erstgeimpft[n-1]/impftempo_df$erstgeimpft[n-2])) +
   (impftempo_df$zweitgeimpft[n-1]* (impftempo_df$zweitgeimpft[n-1]/impftempo_df$zweitgeimpft[n-2])) - 
-  (impftempo_df$erstgeimpft[n]+impftempo_df$zweitgeimpft[n])
+  (impftempo_df$erstgeimpft[n]+impftempo_df$zweitgeimpft[n]))
 
-if (impftempo_df$p[n] < 0 ) {impftempo_df$p[n] <- 0}
+if (impftempo_df$p[n] < 0) impftempo_df$p[n] <- 0
+
+if (wday(impftempo_df$Datum[n]) > 1) {
+  # Falls die Woche noch unvollständig ist: 
+  # Noch eine Tabellenzeile einfügen mit dem Datum des nächsten Sonntags
+  # und dem Prognosewert
+  impftempo_df <- bind_rows(impftempo_df, tibble(
+    woche = impftempo_df$woche[n],
+    Datum = impftempo_df$Datum[n-1]+7,
+    erstgeimpft= NULL,
+    zweitgeimpft= NULL,
+    p = impftempo_df$erstgeimpft[n] +
+                          impftempo_df$zweitgeimpft[n] +
+                          impftempo_df$p[n]))
+} else {
+  # Falls letzter Tag ein Sonntag; Woche abgeschlossen: Prognose auf 0 setzen
+  impftempo_df$p[n] <- 0
+}
 
 
 dw_data_to_chart(impftempo_df %>% select(-woche),"Lch5F")

@@ -8,7 +8,7 @@
 # Datenquelle auslesen, die Excel-Datei mit dem "Digitalen Impfquotenmonitoring auf rki.de -
 # ...mit allen ihren Schwierigkeiten und Risiken. 
 
-# Stand: 1.8.2021
+# Stand: 10.8.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -37,7 +37,8 @@ bev_bl_df <- read_delim("index/12411-04-02-4-B.csv",
                           locale = locale(date_names = "de",         
                           decimal_mark = ",", grouping_mark = ".",
                           encoding = "ISO-8859-1"), trim_ws=TRUE, 
-                          skip = 6) %>%
+                          skip = 6,
+                        show_col_types=FALSE) %>%
   # Länder-ID und Altersgruppen insgesamt/männlich/weiblich nutzen
   select(id=1,Bundesland=2,ag=3,4:6) %>% 
   # Datei enthält auch "Insgesamt"-Zeilen mit den Ländersummen - weg damit
@@ -64,6 +65,8 @@ bev_bl_df <- read_delim("index/12411-04-02-4-B.csv",
 # Bevölkerung nach Altersgruppen, Hessen
 hessen=sum(bev_bl_df %>% filter(id=="06") %>% select(-id,-Bundesland))
 ue60 = bev_bl_df %>% filter(id=="06") %>% pull(`60+`)
+ue18_59 = bev_bl_df %>% filter(id=="06") %>% pull(`18-59`)
+ue12_17 = bev_bl_df %>% filter(id=="06") %>% pull(`12-17`)
 u60 = hessen - ue60
 # Vergleiche https://corona-impfung.hessen.de/faq/impfstrategie
 # Auskunft Innenministerium an Tobias Lübben 15.1.2021
@@ -265,8 +268,9 @@ impfen_alle_df <- bev_bl_df %>%
   left_join(impfquoten_xlsx_df %>% 
               # Spalten aussortieren, die es in der anderen Tabelle schon gibt
               select(-quote_erst,-quote_zweit) %>% 
-              # Quoten von Zeichen in Zahlen
-              mutate(across(starts_with("quote_"),as.numeric)) %>% 
+              # Quoten von Strings in Zahlen umwandeln
+              mutate(across(starts_with("quote_"),as.numeric)) %>%
+              # Nur die Quoten nach Altersgruppen aufheben
               select(id=ID,starts_with("quote_")),by="id") %>% 
   # Kompatibilität mit bisherigem Format: 
   # Spalte umbenennen, personen und durchgeimpft nach vorn sortieren
@@ -335,8 +339,10 @@ janssen_neu <- sum(bl_tbl %>%
 # ---- Basisdaten-Seite anpassen und aktualisieren ----
 msg("Impfzahlen und Immunisierungsquote")
 # Geimpft mit Quote und Datum (Zeile 8)
-range_write(aaa_id,as.data.frame(paste0("Geimpft (",
-                                        format.Date(impf_df$am,"%d.%m."),")")),
+range_write(aaa_id,as.data.frame(paste0("Geimpft ",
+                                        # "(",
+                                        # format.Date(i_d,"%d.%m."),", 8 Uhr)"
+                                        "")),
             range="Basisdaten!A8",col_names=FALSE,reformat=FALSE)
 
 range_write(aaa_id, as.data.frame(paste0(
@@ -349,7 +355,9 @@ range_write(aaa_id, as.data.frame(paste0(
   range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
 
 # Neu dazugekommen
-range_write(aaa_id,as.data.frame("Erst-/Zweitimpfungen"),
+range_write(aaa_id,as.data.frame(
+  paste0("Erst-/Zweitimpfungen ",
+         format.Date(i_d_max,"%d.%m."))),
             range="Basisdaten!A9",col_names=FALSE,reformat=FALSE)
 
 range_write(aaa_id, as.data.frame(paste0("+",
@@ -376,8 +384,8 @@ range_write(aaa_id,as.data.frame(paste0(
 
 range_write(aaa_id,as.data.frame(paste0(
   "Menschen sind in Hessen wenigstens einmal <strong>geimpft</strong>. (Stand: ",
-  format.Date(impf_df$am,"%d.%m."),
-  ")")),
+  format.Date(i_d,"%d.%m."),
+  ", 8 Uhr)")),
   range="Impfzahlen!B2", col_names = FALSE, reformat=FALSE)
 
 # Durchgeimpfte - Zeile 3
@@ -427,12 +435,12 @@ fehlen_str = paste0("Noch nicht geimpft in Hessen:<ul><br>- ",
                     " Menschen)<br>- ",
                     format(100-impf_df$quote_erst_18_60,big.mark=".",decimal.mark = ",",digits = 3),
                     "% der 18-59-Jährigen (",
-                    format(round((100-impf_df$quote_erst_18_60)*ue60/100), 
+                    format(round((100-impf_df$quote_erst_18_60)*ue18_59/100), 
                            big.mark=".",decimal.mark = ","),
                     " Menschen)<br>- ",
                     format(100-impf_df$quote_erst_u18,big.mark=".",decimal.mark = ",",digits = 3),
                     "% der 12-17-Jährigen (",
-                    format(round((100-impf_df$quote_erst_u18)*ue60/100), 
+                    format(round((100-impf_df$quote_erst_u18)*ue12_17/100), 
                     big.mark=".",decimal.mark = ","),
                     " Menschen in Hessen)")
                     
@@ -537,11 +545,12 @@ archiv_tabelle$janssen[archiv_tabelle$am==lastdate] <- impf_df$janssen
 archiv_tabelle$biontech_zweit[archiv_tabelle$am==lastdate] <- impf_df$biontech_zweit
 archiv_tabelle$moderna_zweit[archiv_tabelle$am==lastdate] <- impf_df$moderna_zweit
 archiv_tabelle$az_zweit[archiv_tabelle$am==lastdate] <- impf_df$az_zweit
-# Wennde Spass dran hast, rechne noch mal kumulativ die Impfdosen aus. 
-# Ermöglicht Differenzberechnung zum Vortag (und damit u.U. Korrektur der
-# Erstimpfungs- und Zweitimpfungs-Werte)
-archiv_tabelle$impfdosen[archiv_tabelle$am==lastdate] <- impf_df$neu+impf_df$neu_zweit
-#
+
+# archiv_tabelle$impfdosen[archiv_tabelle$am==lastdate] <- impf_df$neu+impf_df$neu_zweit
+# Impfdosen kumulativ: Alle Impfstoffe, alle Impfungen
+archiv_tabelle$impfdosen[archiv_tabelle$am==lastdate] <- impf_df$biontech_erst +
+  impf_df$biontech_zweit + impf_df$moderna_erst + impf_df$moderna_zweit +
+  impf_df$az_erst + impf_df$az_zweit + impf_df$janssen
 archiv_tabelle$quote_erst_u18[archiv_tabelle$am==lastdate] <- impf_df$quote_erst_u18
 archiv_tabelle$quote_erst_18_60[archiv_tabelle$am==lastdate] <- impf_df$quote_erst_18_60
 archiv_tabelle$quote_erst_ue60[archiv_tabelle$am==lastdate] <- impf_df$quote_erst_ue60
@@ -584,6 +593,8 @@ impftempo_df$p[n] <-
   (impftempo_df$zweitgeimpft[n-1]* (impftempo_df$zweitgeimpft[n-1]/impftempo_df$zweitgeimpft[n-2])) - 
   (impftempo_df$erstgeimpft[n]+impftempo_df$zweitgeimpft[n])
 
+if (impftempo_df$p[n] < 0 ) {impftempo_df$p[n] <- 0}
+
 
 dw_data_to_chart(impftempo_df %>% select(-woche),"Lch5F")
 dw_publish_chart("Lch5F")
@@ -591,7 +602,37 @@ dw_publish_chart("Lch5F")
 # ---- Baue eine Gesamt-Tabelle mit den vorliegenden Impfdaten ----
 
 # zum Vergleich mit den gemeldeten "Briefkastendaten"
-# TODO
+
+impf_hist_df <- bl_tbl %>% 
+  # Tabelle Erst- und Zweitimpfungen nach Land und Impfstoff - Summen
+  filter(id == "06") %>% 
+  pivot_wider(names_from=c(Impfstoff,Impfserie),names_sep="_",values_from=Anzahl,
+              values_fill=0) %>% 
+  # Impfungen nach Impfstoff pro Tag aufsummieren
+  mutate(biontech_erst = cumsum(Comirnaty_1),
+            moderna_erst = cumsum(Moderna_1),
+            az_erst = cumsum(AstraZeneca_1),
+            janssen = cumsum(Janssen_1),
+            biontech_zweit = cumsum(Comirnaty_2),
+            moderna_zweit = cumsum(Moderna_2),
+            az_zweit = cumsum(AstraZeneca_2)) %>%
+  # Impfungen nach Impfstoff pro Tag aus der Tabelle werfen
+  # Summen Personen und Durchgeimpfte bilden 
+  # Wie immer zählt Janssen sowohl als Erst- als auch als Durchimpfung
+  mutate(personen = biontech_erst+moderna_erst+az_erst+janssen,
+         durchgeimpft = biontech_zweit+moderna_zweit+az_zweit+janssen) %>% 
+  # Spalten umsortieren: Summen erst/zweit nach vorne
+  relocate(c(personen,durchgeimpft),.after=id) %>% 
+  # Bevölkerungszahlen dazuholen
+  left_join(bev_bl_df, by="id") %>% 
+  mutate(pop=`u12`+`12-17`+`18-59`+`60+`) %>% 
+  # Janssen-Impfstoff wieder zweimal zählen - bei Erst- und Durchgeimpften!
+  mutate(quote_erst=personen/pop*100,
+         quote_zweit=durchgeimpft/pop*100) %>% 
+  # Spalten aus der Bevölkerungstabelle wieder raus
+  select(-Bundesland,-`u12`,-`12-17`,-`18-59`,-`60+`)
+
+write_sheet(impf_hist_df,aaa_id,sheet = "ImpfzahlenHistorie")
 
 
 # ---- Generiere Infokarte in Teams ----
@@ -599,7 +640,6 @@ dw_publish_chart("Lch5F")
 # Legt eine Karte mit den aktuellen Impfzahlen im Teams-Team "hr-Datenteam", 
 # Channel "Corona" an. 
 
-# Erster Versuch, damnit. 
 
 library(teamr)
 library(magick)
@@ -619,11 +659,10 @@ sec$text(paste0("<h4>",format(impf_df$quote_erst,decimal.mark=",",big.mark=".",
 
 sec$add_fact("Erstgeimpfte: ",format(impf_df$personen,decimal.mark=",",big.mark="."))
 sec$add_fact("Zweitgeimpfte: ",format(impf_df$durchgeimpft,decimal.mark=",",big.mark="."))
-sec$add_fact(paste0("Erstimpfungen ",format.Date(impf_datum,"%d.%m.:")),
+sec$add_fact(paste0("Erstimpfungen ",format.Date(i_d_max,"%d.%m.:")),
              format(impf_df$neu,decimal.mark=",",big.mark="."))
-sec$add_fact(paste0("Zweitimpfungen ",format.Date(impf_datum,"%d.%m.:")),
+sec$add_fact(paste0("Zweitimpfungen ",format.Date(i_d_max,"%d.%m.:")),
              format(impf_df$neu_zweit,decimal.mark=",",big.mark="."))
-sec$add_fact("Impfdosen: ",format(impf_df$impfdosen,decimal.mark=",",big.mark="."))
 sec$add_fact("Impfquote Ü60: ",
              paste0(format(impf_df$quote_erst_ue60,big.mark=".",
                            decimal.mark = ",",digits=4),"%"))
@@ -632,8 +671,19 @@ sec$add_fact("Hessens Rang Erstimpfungen: ",rank(-impfen_alle_df$quote_erst,
                                                  ties.method = "min")[7])
 sec$add_fact("Hessens Rang Zweitimpfungen: ",rank(-impfen_alle_df$quote_zweit,
                                                      ties.method = "min")[7])
-sec$add_fact("Immunisierung: ",hoffnung_str %>% str_replace_all("h4>","small>"))
-             
+# Zahlen Ungeimpfte nach AG: 
+sec$add_fact(paste0("Noch nicht geimpfte ü60 (",
+                    format(100-impf_df$quote_erst_ue60,big.mark=".",decimal.mark = ",",digits = 3),
+                    "%):"),
+                    round(100-impf_df$quote_erst_ue60)*ue60/100)
+sec$add_fact(paste0("Noch nicht geimpfte 18-59J (",
+                    format(100-impf_df$quote_erst_18_60,big.mark=".",decimal.mark = ",",digits = 3),
+                    "%):"),
+             round(100-impf_df$quote_erst_18_60)*ue18_59/100)
+sec$add_fact(paste0("Noch nicht geimpfte 12-17J (",
+                    format(100-impf_df$quote_erst_u18,big.mark=".",decimal.mark = ",",digits = 3),
+                    "%):"),
+             round(100-impf_df$quote_erst_u18)*ue12_17/100)
 
 # Wenn du auf dem Server bist: 
 # Importiere eine PNG-Version des Impffortschritts, 

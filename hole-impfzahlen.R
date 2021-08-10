@@ -672,18 +672,18 @@ sec$add_fact("Hessens Rang Erstimpfungen: ",rank(-impfen_alle_df$quote_erst,
 sec$add_fact("Hessens Rang Zweitimpfungen: ",rank(-impfen_alle_df$quote_zweit,
                                                      ties.method = "min")[7])
 # Zahlen Ungeimpfte nach AG: 
-sec$add_fact(paste0("Noch nicht geimpfte ü60 (",
+sec$add_fact(paste0("Ungeimpfte ü60 (",
                     format(100-impf_df$quote_erst_ue60,big.mark=".",decimal.mark = ",",digits = 3),
                     "%):"),
-                    round(100-impf_df$quote_erst_ue60)*ue60/100)
-sec$add_fact(paste0("Noch nicht geimpfte 18-59J (",
+                    ((100-impf_df$quote_erst_ue60)*ue60 %/% 100000) *1000)
+sec$add_fact(paste0("Ungeimpfte 18-59J (",
                     format(100-impf_df$quote_erst_18_60,big.mark=".",decimal.mark = ",",digits = 3),
                     "%):"),
-             round(100-impf_df$quote_erst_18_60)*ue18_59/100)
-sec$add_fact(paste0("Noch nicht geimpfte 12-17J (",
+                   ((100-impf_df$quote_erst_18_60)*ue18_59 %/% 100000)*1000)
+sec$add_fact(paste0("Ungeimpfte 12-17J (",
                     format(100-impf_df$quote_erst_u18,big.mark=".",decimal.mark = ",",digits = 3),
                     "%):"),
-             round(100-impf_df$quote_erst_u18)*ue12_17/100)
+                    ((100-impf_df$quote_erst_u18)*ue12_17 %/% 100000)*1000)
 
 # Wenn du auf dem Server bist: 
 # Importiere eine PNG-Version des Impffortschritts, 

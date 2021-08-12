@@ -87,7 +87,21 @@ read_github_rki_data <- function() {
                  repo,
                  "raw/master/",
                  path)
-  rki_ <- read_csv(path)
+  # Am 12.8.2021 scheiterte das Programm mit einem SSL ERROR 104 - 
+  # Sicherheitsfeature: wenn kein Dataframe, probiere nochmal. 
+  try(rki_ <- read_csv(path))
+  # Kein Dataframe zurückbekommen (also vermutlich Fehlermeldung)?
+  starttime <- now()
+  while (!"data.frame" %in% class(rki_)) {
+    msg(rki_," - neuer Versuch in 60s")
+    Sys.sleep(60)
+    try(rki_ <- read_csv(path))
+    # Wenn 15min ergebnislos probiert, abbrechen
+    if (now()>starttime+900){
+      msg("Github-Leseversuch abgebrochen")
+      return(NULL)
+    } 
+  }
   # Einfacher Check: Jüngste Fälle mit Meldedatum gestern?
   # (Oh, dass dieser Check eines Tages scheitern möge!)
   if (max(rki_$Meldedatum) != d-1) {

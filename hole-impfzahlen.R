@@ -430,17 +430,17 @@ impf_tabelle <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen") %>% filter(am <= t
 fehlen_str = paste0("Noch nicht geimpft in Hessen:<ul><br>- ",
                     format(100-impf_df$quote_erst_ue60,big.mark=".",decimal.mark = ",",digits = 3),
                     "% der über 60-Jährigen (",
-                    format(round((100-impf_df$quote_erst_ue60)*ue60/100), 
-                           big.mark=".",decimal.mark = ","),
+                    format(((100-impf_df$quote_erst_ue60)*ue60 %/% 100000) *1000,
+                           big.mark=".",decimal.mark = ","), 
                     " Menschen)<br>- ",
                     format(100-impf_df$quote_erst_18_60,big.mark=".",decimal.mark = ",",digits = 3),
                     "% der 18-59-Jährigen (",
-                    format(round((100-impf_df$quote_erst_18_60)*ue18_59/100), 
+                    format(((100-impf_df$quote_erst_18_60)*ue18_59 %/% 100000)*1000, 
                            big.mark=".",decimal.mark = ","),
                     " Menschen)<br>- ",
                     format(100-impf_df$quote_erst_u18,big.mark=".",decimal.mark = ",",digits = 3),
                     "% der 12-17-Jährigen (",
-                    format(round((100-impf_df$quote_erst_u18)*ue12_17/100), 
+                    format(((100-impf_df$quote_erst_u18)*ue12_17 %/% 100000)*1000, 
                     big.mark=".",decimal.mark = ","),
                     " Menschen in Hessen)")
                     
@@ -692,15 +692,18 @@ sec$add_fact("Hessens Rang Zweitimpfungen: ",rank(-impfen_alle_df$quote_zweit,
 sec$add_fact(paste0("Ungeimpfte ü60 (",
                     format(100-impf_df$quote_erst_ue60,big.mark=".",decimal.mark = ",",digits = 3),
                     "%):"),
-                    ((100-impf_df$quote_erst_ue60)*ue60 %/% 100000) *1000)
+                    format(((100-impf_df$quote_erst_ue60)*ue60 %/% 100000) *1000,
+                           big.mark=".",decimal.mark = ","))  
 sec$add_fact(paste0("Ungeimpfte 18-59J (",
                     format(100-impf_df$quote_erst_18_60,big.mark=".",decimal.mark = ",",digits = 3),
                     "%):"),
-                   ((100-impf_df$quote_erst_18_60)*ue18_59 %/% 100000)*1000)
+                    format(((100-impf_df$quote_erst_18_60)*ue18_59 %/% 100000)*1000,
+                          big.mark=".",decimal.mark = ","))  
 sec$add_fact(paste0("Ungeimpfte 12-17J (",
                     format(100-impf_df$quote_erst_u18,big.mark=".",decimal.mark = ",",digits = 3),
                     "%):"),
-                    ((100-impf_df$quote_erst_u18)*ue12_17 %/% 100000)*1000)
+                    format(((100-impf_df$quote_erst_u18)*ue12_17 %/% 100000)*1000,
+                           big.mark=".",decimal.mark = ","))      
 
 # Wenn du auf dem Server bist: 
 # Importiere eine PNG-Version des Impffortschritts, 

@@ -9,7 +9,7 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des Robert-Koch-I
 - RKI-Tagesmeldungen, auf dem Server archiviert
 - Quelle RKI: [Nowcast und 7-Tage-R auf Github](https://github.com/robert-koch-institut/SARS-CoV-2-Nowcasting_und_-R-Schaetzung)
 - Quelle RKI: [Testzahlen donnerstags als Excel-Tabelle](https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Testzahlen-gesamt.html;jsessionid=EF5B74A0B2AEE46C92BE7A6C719305A9.internet082?nn=13490888)
-- Quelle RKI: [Impfzahlen Mo-Fr als Excel-Tabelle](https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquoten-Tab.html;jsessionid=63BB094C521A1D8D2E1767E9A97F2699.internet061) und z.T. via [diesem Repository von ard-data](https://github.com/ard-data/2020-rki-impf-archive/tree/master/data/2_csv)
+- Quelle RKI: Impfdaten auf Github](https://github.com/robert-koch-institut/COVID-19-Impfungen_in_Deutschland) (alte Quelle: [Impfzahlen Mo-Fr als Excel-Tabelle](https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquoten-Tab.html;jsessionid=63BB094C521A1D8D2E1767E9A97F2699.internet061))
 - Quelle DIVI: Intensivregister via [CSV]h(ttps://diviexchange.blob.core.windows.net/%24web/DIVI_Intensivregister_Auszug_pro_Landkreis.csv) und API
 - Quelle Helmholtz-Zentrum für Infektologie: [R-Wert-Schätzungen für Hessen als CSV](https://gitlab.com/simm/covid19/secir/-/tree/master/img/dynamic/Rt_rawData)
 - Quelle Johns-Hopkins-Universität: [Länder als CSV](https://gitlab.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/)
@@ -65,6 +65,7 @@ Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umg
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog: 
+* 7.8.: Impfdaten werden jetzt vom Github gelesen - und aus der XLSX-Datei auf rki.de um die Impfquoten nach Altersgruppe ergänzt, die aus den Github-Dateien nicht zu berechnen sind. 
 * 22.7.: Neues hessisches Eskalationskonzept umgesetzt - historische Bundesnotbremse- und Lockerungs-Tabelle wird nach alten Regeln bis 30.6. errechnet
 * 20.7.: Crontab an neue RKI-Veröffentlichungstermine für Testzahlen (donnerstags) angepasst
 * 20.7.: Github-Repository des RKI als Quelle für die Falldatenbank; Plausibilitätsprüfung vereinfacht

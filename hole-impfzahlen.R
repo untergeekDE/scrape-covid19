@@ -8,7 +8,7 @@
 # Datenquelle auslesen, die Excel-Datei mit dem "Digitalen Impfquotenmonitoring auf rki.de -
 # ...mit allen ihren Schwierigkeiten und Risiken. 
 
-# Stand: 10.8.2021
+# Stand: 24.8.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -620,6 +620,42 @@ dw_publish_chart("Lch5F")
 
 # zum Vergleich mit den gemeldeten "Briefkastendaten"
 
+# Diese Tabelle ist noch "blind" - sie enthält die Daten nach AG, die aus
+# den oben erwähnten Gründen nicht ohne weiteres verwendet werden können
+
+impf_alter_hist_df <- lk_tbl %>% 
+  # id - die ersten zwei Zeichen der AGS enthalten die Länderkennung 
+  mutate(id = str_sub(id_lk,1,2)) %>% 
+  # Tabelle Erst- und Zweitimpfungen nach Land und Altersgruppe  
+  # Es gibt eine Spalte u - für die paar Fälle ohne Altersangabe - 
+  # man darf sie bequem ignorieren. 
+  pivot_wider(names_from=c(Altersgruppe,Impfschutz),values_from=Anzahl) %>% 
+  # Beschränkung auf Hessen
+  filter(id=="06") %>% 
+  # Landkreise interessieren uns nicht
+  select(-id_lk,-id) %>%
+  group_by(Datum) %>% 
+  # Tage aufaddieren
+  summarize_all(sum,na.rm=TRUE) %>% 
+  # mutate_all(~replace(., is.na(.), 0)) %>% 
+  # Kumulative Summen der Geimpften-Zahlen nach AG
+  mutate(ue12_17_gesamt_erst = cumsum(`12-17_1`),
+         ue12_17_gesamt_zweit = cumsum(`12-17_2`),
+         ue18_60_gesamt_erst = cumsum(`18-59_1`),
+         ue18_60_gesamt_zweit = cumsum(`18-59_2`),
+         ue60_gesamt_erst = cumsum(`60+_1`),
+         ue60_gesamt_zweit = cumsum(`60+_2`)) %>% 
+  # Bevölkerung Bundesländer dazuholen - die Tabelle, die oben aus dem 
+  # Summen für Erst- und Zweitimpfungsquote berechnen
+  mutate(quote_erst_ue12_17 = ue12_17_gesamt_erst/ue12_17  * 100,
+         quote_zweit_ue12_17 = ue12_17_gesamt_zweit/ue12_17 * 100,
+         quote_erst_ue18_60 = ue18_60_gesamt_erst/ue18_59 * 100,
+         quote_zweit_ue18_60 = ue18_60_gesamt_zweit/ue18_59 * 100,
+         quote_erst_ue60 = ue60_gesamt_erst/ue60 * 100,
+         quote_zweit_ue60 = ue60_gesamt_zweit/ue60 * 100)
+
+
+
 impf_hist_df <- bl_tbl %>% 
   # Tabelle Erst- und Zweitimpfungen nach Land und Impfstoff - Summen
   filter(id == "06") %>% 
@@ -647,7 +683,8 @@ impf_hist_df <- bl_tbl %>%
   mutate(quote_erst=personen/pop*100,
          quote_zweit=durchgeimpft/pop*100) %>% 
   # Spalten aus der Bevölkerungstabelle wieder raus
-  select(-Bundesland,-`u12`,-`12-17`,-`18-59`,-`60+`)
+  select(-Bundesland,-`u12`,-`12-17`,-`18-59`,-`60+`) %>% 
+  full_join(impf_alter_hist_df,by="Datum")
 
 write_sheet(impf_hist_df,aaa_id,sheet = "ImpfzahlenHistorie")
 

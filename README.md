@@ -13,6 +13,7 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des Robert-Koch-I
 - Quelle DIVI: Intensivregister via [CSV]h(ttps://diviexchange.blob.core.windows.net/%24web/DIVI_Intensivregister_Auszug_pro_Landkreis.csv) und API
 - Quelle Helmholtz-Zentrum für Infektologie: [R-Wert-Schätzungen für Hessen als CSV](https://gitlab.com/simm/covid19/secir/-/tree/master/img/dynamic/Rt_rawData)
 - Quelle Johns-Hopkins-Universität: [Länder als CSV](https://gitlab.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/)
+- Quelle: DESTATIS-Bevölkerungsdaten 2019 und 2020 (Berechnungen werden ab Meldedatum 25.8.2021 mit den Daten von 2020 berechnet, davor mit den Daten von 2019)
 
 Die [Quelle "Hessisches Sozialministerium"](https://soziales.hessen.de/gesundheit/infektionsschutz/coronavirus-sars-cov-2/taegliche-uebersicht-der-bestaetigten-sars-cov-2-faelle-hessen) wurde wegen mangelnder Zuverlässigkeit und fehlender API/CSV zum 21.5. aussortiert. 
 

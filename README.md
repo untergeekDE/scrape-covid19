@@ -64,7 +64,9 @@ Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umg
 
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
-### Changelog: 
+### Changelog:
+* 26.8.: Umstellung auf aktuelle Bevölkerungsdaten (Stichtag 31.12.2020); bei Berechnung der Archiv-Inzidenzen bis 24.8.2021 mit Daten von 2019 rechnen, ab 25.8.2021 mit Daten von 2020
+* 24.8.: Impfdaten vom Github werden jetzt in historische Übersichtstabelle geschrieben
 * 7.8.: Impfdaten werden jetzt vom Github gelesen - und aus der XLSX-Datei auf rki.de um die Impfquoten nach Altersgruppe ergänzt, die aus den Github-Dateien nicht zu berechnen sind. 
 * 22.7.: Neues hessisches Eskalationskonzept umgesetzt - historische Bundesnotbremse- und Lockerungs-Tabelle wird nach alten Regeln bis 30.6. errechnet
 * 20.7.: Crontab an neue RKI-Veröffentlichungstermine für Testzahlen (donnerstags) angepasst

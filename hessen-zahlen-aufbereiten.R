@@ -31,7 +31,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 20.7.2021
+# Stand: 12.8.2021
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -58,7 +58,9 @@ msg("\n\n-- START ",as.character(today())," --")
 # Vorbereitung: Index-Datei einlesen; enthält Kreise/AGS und Bevölkerungszahlen
 msg("Lies index/kreise-index-pop.xlsx","...")
 # Jeweils aktuelle Bevölkerungszahlen; zuletzt aktualisiert Juli 2020
-kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
+kreise <- read.xlsx("index/kreise-index-pop2020.xlsx") %>%
+  mutate(AGS = paste0("06",str_replace(AGS,"000","")))
+kreise2019 <- read.xlsx("index/kreise-index-pop2019.xlsx") %>%
   mutate(AGS = paste0("06",str_replace(AGS,"000","")))
 
 # ---- Funktionen RKI-Daten lesen ----
@@ -823,7 +825,11 @@ dw_publish_chart(chart_id ="9UVBF")
 
 msg("Gesamttabelle 7-Tage-Inzidenzen nach Kreis erstellen...")
 
-# Daten für Hessen nach Kreis und Datum pivotieren
+# Dafür brauchen wir die Bevölkerungszahlen des Vorjahrs
+
+
+# Daten für Hessen nach Kreis und Datum pivotieren:
+# Neufälle je Tag und Kreis
 hessen_neu_df <- rki_he_df %>%
   filter(NeuerFall %in% c(0,1)) %>%
   select(Meldedatum,AGS = IdLandkreis,AnzahlFall) %>%
@@ -841,19 +847,25 @@ hsum_df[,2:27] <- sapply(hsum_df[,2:27],as.numeric)
 # Für alle 26 Kreise: 
 for ( k in 2:27){
   # Bevölkerung aus der Kreis-Tabelle ziehen, via AGS
-  p <- kreise$pop[kreise$AGS == colnames(hessen_neu_df[,k])]
+  # Datum >= 25.8.2020? Dann nutze aktuelle Bevökerungsdaten in kreise,
+  # sonst nutze die Bevölkerungsdaten in kreise2019
+  p2020 <-  as.numeric(kreise$pop[kreise$AGS == colnames(hessen_neu_df[,k])])
+  p2019 <-  as.numeric(kreise2019$pop[kreise2019$AGS == colnames(hessen_neu_df[,k])])
+  
   # Kopiere aus hessen_df eine gleitende 7-Tage-Summe und berechne die Inzidenz
   # Stumpfer Algorithmus ohne jede Raffinesse, dauert entsprechend lang
   for (i in 8:nrow(hessen_neu_df)){
-    hsum_df[i,k] <- round(sum(hessen_neu_df[(i-6):i,k])/p*100000,1)
+    is_2020 <- hessen_neu_df$Meldedatum[i] >= as_date("2021-08-25")
+    hsum_df[i,k] <- round(sum(hessen_neu_df[(i-6):i,k])/
+                            ifelse(is_2020,p2020,p2019) * 100000,1)
   }
 }
 
 # Kreisnamen als Spaltenköpfe
-k <- kreise %>%
+kk <- kreise %>%
   arrange(AGS)
   
-colnames(hsum_df) <- c("Datum",k$kreis)
+colnames(hsum_df) <- c("Datum",kk$kreis)
 
 # Datum auf Datumsspalte
 # Um eins erhöht, weil die Inzidenz ja die Meldedaten bis gestern berücksichtigt. 

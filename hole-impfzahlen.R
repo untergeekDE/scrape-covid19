@@ -31,6 +31,7 @@ if (file.exists("./server-msg-googlesheet-include.R")) {
 # Altersgruppen: 12-17, 18-59,60+.
 # Ausgangspunkt ist der File aus GENESIS mit der Altersschichtung
 # nach Lebensjahren und Bundesland. 
+# Q: 12411-04-02-4, Stichtag 31.12.2019
 library(readr)
 bev_bl_df <- read_delim("index/12411-04-02-4-B.csv", 
                           delim = ";", escape_double = FALSE, 

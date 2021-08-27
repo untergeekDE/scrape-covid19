@@ -14,6 +14,16 @@
 # - AktiveAlter (für aktive Fälle nach Alter und Geschlecht)
 # - ToteAlter (für Todesfälle nach Alter und Geschlecht)
 #
+# Bevölkerungsstatistik als Grundlage für die Inzidenzen: 
+# 
+# Basis für die Inzidenzberechnung ist die DESTATIS-Bevölkerungsstatistik nach Kreisen
+# (regionalstatistik.de: 12411-0015), zuletzt aktualisiert am 26.8.2021 auf den Stand
+# 31.12.2020. Im Abschnitt "Überblick erstellen" wird aus dem aktuellen Datenbank-Stand eine
+# Tabelle der Inzidenzen nach Kreis erzeugt - dort wird für Meldedaten vor dem 25.8. der
+# Bevölkerungsstand vom Vorjahr genutzt (Stand 31.12.2019), der für den Großteil der Pandemie
+# die Berechnungsgrundlage darstellte. Abweichungen für die Zeit vor dem Juli 2020, an dem das
+# RKI die Zahlen erstmalig aktualisiert hatte, werden ignoriert. 
+#
 # Die entsprechenden Grafiken werden am Ende gepingt, um aktualisiert zu werden. 
 # CSVs der hessischen Fälle, der Kreisdaten und der letzten 4 Wochen werden archiviert und 
 # als Aktuell-Kopie auf den Google-Bucket geschoben. 
@@ -58,7 +68,7 @@ msg("\n\n-- START ",as.character(today())," --")
 # Vorbereitung: Index-Datei einlesen; enthält Kreise/AGS und Bevölkerungszahlen
 msg("Lies index/kreise-index-pop.xlsx","...")
 # Jeweils aktuelle Bevölkerungszahlen; zuletzt aktualisiert Juli 2020
-kreise <- read.xlsx("index/kreise-index-pop2020.xlsx") %>%
+kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
   mutate(AGS = paste0("06",str_replace(AGS,"000","")))
 kreise2019 <- read.xlsx("index/kreise-index-pop2019.xlsx") %>%
   mutate(AGS = paste0("06",str_replace(AGS,"000","")))

@@ -41,7 +41,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 12.8.2021
+# Stand: 3.9.2021
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -1005,8 +1005,45 @@ write_csv2(ArchivKreisGenesen_df,"daten/ArchivKreisGenesen.csv")
 
 msg("Aufschlüsselung Neufälle nach Alter...")
 
-altersgruppen_df <- range_read(aaa_id,sheet="AltersgruppenPop") %>%
-  mutate(Altersgruppe = as.factor(Altersgruppe))
+# altersgruppen_df <- range_read(aaa_id,sheet="AltersgruppenPop") %>%
+#   mutate(Altersgruppe = as.factor(Altersgruppe))
+
+# Bevölkerungstabelle für alle Bundesländer vorbereiten,
+# Altersgruppen: 0-4, 5-14, 15-34, 35-59, 60-79, 80+
+# Ausgangspunkt ist der File aus GENESIS mit der Altersschichtung
+# nach Lebensjahren und Bundesland. 
+# Q: 12411-04-02-4, Stichtag 31.12.2019
+# library(readr)
+altersgruppen_df <- read_delim("index/12411-04-02-4-B.csv", 
+                        delim = ";", escape_double = FALSE, 
+                        locale = locale(date_names = "de",         
+                                        decimal_mark = ",", grouping_mark = ".",
+                                        encoding = "ISO-8859-1"), trim_ws=TRUE, 
+                        skip = 6,
+                        show_col_types=FALSE) %>%
+  # Länder-ID und Altersgruppen insgesamt/männlich/weiblich nutzen
+  select(id=1,Bundesland=2,ag=3,4:6) %>% 
+  # Datei enthält auch "Insgesamt"-Zeilen mit den Ländersummen - weg damit
+  filter(ag!="Insgesamt") %>% 
+  # Altersgruppen; 90 (die höchste) umfasst alle darüber. 
+  mutate(ag = ifelse(str_detect(ag,"^unter"),0,
+                     as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
+  # Zusätzliche Variable mit der Altersgruppe
+  mutate(Altersgruppe = case_when(
+    ag < 5 ~ "A00-A04",
+    ag < 15 ~ "A05-A14",
+    ag < 35 ~ "A15-A34",
+    ag < 60 ~ "A35-A59",
+    ag < 80 ~ "A60-A79",
+    TRUE    ~ "A80+")) %>% 
+  select(id,Bundesland,Altersgruppe,Insgesamt) %>% 
+  # Tabelle bauen: Bevölkerung in der jeweiligen Altersgruppe nach BL,
+  # Werte aus der Variable aufsummieren. 
+  pivot_wider(names_from=Altersgruppe, values_from=Insgesamt,values_fn=sum) %>% 
+  # Hessen!
+  filter(id == "06") %>% 
+  pivot_longer(cols=starts_with("A") ,names_to="Altersgruppe",values_to="pop") %>% 
+  select(-id, -Bundesland)
 
 # Auf aktive Fälle filtern, nach Alter und Geschlecht anordnen
 

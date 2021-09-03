@@ -32,7 +32,6 @@ if (file.exists("./server-msg-googlesheet-include.R")) {
 # Ausgangspunkt ist der File aus GENESIS mit der Altersschichtung
 # nach Lebensjahren und Bundesland. 
 # Q: 12411-04-02-4, Stichtag 31.12.2019
-library(readr)
 bev_bl_df <- read_delim("index/12411-04-02-4-B.csv", 
                           delim = ";", escape_double = FALSE, 
                           locale = locale(date_names = "de",         
@@ -163,7 +162,10 @@ bl_1_df <- bl_tbl %>%
             janssen = sum(Janssen_1,na.rm=TRUE),
             biontech_zweit = sum(Comirnaty_2,na.rm=TRUE),
             moderna_zweit = sum(Moderna_2,na.rm=TRUE),
-            az_zweit = sum(AstraZeneca_2,na.rm=TRUE)) %>% 
+            az_zweit = sum(AstraZeneca_2,na.rm=TRUE),
+            biontech_dritt = sum(Comirnaty_3,na.rm=TRUE),
+            moderna_dritt = sum(Moderna_3,na.rm=TRUE),
+            az_dritt = sum(AstraZeneca_3,na.rm=TRUE)) %>% 
   # Summen Personen und Durchgeimpfte bilden 
   # Wie immer zählt Janssen sowohl als Erst- als auch als Durchimpfung
   mutate(personen = biontech_erst+moderna_erst+az_erst+janssen,
@@ -187,7 +189,7 @@ bl_n_df <- bl_tbl %>%
   group_by(id, Impfserie) %>% 
   summarize(neu = sum(Anzahl)) %>% 
   pivot_wider(names_from=Impfserie,values_from=neu) %>% 
-  rename(neu = `1`, neu_zweit = `2`)
+  rename(neu = `1`, neu_zweit = `2`, neu_dritt=`3`)
 
 # NEU: Bisher konnte man die neuen Impfungen nur als Differenz errechnen, 
 # und das hieß: Der Janssen-Impfstoff tauchte sowohl in neu als auch neu_zweit auf.
@@ -214,7 +216,9 @@ msg("Baue Ländertabelle Impfquoten nach Altersgruppe...")
 # Deswegen wird für die Impfquote einstweilen weiter die grausige XLS-Tabelle
 # von der RKI-Website genutzt. 
 
-bl_2_df <- lk_tbl %>% 
+# Erst eine Tabelle, die die absoluten Zahlen enthält (brauchen wir für die
+# Drittimpfung)
+bl_3_df <- lk_tbl %>% 
   # id - die ersten zwei Zeichen der AGS enthalten die Länderkennung 
   mutate(id = str_sub(id_lk,1,2)) %>% 
   # Tabelle Erst- und Zweitimpfungen nach Land und Altersgruppe  
@@ -227,7 +231,9 @@ bl_2_df <- lk_tbl %>%
   group_by(id) %>% 
   # Datum und Landkreis interessieren uns nicht; wir wollen Gesamtsummen
   select(-Datum,-id_lk) %>% 
-  summarize_all(sum, na.rm=TRUE) %>% 
+  summarize_all(sum, na.rm=TRUE) 
+
+bl_2_df <- bl_3_df %>% 
   # Bevölkerung Bundesländer dazuholen - die Tabelle, die oben aus dem 
   # GENESIS-File erstellt wurde
   left_join(bev_bl_df,by="id") %>% 
@@ -237,10 +243,13 @@ bl_2_df <- lk_tbl %>%
          quote_erst_ue60 = `60+_1`/ `60+` * 100,
          quote_zweit_u18 = `12-17_2`/ `12-17` * 100,
          quote_zweit_18_60 = `18-59_2`/ `18-59` * 100,
-         quote_zweit_ue60 = `60+_2`/ `60+` * 100) %>% 
+         quote_zweit_ue60 = `60+_2`/ `60+` * 100,
+         quote_dritt_u18 = `12-17_3`/ `12-17` * 100,
+         quote_dritt_18_60 = `18-59_3`/ `18-59` * 100,
+         quote_dritt_ue60 = `60+_3`/ `60+` * 100) %>% 
   select(id,starts_with("quote_"))
 
-# 
+
 
 
 # Jetzt: Die Tabelle zusammenführen. 
@@ -318,6 +327,9 @@ write_sheet(impf_df,ss=aaa_id,sheet="ImpfenTagestabelle")
 # - quote_zweit_u18
 # - quote_zweit_18_60
 # - quote_zweit_ue60
+# - quote_dritt_u18
+# - quote_dritt_18_60
+# - quote_dritt_ue60
 #
 # - biontech_zweit
 # - moderna_zweit
@@ -368,6 +380,8 @@ range_write(aaa_id, as.data.frame(paste0("+",
   " / +", base::format(impf_df$neu_zweit,
                      big.mark = ".", decimal.mark = ",", nsmall =0))),
   range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
+
+
 dw_publish_chart("OXn7r") # Basisdaten-Seite
 
 
@@ -413,16 +427,48 @@ range_write(aaa_id,as.data.frame(paste0(
   range="Impfzahlen!B4", col_names = FALSE, reformat=FALSE)
 
 
-#Impfquote Ü60 - Zeile 5
+# Auffrischungsimpfungen - Zeile 5
+
+# Erst einmal aus der Ländertabelle isolieren - absolute Zahlen. 
+he_3_df <- bl_3_df %>% 
+  filter(id=="06") %>% 
+  select(ue12_17_3 = `12-17_3`,
+         ue18_59_3 = `18-59_3`,
+         ue60_3 = `60+_3`)
+  
+
+range_write(aaa_id,as.data.frame(
+  format(sum(he_3_df),big.mark = ".",decimal.mark=",")),
+  range="Impfzahlen!A5", col_names = FALSE, reformat=FALSE)
+
+range_write(aaa_id,as.data.frame(paste0("<strong>Auffrischungsimpfungen",
+                                        "</strong> - ",
+                                        format(he_3_df$ue60_3,
+                                               big.mark = ".",
+                                               decimal.mark = ","),
+                                        " über 60-Jährige, ",
+                                        format(he_3_df$ue18_59_3,
+                                               big.mark = ".",
+                                               decimal.mark = ","),
+                                        " 18-59-Jährige, ",
+                                        format(he_3_df$ue12_17_3,
+                                               big.mark = ".",
+                                               decimal.mark = ","),
+                                        " 12-17-Jährige ")),
+            range="Impfzahlen!B5", col_names = FALSE, reformat=FALSE)
+
+
+
+#Impfquote Ü60 - Zeile 6
 range_write(aaa_id,as.data.frame(paste0(
   format(impf_df$quote_erst_ue60,big.mark = ".",decimal.mark=","),
   "% / ",format(impf_df$quote_zweit_ue60,big.mark = ".",decimal.mark=","),"%")),
-  range="Impfzahlen!A5", col_names = FALSE, reformat=FALSE)
+  range="Impfzahlen!A6", col_names = FALSE, reformat=FALSE)
 
 range_write(aaa_id,as.data.frame(paste0("der <strong>besonders gefährdeten Menschen über 60",
                                         "</strong>",
                                         " sind inzwischen erst-/durchgeimpft.")),
-  range="Impfzahlen!B5", col_names = FALSE, reformat=FALSE)
+  range="Impfzahlen!B6", col_names = FALSE, reformat=FALSE)
 
 
 faelle_df <- read_sheet(aaa_id,sheet="Fallzahl4Wochen")
@@ -536,6 +582,7 @@ archiv_tabelle$personen[archiv_tabelle$am==lastdate] <- impf_df$personen
 archiv_tabelle$personen_durchgeimpft[archiv_tabelle$am==lastdate] <- impf_df$durchgeimpft
 archiv_tabelle$differenz_zum_vortag_erstimpfung[archiv_tabelle$am==lastdate] <- impf_df$neu
 archiv_tabelle$differenz_zum_vortag_zweitimpfung[archiv_tabelle$am==lastdate] <- impf_df$neu_zweit
+archiv_tabelle$differenz_zum_vortag_drittimpfung[archiv_tabelle$am==lastdate] <- impf_df$neu_dritt
 archiv_tabelle$impfquote[archiv_tabelle$am==lastdate] <- impf_df$quote_erst
 archiv_tabelle$durchgeimpft_quote[archiv_tabelle$am==lastdate] <- impf_df$quote_zweit
 archiv_tabelle$biontech[archiv_tabelle$am==lastdate] <- impf_df$biontech_erst
@@ -546,6 +593,10 @@ archiv_tabelle$janssen[archiv_tabelle$am==lastdate] <- impf_df$janssen
 archiv_tabelle$biontech_zweit[archiv_tabelle$am==lastdate] <- impf_df$biontech_zweit
 archiv_tabelle$moderna_zweit[archiv_tabelle$am==lastdate] <- impf_df$moderna_zweit
 archiv_tabelle$az_zweit[archiv_tabelle$am==lastdate] <- impf_df$az_zweit
+# Und die erst ab 1.9.:
+archiv_tabelle$biontech_dritt[archiv_tabelle$am==lastdate] <- impf_df$biontech_dritt
+archiv_tabelle$moderna_dritt[archiv_tabelle$am==lastdate] <- impf_df$moderna_dritt
+archiv_tabelle$az_dritt[archiv_tabelle$am==lastdate] <- impf_df$az_dritt
 
 # archiv_tabelle$impfdosen[archiv_tabelle$am==lastdate] <- impf_df$neu+impf_df$neu_zweit
 # Impfdosen kumulativ: Alle Impfstoffe, alle Impfungen
@@ -714,6 +765,8 @@ sec$text(paste0("<h4>",format(impf_df$quote_erst,decimal.mark=",",big.mark=".",
 
 sec$add_fact("Erstgeimpfte: ",format(impf_df$personen,decimal.mark=",",big.mark="."))
 sec$add_fact("Zweitgeimpfte: ",format(impf_df$durchgeimpft,decimal.mark=",",big.mark="."))
+sec$add_fact("Nachgeimpfte",format(sum(he_3_df),big.mark=".",decimal.mark=","))
+
 sec$add_fact(paste0("Erstimpfungen ",format.Date(i_d_max,"%d.%m.:")),
              format(impf_df$neu,decimal.mark=",",big.mark="."))
 sec$add_fact(paste0("Zweitimpfungen ",format.Date(i_d_max,"%d.%m.:")),

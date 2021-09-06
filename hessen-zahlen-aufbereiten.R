@@ -999,7 +999,7 @@ if (ts %in% ArchivKreisGenesen_df$Datum) {
 write_sheet(ArchivKreisGenesen_df,ss=aaa_id, sheet="ArchivKreisGenesen")
 write_csv2(ArchivKreisGenesen_df,"daten/ArchivKreisGenesen.csv")
 
-# ---- Aufbereitung Alter und Geschlecht Aktive/Tote ----
+# ---- Aufbereitung Alter und Geschlecht Neufälle/Tote ----
 
 # Tabelle Altersgruppen/Population einlesen
 
@@ -1049,19 +1049,20 @@ altersgruppen_df <- read_delim("index/12411-04-02-4-B.csv",
 
 neu7tage_df <- rki_he_df %>%
   filter(NeuerFall %in% c(0,1)) %>%
-  # Neufälle der letzten 7 Tage
+  # Neufälle der letzten 7 Tage: neuestes Meldedatum und die sechs davor
+  mutate(Meldedatum = as_date(Meldedatum)) %>% 
   filter(Meldedatum > heute-8) %>%
   
   # filter(NeuGenesen %in% c(0,1)) %>%
   # Alter unbekannt? Ausfiltern. 
   filter(str_detect(Altersgruppe,"A[0-9]")) %>% 
   # Genesene und Todesfälle ausfiltern - nur aktive Fälle
-  # filter(AnzahlGenesen == 0) %>%              #
+  # filter(AnzahlGenesen == 0) %>%              
   # filter(AnzahlTodesfall == 0) %>%
   group_by(Altersgruppe, Geschlecht) %>%
   summarize(AnzahlFall = sum(AnzahlFall)) %>%
   pivot_wider(names_from = Geschlecht, values_from = AnzahlFall,values_fill=0) %>%
-  select(Altersgruppe, männlich = M, weiblich = W) %>%
+  select(Altersgruppe, männlich = M, weiblich = W, unbekannt) %>%
   ungroup()
 
 # Berechne Inzidenzen für die Altersgruppen
@@ -1071,7 +1072,7 @@ neu7tage_df <- rki_he_df %>%
 # Inzidenzen für Altersgruppen berechnen
 neu7tage_df <- neu7tage_df %>%
   right_join(altersgruppen_df, by= c("Altersgruppe"="Altersgruppe")) %>%
-  mutate(Inzidenz = (männlich+weiblich)/pop*100000) %>%
+  mutate(Inzidenz = (männlich+weiblich+unbekannt)/pop*100000) %>%
   mutate(Altersgruppe = paste0(str_replace_all(Altersgruppe,"A","")," Jahre")) %>%
   select(Altersgruppe, männlich, weiblich, Inzidenz) # Spalte pop wieder rausnehmen
 

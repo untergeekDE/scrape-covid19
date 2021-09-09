@@ -66,6 +66,7 @@ Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umg
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog:
+* 9.9.: Anpassung an zusätzliche Impftabellen-Spalten
 * 6.9.: Bugfix - Fälle ohne Geschlecht wurden bei der Inzidenzberechnung nach Alter nicht berücksichtigt
 * 3.9.: Drittimpfungen (Auffrischungsimpfungen) integriert
 * 3.9.: Altersgruppengröße aus DESTATIS-Datei 12411-4-2-4 berechnen, um besser an geänderte Daten anpassen zu können (nicht mehr aus Google Sheet ziehen)

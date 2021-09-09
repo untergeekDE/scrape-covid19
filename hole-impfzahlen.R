@@ -8,7 +8,7 @@
 # Datenquelle auslesen, die Excel-Datei mit dem "Digitalen Impfquotenmonitoring auf rki.de -
 # ...mit allen ihren Schwierigkeiten und Risiken. 
 
-# Stand: 24.8.2021
+# Stand: 9.9.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -134,18 +134,18 @@ tabelle3 <- read.xlsx(rki_xlsx_url,sheet=3)
 # Zeitreihe Impfungen bundesweit
 tabelle4 <- read.xlsx(rki_xlsx_url,sheet=4)
 
-# Tabelle 2 aufarbeiten
+# Tabelle 2 aufarbeiten - Spaltennamen letztmals angepasst 9.9.2021
 impfquoten_xlsx_df <- tabelle2 %>% 
                                    select(ID=1,
                                           impfdosen = 3, 
-                                          quote_erst = 6,
-                                          quote_erst_u18 = 7,
-                                          quote_erst_18_60 =8, 
-                                          quote_erst_ue60 = 9,
-                                          quote_zweit = 10,
-                                          quote_zweit_u18 = 11,
-                                          quote_zweit_18_60 = 12,
-                                          quote_zweit_ue60 =13) %>%
+                                          quote_erst = 7,
+                                          quote_erst_u18 = 8,
+                                          quote_erst_18_60 =10, 
+                                          quote_erst_ue60 = 11,
+                                          quote_zweit = 12,
+                                          quote_zweit_u18 = 13,
+                                          quote_zweit_18_60 = 15,
+                                          quote_zweit_ue60 =16) %>%
                                    filter(as.numeric(ID) %in% 1:16)
 
 # ---- Länder-Vergleichstabelle erstellen ----
@@ -427,7 +427,23 @@ range_write(aaa_id,as.data.frame(paste0(
   range="Impfzahlen!B4", col_names = FALSE, reformat=FALSE)
 
 
-# Auffrischungsimpfungen - Zeile 5
+
+#Impfquote Ü60 - Zeile 5
+range_write(aaa_id,as.data.frame(paste0(
+  format(impf_df$quote_erst_ue60,big.mark = ".",decimal.mark=","),
+  "% / ",format(impf_df$quote_zweit_ue60,big.mark = ".",decimal.mark=","),"%")),
+  range="Impfzahlen!A5", col_names = FALSE, reformat=FALSE)
+
+range_write(aaa_id,as.data.frame(paste0("der <strong>besonders gefährdeten Menschen über 60",
+                                        "</strong>",
+                                        " sind inzwischen erst-/durchgeimpft.")),
+  range="Impfzahlen!B5", col_names = FALSE, reformat=FALSE)
+
+
+faelle_df <- read_sheet(aaa_id,sheet="Fallzahl4Wochen")
+impf_tabelle <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen") %>% filter(am <= today()-14)
+
+# Auffrischungsimpfungen - Zeile 6
 
 # Erst einmal aus der Ländertabelle isolieren - absolute Zahlen. 
 he_3_df <- bl_3_df %>% 
@@ -435,11 +451,11 @@ he_3_df <- bl_3_df %>%
   select(ue12_17_3 = `12-17_3`,
          ue18_59_3 = `18-59_3`,
          ue60_3 = `60+_3`)
-  
+
 
 range_write(aaa_id,as.data.frame(
   format(sum(he_3_df),big.mark = ".",decimal.mark=",")),
-  range="Impfzahlen!A5", col_names = FALSE, reformat=FALSE)
+  range="Impfzahlen!A6", col_names = FALSE, reformat=FALSE)
 
 range_write(aaa_id,as.data.frame(paste0("<strong>Auffrischungsimpfungen",
                                         "</strong> - ",
@@ -455,24 +471,10 @@ range_write(aaa_id,as.data.frame(paste0("<strong>Auffrischungsimpfungen",
                                                big.mark = ".",
                                                decimal.mark = ","),
                                         " 12-17-Jährige ")),
-            range="Impfzahlen!B5", col_names = FALSE, reformat=FALSE)
+            range="Impfzahlen!B6", col_names = FALSE, reformat=FALSE)
 
 
 
-#Impfquote Ü60 - Zeile 6
-range_write(aaa_id,as.data.frame(paste0(
-  format(impf_df$quote_erst_ue60,big.mark = ".",decimal.mark=","),
-  "% / ",format(impf_df$quote_zweit_ue60,big.mark = ".",decimal.mark=","),"%")),
-  range="Impfzahlen!A6", col_names = FALSE, reformat=FALSE)
-
-range_write(aaa_id,as.data.frame(paste0("der <strong>besonders gefährdeten Menschen über 60",
-                                        "</strong>",
-                                        " sind inzwischen erst-/durchgeimpft.")),
-  range="Impfzahlen!B6", col_names = FALSE, reformat=FALSE)
-
-
-faelle_df <- read_sheet(aaa_id,sheet="Fallzahl4Wochen")
-impf_tabelle <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen") %>% filter(am <= today()-14)
 
 fehlen_str = paste0("Noch nicht geimpft in Hessen:<ul><br>- ",
                     format(100-impf_df$quote_erst_ue60,big.mark=".",decimal.mark = ",",digits = 3),
@@ -667,6 +669,7 @@ if (wday(impftempo_df$Datum[n]) > 1) {
 
 dw_data_to_chart(impftempo_df %>% select(-woche),"Lch5F")
 dw_publish_chart("Lch5F")
+write_sheet(impftempo_df,ss=aaa_id,sheet="Impftempo wochenweise")
 
 # ---- Baue eine Gesamt-Tabelle mit den vorliegenden Impfdaten ----
 

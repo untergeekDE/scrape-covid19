@@ -8,7 +8,7 @@
 # Datenquelle auslesen, die Excel-Datei mit dem "Digitalen Impfquotenmonitoring auf rki.de -
 # ...mit allen ihren Schwierigkeiten und Risiken. 
 
-# Stand: 24.8.2021
+# Stand: 9.9.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -134,18 +134,18 @@ tabelle3 <- read.xlsx(rki_xlsx_url,sheet=3)
 # Zeitreihe Impfungen bundesweit
 tabelle4 <- read.xlsx(rki_xlsx_url,sheet=4)
 
-# Tabelle 2 aufarbeiten
+# Tabelle 2 aufarbeiten - Spaltennamen letztmals angepasst 9.9.2021
 impfquoten_xlsx_df <- tabelle2 %>% 
                                    select(ID=1,
                                           impfdosen = 3, 
-                                          quote_erst = 6,
-                                          quote_erst_u18 = 7,
-                                          quote_erst_18_60 =8, 
-                                          quote_erst_ue60 = 9,
-                                          quote_zweit = 10,
-                                          quote_zweit_u18 = 11,
-                                          quote_zweit_18_60 = 12,
-                                          quote_zweit_ue60 =13) %>%
+                                          quote_erst = 7,
+                                          quote_erst_u18 = 8,
+                                          quote_erst_18_60 =10, 
+                                          quote_erst_ue60 = 11,
+                                          quote_zweit = 12,
+                                          quote_zweit_u18 = 13,
+                                          quote_zweit_18_60 = 15,
+                                          quote_zweit_ue60 =16) %>%
                                    filter(as.numeric(ID) %in% 1:16)
 
 # ---- Länder-Vergleichstabelle erstellen ----
@@ -667,6 +667,7 @@ if (wday(impftempo_df$Datum[n]) > 1) {
 
 dw_data_to_chart(impftempo_df %>% select(-woche),"Lch5F")
 dw_publish_chart("Lch5F")
+write_sheet(impftempo_df,ss=aaa_id,sheet="Impftempo wochenweise")
 
 # ---- Baue eine Gesamt-Tabelle mit den vorliegenden Impfdaten ----
 

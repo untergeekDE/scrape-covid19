@@ -499,7 +499,8 @@ range_write(aaa_id,as.data.frame(datumsstring),range="Basisdaten!A2",
             col_names = FALSE, reformat=FALSE)
 
 # Neufälle heute (Zeile 3)
-#range_write(aaa_id,as.data.frame('neue Fälle'),range="Basisdaten!A3")
+# range_write braucht einen col_names=FALSE Parameter, um nicht zwei Zeilen vollzuschreiben
+range_write(aaa_id,as.data.frame("Neufälle heute"),range="Basisdaten!A3", col_names=FALSE)
 range_write(aaa_id,as.data.frame(faelle_neu),
             range="Basisdaten!B3", col_names = FALSE, reformat=FALSE)
 
@@ -509,17 +510,15 @@ range_write(aaa_id,as.data.frame(faelle_neu),
 # zu den 7 Tagen davor aus den korrigierten Daten nach Meldedatum. 
 
 
-# Neufälle letzte 7 Tage - (Zeile 4)
+# Neufälle letzte 7 Tage mit Vergleich (Zeile 4)
 # **ACHTUNG** Berechnung nach Meldedatum, nicht aus den gemeldeten "Briefkastendaten" der Neufälle
-#range_write(aaa_id,as.data.frame("letzte 7 Tage (pro 100.000)"),range="Basisdaten!A4")
+range_write(aaa_id,as.data.frame("Neufälle 7 Tage (Diff. Vorwoche)"),range="Basisdaten!A4", col_names=FALSE)
 steigerung_7t=sum(f28_df$AnzahlFall[22:28])
 steigerung_7t_inzidenz <- round(steigerung_7t/sum(kreise$pop)*100000,1)
-range_write(aaa_id,as.data.frame(steigerung_7t),
-            range="Basisdaten!B4", col_names = FALSE, reformat=FALSE)
 
-# Vergleich Vorwoche (Zeile 5)
-#range_write(aaa_id,as.data.frame("Vergleich Vorwoche"),range="Basisdaten!A5")
+# Vergleichzahlen Vorwoche berechnen
 steigerung_7t_vorwoche <- sum(f28_df$AnzahlFall[15:21])
+# prozentuale Veränderung bestimmt den farbigen Marker
 steigerung_prozent_vorwoche <- (steigerung_7t/steigerung_7t_vorwoche*100)-100
 
 trend_string <- "&#9632;"
@@ -533,69 +532,79 @@ if (steigerung_prozent_vorwoche > 50) # stark gestiegen
   trend_string <- "<b style='color:#cc1a14'>&#9650;&#9650;</b><!--stark gestiegen-->"
 
 range_write(aaa_id,as.data.frame(
-  paste0(format(steigerung_7t_vorwoche,big.mark = ".", decimal.mark = ",", nsmall =0),
-         " (",ifelse(steigerung_7t-steigerung_7t_vorwoche > 0,"+",""),
-         format(steigerung_7t - steigerung_7t_vorwoche,big.mark = ".", decimal.mark = ",", nsmall =0),
+  paste0(format(steigerung_7t,big.mark = ".", decimal.mark = ","),
+         " (",
+         # Veränderung mit Trend-Symbolmarker
+         format(steigerung_7t - steigerung_7t_vorwoche,big.mark = ".", decimal.mark = ","),
          trend_string,")")),
-            range="Basisdaten!B5", col_names = FALSE, reformat=FALSE)
-
+            range="Basisdaten!B4", col_names = FALSE, reformat=FALSE)
 
 # Wachstumsrate durch Inzidenz ersetzt
 # Durchschnitt der letzten 7 Steigerungsraten (in fall4w_df sind die letzten 4 Wochen)
 #steigerung_prozent <- round(mean(fall4w_df$steigerung[22:28]) * 100,1)
 #v_zeit <- round(log(2)/log(1+mean(fall4w_df$steigerung[22:28])),1)
 
-# Inzidenz (Zeile 6)
+# Inzidenz (Zeile 5)
 
+range_write(aaa_id,as.data.frame("7-Tage-Inzidenz"),range="Basisdaten!A5",col_names=FALSE)
 range_write(aaa_id,as.data.frame(format(steigerung_7t_inzidenz,big.mark = ".",decimal.mark=",",nsmall=1)),
-            range="Basisdaten!B6", col_names = FALSE, reformat=FALSE)
+            range="Basisdaten!B5", col_names = FALSE, reformat=FALSE)
 
-# Gesamt und aktiv (Zeile 7)
-# range_write(aaa_id,as.data.frame(paste0("Fälle gesamt/aktiv")),range="Basisdaten!A7")
+
+# DIVI-Corona-Intensivfälle (Zeile 6)
+# wird vom DIVI-Skript gegen 12 Uhr 30 aktualisiert
+
+# Fälle aber einlesen, um Warnstufen-String generieren zu können
+divi_df <- read_csv("archiv/divi_hessen_archiv.csv")
+divi_stand <- last(divi_df$Datum)
+# Fälle Erwachsene Hessen
+divi_faelle <- last(divi_df$faelle_covid_aktuell)
+
+# Hospitalisierungsinzidenz Hessen (Zeile 7)
+# derzeit nur statisch - wir warten darauf, dass es vom RKI Daten dazu im Github gibt.
+
+range_write(aaa_id,as.data.frame("Hospitalisierungs-Inzidenz"),range="Basisdaten!A7",col_names=FALSE)
+# Link auf den Erklärkasten
+range_write(aaa_id,as.data.frame(paste0(
+ # "<a href='https://www.hessenschau.de/panorama/infografik-wo-sich-corona-ausbreitet---und-wie-schnell,corona-infektionen-hessen-karte-100.html#HInzidenz'>",
+  "(*)")),
+  range="Basisdaten!B7",col_names=FALSE)
+
+# Wert hart setzen für spätere Abfrage
+h_inzidenz <- 2.5
+
+
+# Corona-Warnstufe (Zeile 8)
+range_write(aaa_id,as.data.frame("Corona-Warnstufe Hessen"),range="Basisdaten!A8",col_names=FALSE)
+warnstufe_str <- case_when(
+  (h_inzidenz >= 8 | divi_faelle >= 200) ~ "<b style='background:#ff5c00; color:white; padding:1px 4px'>Stufe 1</b>",
+  (h_inzidenz >= 15 | divi_faelle >= 400) ~ "<b style='background:#cc1a14; color:white; padding:1px 4px'>Stufe 2</b>", 
+  TRUE ~ "--")
+range_write(aaa_id,as.data.frame(warnstufe_str),range="Basisdaten!B8",col_names=FALSE)
+
+
+
+# AUSKOMMENTIERT - lass das dem hole-impfzahlen.R-Skript: 
+# # Immunisiert und geimpft (Zeile 9+10)
+# 
+
+# Gesamt und aktiv (Zeile 11)
+range_write(aaa_id,as.data.frame("Fälle gesamt (aktiv)"),range="Basisdaten!A11",col_names=FALSE)
 aktiv_str <- format(round((faelle_gesamt-genesen_gesamt-tote_gesamt)/100) * 100,
                     big.mark = ".", decimal.mark = ",", nsmall =0)
 range_write(aaa_id,as.data.frame(paste0(format(faelle_gesamt,big.mark = ".", decimal.mark = ",", nsmall =0),
-                                           " (ca. ",aktiv_str,")")),
-            range="Basisdaten!B7", col_names = FALSE, reformat=FALSE)
+                                           " (~",aktiv_str,")")),
+            range="Basisdaten!B11", col_names = FALSE, reformat=FALSE)
 
-# AUSKOMMENTIERT - lass das dem hole-impfzahlen.R-Skript: 
-# # Immunisiert und geimpft (Zeile 8 und 9)
-# 
-# msg("Impfzahlen und Immunisierungsquote")
-# # Geimpft (Zeile 8)
-# impfen_df <- read_sheet(ss=aaa_id,sheet = "ArchivImpfzahlen") %>%
-#   filter(am == max(am))
-# range_write(aaa_id,as.data.frame(paste0("Geimpft (",
-#                                         format.Date(impfen_df$am,"%d.%m."),")")),
-#             range="Basisdaten!A8",col_names=FALSE,reformat=FALSE)
-# range_write(aaa_id, as.data.frame(paste0(
-#   format(impfen_df$personen,big.mark=".",decimal.mark = ","),
-#   " (+", format(impfen_df$differenz_zum_vortag_erstimpfung,big.mark = ".", decimal.mark = ",", nsmall =0),
-#   ")")),
-#   range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
-# 
-# # Immun (Zeile 9)
-# impf_alt_df <- read_sheet(ss=aaa_id,sheet="ArchivImpfzahlen") %>% filter(am <= today()-14)
-# immun <- max(as.numeric(impf_alt_df$personen)) + genesen_gesamt
-# hessen=sum(read.xlsx("index/kreise-index-pop.xlsx") %>% select(pop))
-# 
-# range_write(aaa_id,as.data.frame("Immunisiert sind ca. "),range="Basisdaten!A9", col_names=FALSE,reformat=FALSE)
-# immun_str <- paste0(format(round(immun/hessen*100,1),
-#                            big.mark = ".", decimal.mark = ",", nsmall =0),
-#                     " %")
-# range_write(aaa_id,as.data.frame(immun_str),
-#             range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
-
-
-# Todesfälle heute (Zeile 10)
-#range_write(aaa_id,as.data.frame("neue Todesfälle"),range="Basisdaten!A10")
+# Todesfälle heute (Zeile 12)
+range_write(aaa_id,as.data.frame("Todesfälle gestern"),range="Basisdaten!A12",col_names=FALSE)
 range_write(aaa_id,as.data.frame(tote_neu),
-            range="Basisdaten!B10",col_names = FALSE, reformat=FALSE)
+            range="Basisdaten!B12",col_names = FALSE, reformat=FALSE)
 
-# Todesfälle gesamt (Zeile 11)
-#range_write(aaa_id,as.data.frame("Todesfälle gesamt"),range="Basisdaten!A11")
+# Todesfälle gesamt (Zeile 13)
+range_write(aaa_id,as.data.frame("Todesfälle gesamt"),range="Basisdaten!A13",col_names=FALSE)
 range_write(aaa_id,as.data.frame(format(tote_gesamt,big.mark=".",decimal.mark = ",")),
-            range="Basisdaten!B11",
+            range="Basisdaten!B13",
             col_names = FALSE,reformat=FALSE)
 
 # ---- Update der Prognose-Sheets NeuPrognose und ICUPrognose ----
@@ -1367,7 +1376,7 @@ msg("Alle Datawrapper-Grafiken aktualisiert.")
 # Dies Skript erstellt und aktualisiert die Ampel-Tabelle aus den Archivdaten
 source("./berechne-notbremse.R")
 
-# ---- Experimentell: Generiere Infokarte in Teams ----
+# ---- Generiere Infokarte in Teams ----
 
 # Legt eine Karte mit den aktuellen Kennzahlen im Teams-Team "hr-Datenteam", 
 # Channel "Corona" an. 

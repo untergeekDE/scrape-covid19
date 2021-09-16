@@ -351,12 +351,12 @@ janssen_neu <- sum(bl_tbl %>%
 
 # ---- Basisdaten-Seite anpassen und aktualisieren ----
 msg("Impfzahlen und Immunisierungsquote")
-# Geimpft mit Quote und Datum (Zeile 8)
+# Geimpft mit Quote und Datum (Zeile 9)
 range_write(aaa_id,as.data.frame(paste0("Geimpft ",
                                         # "(",
                                         # format.Date(i_d,"%d.%m."),", 8 Uhr)"
                                         "")),
-            range="Basisdaten!A8",col_names=FALSE,reformat=FALSE)
+            range="Basisdaten!A9",col_names=FALSE,reformat=FALSE)
 
 range_write(aaa_id, as.data.frame(paste0(
   # kumulativ: Erstgeimpfte 
@@ -365,13 +365,13 @@ range_write(aaa_id, as.data.frame(paste0(
   " (", base::format(impf_df$quote_erst,
                 big.mark = ".", decimal.mark = ",", nsmall =0,digits=4),
   "%)")),
-  range="Basisdaten!B8", col_names = FALSE, reformat=FALSE)
+  range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
 
 # Neu dazugekommen
 range_write(aaa_id,as.data.frame(
-  paste0("Erst-/Zweitimpfungen ",
+  paste0("Erst-, Zweitimpfungen ",
          format.Date(i_d_max,"%d.%m."))),
-            range="Basisdaten!A9",col_names=FALSE,reformat=FALSE)
+            range="Basisdaten!A10",col_names=FALSE,reformat=FALSE)
 
 range_write(aaa_id, as.data.frame(paste0("+",
   # neu erstgeimpft
@@ -379,7 +379,7 @@ range_write(aaa_id, as.data.frame(paste0("+",
   # neu zweitgeimpft (ohne Janssen!)
   " / +", base::format(impf_df$neu_zweit,
                      big.mark = ".", decimal.mark = ",", nsmall =0))),
-  range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
+  range="Basisdaten!B10", col_names = FALSE, reformat=FALSE)
 
 
 dw_publish_chart("OXn7r") # Basisdaten-Seite

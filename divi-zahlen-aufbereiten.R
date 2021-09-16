@@ -1,11 +1,15 @@
 ################ divi-zahlen-aufbereiten.R
 #
 # Liest die täglich um 12.15h bereitgestellte DIVI-Datensatz-Datei
-# mit den regionalen Daten aus und bereitet sie in die Auslastungs- 
-# und 
+# mit den regionalen Daten aus und bereitet sie auf.
+#
+# Daten im Hauptdokument werden aktualisiert: 
+# - Basisdaten (Covid-Intensivpatienten)
+# - Altersaufschlüsselung Intensivpatienten national
+# - Intensiv-Statistiken
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 31.3.2020
+# Stand: 16.9.2021
 
 
 
@@ -48,6 +52,17 @@ while (OLD_DATA) {
     break
   }
 }
+
+
+
+# Aktuelle Tagesdaten-CSV
+# Auszug des DIVI-Intensivregisters: Aggregation der aktuellsten Meldungen nach Landkreis
+aktuelle_daten <- divi_kreise_df %>% 
+      filter(str_detect(AGS,"^06"))
+faelle_covid_aktuell <- sum(aktuelle_daten$faelle_covid_aktuell)
+faelle_covid_aktuell_beatmet <- sum(aktuelle_daten$faelle_covid_aktuell_invasiv_beatmet)
+betten_frei <- sum(aktuelle_daten$betten_frei_nur_erwachsen)
+
 
 # ...und ins Archiv: 
 write.csv(divi_kreise_df, format(Sys.time(), "archiv/divi_kreise_%Y%m%d.csv"), fileEncoding = "UTF-8", row.names = F)
@@ -201,8 +216,8 @@ if (nur_hessen_df$Datum %in% icu_df$datum) {
 icu_df <- icu_df %>%
   full_join(prognose_df,by = c("datum" = "datum")) %>%
   arrange(datum) %>%
-  #letzte 4 Wochen
-  filter(datum > today()-28) %>%
+  #letzte 12 Wochen
+  filter(datum > today()-84) %>%
   # nächste 28 Tage
   filter(datum < today()+ 14) %>%
   mutate(kapazitaet = max_beds) %>%
@@ -215,7 +230,6 @@ msg("Intensivbetten-Chart-Daten aktualisiert")
 
 # Intensivbetten-Chart pushen
 dw_publish_chart("kc2ot")
-
 
 # ---- Krankenhaus-Einzelmeldungen abrufen und archivieren ----
 
@@ -270,6 +284,77 @@ dh_tbl <- d_tbl %>%
 
 msg("Geputzte Einzelmeldungen archivieren...")
 write.csv(d_tbl, format(Sys.time(), "archiv/divi_%Y%m%d_%H%M.csv"), fileEncoding = "UTF-8", row.names = F)
+
+# ---- Basis-Seite um aktuelle Corona-Fallzahl ergänzen ----
+
+# Todesfälle gesamt (Zeile 13)
+range_write(aaa_id,as.data.frame("Corona-Fälle auf Intensiv"),range="Basisdaten!A6",col_names=FALSE)
+range_write(aaa_id,as.data.frame(format(faelle_covid_aktuell,big.mark=".",decimal.mark = ",")),
+            range="Basisdaten!B6",
+            col_names = FALSE,reformat=FALSE)
+
+# DW-Grafik aktualisieren
+dw_publish_chart(chart_id="OXn7r")
+
+# ---- Altersstruktur-Grafik aktualisieren ----
+
+alter_url <- "https://diviexchange.blob.core.windows.net/%24web/bund-covid-altersstruktur-zeitreihe_ab-2021-04-29.csv"
+
+try(alter_df <- read_csv(url(alter_url)) %>% 
+      filter(Bundesland == "DEUTSCHLAND") %>% 
+      slice_tail() %>% 
+      select(-Datum,-Bundesland) %>% 
+      pivot_longer(cols=everything(),names_to="Altersgruppe",values_to="Anzahl") %>% 
+      mutate(Altersgruppe=str_replace_all(Altersgruppe,"Stratum_","")) %>%
+      mutate(Altersgruppe=str_replace(Altersgruppe,"_Bis_","-")) %>% 
+      mutate(Altersgruppe=str_replace_all(Altersgruppe,"_"," ")) %>% 
+      mutate(Altersgruppe=str_replace_all(Altersgruppe," Plus","+")) %>% 
+      mutate(Altersgruppe=ifelse(Altersgruppe=="17 Minus","0-17",Altersgruppe))
+    ) 
+
+dw_data_to_chart(alter_df,chart_id="Jf7Kw")
+dw_edit_chart(chart_id="Jf7Kw",annotate=paste0("Stand: ",format(ts,"%d.%m.%Y")))
+dw_publish_chart(chart_id="Jf7Kw")
+# ---- Generiere Infokarte in Teams ----
+
+library(teamr)
+library(magick)
+# Legt eine Karte mit den aktuellen Kennzahlen im Teams-Team "hr-Datenteam", 
+# Channel "Corona" an. 
+
+
+# Webhook aus dem Environment lesen, Karte generieren
+cc <- connector_card$new(hookurl = Sys.getenv("WEBHOOK_CORONA"))
+cc$text(paste0("DIVI-Intensivregister, Stand: ",format(ts,"%d.%m.%Y")))
+
+sec <- card_section$new()
+
+sec$text(paste0("<strong>COVID-Intensivpatienten in Hessen: ",
+                format(faelle_covid_aktuell,big.mark = ".",
+                       decimal.mark=",",nsmall=1),
+                "<strong>"))
+sec$add_fact("Freie Betten (nur Erwachsene): ",
+             paste0(format(betten_frei,big.mark=".",
+                           decimal.mark = ",")))
+
+# Wenn du auf dem Server bist: 
+# Importiere eine PNG-Version des Impffortschritts, 
+# schiebe sie auf den Google-Bucket, und 
+# übergib die URL an die Karte. 
+
+
+if (server) {
+  # Google-Bucket befüllen
+  png <- dw_export_chart(chart_id = "kc2ot",type = "png",unit="px",mode="rgb", scale = 1, 
+                         width = 320, height = 550, plain = FALSE)
+  image_write(png,"./png/divi-tmp.png")
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./png/divi-tmp.png gs://d.data.gcp.cloud.hr.de/divi-tmp.png')
+  sec$add_image(sec_image="https://d.data.gcp.cloud.hr.de/divi-tmp.png", sec_title="Intensivbetten und Trend")
+}
+
+# Karte vorbereiten und abschicken. 
+cc$add_section(new_section = sec)
+if(cc$send()) msg("OK, Teams-Karte abgeschickt") else msg("OK")
 
 
 # ---- Alles OK, melde dich ab ----

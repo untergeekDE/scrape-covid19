@@ -287,14 +287,16 @@ write.csv(d_tbl, format(Sys.time(), "archiv/divi_%Y%m%d_%H%M.csv"), fileEncoding
 
 # ---- Basis-Seite um aktuelle Corona-Fallzahl ergänzen ----
 
-# Todesfälle gesamt (Zeile 13)
-range_write(aaa_id,as.data.frame("Corona-Fälle auf Intensiv"),range="Basisdaten!A6",col_names=FALSE)
-range_write(aaa_id,as.data.frame(format(faelle_covid_aktuell,big.mark=".",decimal.mark = ",")),
-            range="Basisdaten!B6",
-            col_names = FALSE,reformat=FALSE)
+# ausgeklammert, weil wir die HMSI-Zahlen nutzen
 
-# DW-Grafik aktualisieren
-dw_publish_chart(chart_id="OXn7r")
+# Corona-Intensivfälle (Zeile 6)
+# range_write(aaa_id,as.data.frame("Fälle auf Intensivstation"),range="Basisdaten!A6",col_names=FALSE)
+# range_write(aaa_id,as.data.frame(format(faelle_covid_aktuell,big.mark=".",decimal.mark = ",")),
+#             range="Basisdaten!B6",
+#             col_names = FALSE,reformat=FALSE)
+# 
+# # DW-Grafik aktualisieren
+# dw_publish_chart(chart_id="OXn7r")
 
 # ---- Altersstruktur-Grafik aktualisieren ----
 

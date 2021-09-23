@@ -67,6 +67,7 @@ Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Dat
 
 ### Changelog:
 
+* 23.9.: Python-Scraper kümmert sich jetzt um Hospitalisierung und Krankenhauszahlen vom HMSI
 * 16.9.: Die (unsinnige) Kenngröße "Hospitalisierungsinzidenz" vorbereitet; Basisdaten umgestellt; neue Grafik in divi-zahlen-aufbereiten.R: Altersschichtung auf den Intensivstationen
 * 9.9.: Anpassung an zusätzliche Impftabellen-Spalten
 * 6.9.: Bugfix - Fälle ohne Geschlecht wurden bei der Inzidenzberechnung nach Alter nicht berücksichtigt

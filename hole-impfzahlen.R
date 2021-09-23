@@ -353,8 +353,9 @@ janssen_neu <- sum(bl_tbl %>%
 msg("Impfzahlen und Immunisierungsquote")
 # Geimpft mit Quote und Datum (Zeile 9)
 range_write(aaa_id,as.data.frame(paste0("Geimpft ",
-                                        # "(",
-                                        # format.Date(i_d,"%d.%m."),", 8 Uhr)"
+                                         "(",
+                                         format.Date(i_d,"%d.%m."),
+                                        ", 8 Uhr)",
                                         "")),
             range="Basisdaten!A9",col_names=FALSE,reformat=FALSE)
 

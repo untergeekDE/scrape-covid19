@@ -550,38 +550,9 @@ range_write(aaa_id,as.data.frame("7-Tage-Inzidenz"),range="Basisdaten!A5",col_na
 range_write(aaa_id,as.data.frame(format(steigerung_7t_inzidenz,big.mark = ".",decimal.mark=",",nsmall=1)),
             range="Basisdaten!B5", col_names = FALSE, reformat=FALSE)
 
-
-# DIVI-Corona-Intensivfälle (Zeile 6)
-# wird vom DIVI-Skript gegen 12 Uhr 30 aktualisiert
-
-# Fälle aber einlesen, um Warnstufen-String generieren zu können
-divi_df <- read_csv("archiv/divi_hessen_archiv.csv")
-divi_stand <- last(divi_df$Datum)
-# Fälle Erwachsene Hessen
-divi_faelle <- last(divi_df$faelle_covid_aktuell)
-
-# Hospitalisierungsinzidenz Hessen (Zeile 7)
-# derzeit nur statisch - wir warten darauf, dass es vom RKI Daten dazu im Github gibt.
-
-range_write(aaa_id,as.data.frame("Hospitalisierungs-Inzidenz"),range="Basisdaten!A7",col_names=FALSE)
-# Link auf den Erklärkasten
-range_write(aaa_id,as.data.frame(paste0(
- # "<a href='https://www.hessenschau.de/panorama/infografik-wo-sich-corona-ausbreitet---und-wie-schnell,corona-infektionen-hessen-karte-100.html#HInzidenz'>",
-  "(*)")),
-  range="Basisdaten!B7",col_names=FALSE)
-
-# Wert hart setzen für spätere Abfrage
-h_inzidenz <- 2.5
-
-
-# Corona-Warnstufe (Zeile 8)
-range_write(aaa_id,as.data.frame("Corona-Warnstufe Hessen"),range="Basisdaten!A8",col_names=FALSE)
-warnstufe_str <- case_when(
-  (h_inzidenz >= 8 | divi_faelle >= 200) ~ "<b style='background:#ff5c00; color:white; padding:1px 4px'>Stufe 1</b>",
-  (h_inzidenz >= 15 | divi_faelle >= 400) ~ "<b style='background:#cc1a14; color:white; padding:1px 4px'>Stufe 2</b>", 
-  TRUE ~ "--")
-range_write(aaa_id,as.data.frame(warnstufe_str),range="Basisdaten!B8",col_names=FALSE)
-
+# Hospitalisierungsinzidenz, Intensiv-Fälle, Hessen-Warnstufe (Zeile 6-8)
+#
+# Wird von Sandras Python-Scraper aktualisiert - nix tun
 
 
 # AUSKOMMENTIERT - lass das dem hole-impfzahlen.R-Skript: 

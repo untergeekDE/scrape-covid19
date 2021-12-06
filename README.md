@@ -67,6 +67,8 @@ Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Dat
 
 ### Changelog:
 
+* 5.12.: Impfdaten-Auswertung endlich auf den Stand der Boosterimpfungen gebracht
+* 2.12.: Bevölkerungsdaten aufbereitet (jetzt Stand 31.12.2020 aus Destatis-Tabelle 12411-04-02-04)
 * 23.9.: Python-Scraper kümmert sich jetzt um Hospitalisierung und Krankenhauszahlen vom HMSI
 * 16.9.: Die (unsinnige) Kenngröße "Hospitalisierungsinzidenz" vorbereitet; Basisdaten umgestellt; neue Grafik in divi-zahlen-aufbereiten.R: Altersschichtung auf den Intensivstationen
 * 9.9.: Anpassung an zusätzliche Impftabellen-Spalten

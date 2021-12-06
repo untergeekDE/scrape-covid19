@@ -1,7 +1,7 @@
 ###################### berechne-notbremse.R ######################
 # Wird vom hessen-zahlen-aufbereiten.R aufgerufen
 #
-# Stand: 22.7.2021
+# Stand: 22.7.2021 - am 3.12. an die neue Regel ">350 = Hotspot"
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 
@@ -222,7 +222,9 @@ inz_work_df$status <- ""
 # Erster Tag der Gültigkeit des Eskalationskonzepts vom 19.7.2021
 he_erster_tag <- as_date("2021-07-22")
 # Grenzwerte 
-for (g in c(35,50,100)) {
+# Ergänzt am 3.12.2021 um den Grenzwert 350 - und eine Regel, die die Kreise dann als
+# "Hotspot" benennt
+for (g in c(35,50,100,350)) {
   for (k in kreise$kreis) {
     inz_work_df <- inz_work_df %>% 
       mutate(status =
@@ -243,7 +245,8 @@ for (g in c(35,50,100)) {
                                    lag(inz,4)>g |
                                    lag(inz,5)>g),
                                  paste0(g,"er-Stufe<.>"),
-                                 status))))
+                                 status)))) %>% 
+      mutate(status = str_replace(status,"350er-Stufe","HOTSPOT"))
   }
 }
 # ---- Ausgabe in Archivtabelle ----

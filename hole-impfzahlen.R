@@ -8,7 +8,7 @@
 # Datenquelle auslesen, die Excel-Datei mit dem "Digitalen Impfquotenmonitoring auf rki.de -
 # ...mit allen ihren Schwierigkeiten und Risiken. 
 
-# Stand: 9.9.2021
+# Stand: 2.12.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -31,19 +31,36 @@ if (file.exists("./server-msg-googlesheet-include.R")) {
 # Altersgruppen: 12-17, 18-59,60+.
 # Ausgangspunkt ist der File aus GENESIS mit der Altersschichtung
 # nach Lebensjahren und Bundesland. 
-# Q: 12411-04-02-4, Stichtag 31.12.2019
-bev_bl_df <- read_delim("index/12411-04-02-4-B.csv", 
+# Q: 12411-04-02-4, Stichtag 31.12.2020
+if (!file.exists("index/pop.rda")) {
+  # Gibt es die Länder-Datei mit den Bevölkerungsschichten schon?
+  pop_df <- read_delim("index/12411-04-02-4.csv", 
                           delim = ";", escape_double = FALSE, 
                           locale = locale(date_names = "de",         
-                          decimal_mark = ",", grouping_mark = ".",
-                          encoding = "ISO-8859-1"), trim_ws=TRUE, 
+                                          decimal_mark = ",", grouping_mark = ".",
+                                          encoding = "ISO-8859-1"), trim_ws=TRUE, 
                           skip = 6,
-                        show_col_types=FALSE) %>%
-  # Länder-ID und Altersgruppen insgesamt/männlich/weiblich nutzen
-  select(id=1,Bundesland=2,ag=3,4:6) %>% 
-  # Datei enthält auch "Insgesamt"-Zeilen mit den Ländersummen - weg damit
-  filter(ag!="Insgesamt") %>% 
+                          show_col_types=FALSE) %>%
+    # Länder-ID und Altersgruppen insgesamt/männlich/weiblich nutzen
+    select(id=1,Name=2,ag=3,4:6) %>% 
+    # Datei enthält auch "Insgesamt"-Zeilen mit den Ländersummen - weg damit
+    filter(ag!="Insgesamt") %>% 
+    # IDs auf Länder- und Kreis-
+    filter((str_length(id)==2 &  str_detect(id,"[01][0-9]")) | str_length(id)==5)
+    # Die lange 12411-04-02-04 auf die Angaben für die Bundesländer eindampfen
+  pop_bl_df <- pop_df %>% filter(str_length(id)==2) 
+  pop_kr_df <- pop_df %>% filter(str_length(id)==5)
+  save(pop_bl_df,pop_kr_df,file = "index/pop.rda")
+} else {
+  # vorbereitete Datenbank mit den Kreis- und Länder-Bevölkerungszahlen nach Altersjahren laden
+  # enthält zwei Dataframes:
+  # jeweils id | Name | ag | Insgesamt | männlich | weiblich 
+  # - pop_bl_df
+  # - pop_kr_df
+  load("index/pop.rda")
+}
   # Altersgruppen; 90 (die höchste) umfasst alle darüber. 
+bev_bl_df <- pop_bl_df %>% 
   mutate(ag = ifelse(str_detect(ag,"^unter"),0,
                     as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
   # Zusätzliche Variable mit der Altersgruppe
@@ -52,7 +69,8 @@ bev_bl_df <- read_delim("index/12411-04-02-4-B.csv",
          ag < 18 ~ "12-17",
          ag < 60 ~"18-59",
          TRUE    ~ "60+")) %>% 
-  select(id,Bundesland,Altersgruppe,Insgesamt) %>% 
+  select(id,Bundesland=Name,Altersgruppe,Insgesamt) %>% 
+  mutate(Insgesamt = as.numeric(Insgesamt)) %>% 
   # Tabelle bauen: Bevölkerung in der jeweiligen Altersgruppe nach BL,
   # Werte aus der Variable aufsummieren. 
   pivot_wider(names_from=Altersgruppe, values_from=Insgesamt,values_fn=sum) %>% 
@@ -60,6 +78,21 @@ bev_bl_df <- read_delim("index/12411-04-02-4-B.csv",
   # "Baden-Württemberg, Land". Korrigiere das. 
   mutate(Bundesland = str_replace(Bundesland,"\\, Land$",""))
   
+bev_kr_df <- pop_kr_df %>% 
+  mutate(ag = ifelse(str_detect(ag,"^unter"),0,
+                     as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
+  # Zusätzliche Variable mit der Altersgruppe
+  mutate(Altersgruppe = case_when(
+    ag < 12 ~ "u12",
+    ag < 18 ~ "12-17",
+    ag < 60 ~"18-59",
+    TRUE    ~ "60+")) %>% 
+  select(id,Kreis=Name,Altersgruppe,Insgesamt) %>% 
+  filter(!is.na(as.numeric(Insgesamt))) %>% 
+  mutate(Insgesamt = as.numeric(Insgesamt,na.rm=T)) %>% 
+  # Tabelle bauen: Bevölkerung in der jeweiligen Altersgruppe nach BL,
+  # Werte aus der Variable aufsummieren. 
+  pivot_wider(names_from=Altersgruppe, values_from=Insgesamt,values_fn=sum)
 
 
 # Bevölkerung nach Altersgruppen, Hessen
@@ -145,7 +178,10 @@ impfquoten_xlsx_df <- tabelle2 %>%
                                           quote_zweit = 12,
                                           quote_zweit_u18 = 13,
                                           quote_zweit_18_60 = 15,
-                                          quote_zweit_ue60 =16) %>%
+                                          quote_zweit_ue60 =16,
+                                          quote_dritt_u18 = 18,
+                                          quote_dritt_18_60 = 20,
+                                          quote_dritt_ue60=21) %>%
                                    filter(as.numeric(ID) %in% 1:16)
 
 # ---- Länder-Vergleichstabelle erstellen ----
@@ -169,7 +205,8 @@ bl_1_df <- bl_tbl %>%
   # Summen Personen und Durchgeimpfte bilden 
   # Wie immer zählt Janssen sowohl als Erst- als auch als Durchimpfung
   mutate(personen = biontech_erst+moderna_erst+az_erst+janssen,
-         durchgeimpft = biontech_zweit+moderna_zweit+az_zweit+janssen) %>% 
+         durchgeimpft = biontech_zweit+moderna_zweit+az_zweit+janssen,
+         geboostert = biontech_dritt+moderna_dritt+az_dritt) %>% 
   # Spalten umsortieren: Summen erst/zweit nach vorne
   relocate(c(personen,durchgeimpft),.after=id) %>% 
   # Bevölkerungszahlen dazuholen
@@ -177,7 +214,8 @@ bl_1_df <- bl_tbl %>%
   mutate(pop=`u12`+`12-17`+`18-59`+`60+`) %>% 
   # Janssen-Impfstoff wieder zweimal zählen - bei Erst- und Durchgeimpften!
   mutate(quote_erst=personen/pop*100,
-         quote_zweit=durchgeimpft/pop*100) %>% 
+         quote_zweit=durchgeimpft/pop*100,
+         quote_dritt=geboostert/pop*100) %>% 
   # Spalten aus der Bevölkerungstabelle wieder raus
   select(-Bundesland,-`u12`,-`12-17`,-`18-59`,-`60+`)
 
@@ -254,8 +292,8 @@ bl_2_df <- bl_3_df %>%
 
 # Jetzt: Die Tabelle zusammenführen. 
 # Die BL-Tabelle, die die Namen der Länder enthält, als Ausgangspunkt,
-# dann Summen nach Wirkstoff Erst/Zweit, 
-# dann Quoten nach Altersgruppe Erst/Zweit
+# dann Summen nach Wirkstoff Erst/Zweit/Dritt, 
+# dann Quoten nach Altersgruppe Erst/Zweit/Dritt
 
 # Tabelle Bundesländer
 
@@ -267,7 +305,7 @@ impfen_alle_df <- bev_bl_df %>%
   select(am,id,Bundesland) %>% 
   # Nach der id sortieren
   arrange(id) %>% 
-  # Neue Erst- und Zweitimpfungen
+  # Neue Erst-, Zweit- und Drittimpfungen
   left_join(bl_n_df, by="id") %>% 
   # Die Tabelle mit den Impfstoffen holen
   left_join(bl_1_df, by="id") %>% 
@@ -368,18 +406,19 @@ range_write(aaa_id, as.data.frame(paste0(
   "%)")),
   range="Basisdaten!B9", col_names = FALSE, reformat=FALSE)
 
-# Neu dazugekommen
+# Geboostert
 range_write(aaa_id,as.data.frame(
-  paste0("Erst-, Zweitimpfungen ",
-         format.Date(i_d_max,"%d.%m."))),
-            range="Basisdaten!A10",col_names=FALSE,reformat=FALSE)
+  paste0("Geboostert ",
+  #       format.Date(i_d_max,"%d.%m."))
+  "")),
+  range="Basisdaten!A10",col_names=FALSE,reformat=FALSE)
 
-range_write(aaa_id, as.data.frame(paste0("+",
-  # neu erstgeimpft
-  base::format(impf_df$neu,big.mark=".",decimal.mark = ","),
-  # neu zweitgeimpft (ohne Janssen!)
-  " / +", base::format(impf_df$neu_zweit,
-                     big.mark = ".", decimal.mark = ",", nsmall =0))),
+range_write(aaa_id, as.data.frame(
+  paste0(base::format(impf_df$quote_dritt,
+               big.mark = ".", decimal.mark = ",", nsmall =0,digits=4),
+         "% (+",
+         base::format(impf_df$neu_dritt,big.mark=".",decimal.mark = ","),
+         ")")),
   range="Basisdaten!B10", col_names = FALSE, reformat=FALSE)
 
 
@@ -408,43 +447,13 @@ range_write(aaa_id,as.data.frame(paste0(
 range_write(aaa_id,as.data.frame(paste0(
   format(impf_df$durchgeimpft,big.mark=".",decimal.mark = ","),
   " (",format(impf_df$quote_zweit,big.mark=".",decimal.mark = ",",digits=4),"%)"
-  )),
-  range="Impfzahlen!A3", col_names = FALSE, reformat=FALSE)
+)),
+range="Impfzahlen!A3", col_names = FALSE, reformat=FALSE)
 
 range_write(aaa_id,as.data.frame(paste0("sind <strong>durchgeimpft</strong>.")),
-  range="Impfzahlen!B3", col_names = FALSE, reformat=FALSE)
+            range="Impfzahlen!B3", col_names = FALSE, reformat=FALSE)
 
-# Neue Impfungen - Zeile 4
-range_write(aaa_id,as.data.frame(paste0(
-  "+",format(impf_df$neu,big.mark = ".",decimal.mark=","),
-  " / +",format(impf_df$neu_zweit,big.mark = ".",decimal.mark=","))),
-  range="Impfzahlen!A4", col_names = FALSE, reformat=FALSE)
-
-
-range_write(aaa_id,as.data.frame(paste0(
-  "<strong>Erstimpfungen / Zweitimpfungen</strong> sind am ",
-  format.Date(impf_df$am,"%d.%m."),
-  " dazugekommen.")),
-  range="Impfzahlen!B4", col_names = FALSE, reformat=FALSE)
-
-
-
-#Impfquote Ü60 - Zeile 5
-range_write(aaa_id,as.data.frame(paste0(
-  format(impf_df$quote_erst_ue60,big.mark = ".",decimal.mark=","),
-  "% / ",format(impf_df$quote_zweit_ue60,big.mark = ".",decimal.mark=","),"%")),
-  range="Impfzahlen!A5", col_names = FALSE, reformat=FALSE)
-
-range_write(aaa_id,as.data.frame(paste0("der <strong>besonders gefährdeten Menschen über 60",
-                                        "</strong>",
-                                        " sind inzwischen erst-/durchgeimpft.")),
-  range="Impfzahlen!B5", col_names = FALSE, reformat=FALSE)
-
-
-faelle_df <- read_sheet(aaa_id,sheet="Fallzahl4Wochen")
-impf_tabelle <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen") %>% filter(am <= today()-14)
-
-# Auffrischungsimpfungen - Zeile 6
+# Auffrischungs-/Boosterimpfungen - Zeile 4
 
 # Erst einmal aus der Ländertabelle isolieren - absolute Zahlen. 
 he_3_df <- bl_3_df %>% 
@@ -455,27 +464,47 @@ he_3_df <- bl_3_df %>%
 
 
 range_write(aaa_id,as.data.frame(
-  format(sum(he_3_df),big.mark = ".",decimal.mark=",")),
+  paste0(format(sum(he_3_df),big.mark = ".",decimal.mark=","),
+         " (",
+         format(impf_df$quote_dritt,big.mark=".",decimal.mark = ",",digits=4),
+         "%)")),
+  range="Impfzahlen!A4", col_names = FALSE, reformat=FALSE)
+
+range_write(aaa_id,as.data.frame(paste0("sind <strong>geboostert",
+                                        "</strong>.")),
+            range="Impfzahlen!B4", col_names = FALSE, reformat=FALSE)
+
+# Neue Impfungen - Zeile 5
+range_write(aaa_id,as.data.frame(paste0(
+  "+",format(impf_df$neu,big.mark = ".",decimal.mark=","),
+  " / +",format(impf_df$neu_zweit,big.mark = ".",decimal.mark=","),
+  " / +",format(impf_df$neu_dritt,big.mark = ".",decimal.mark=","))),
+  range="Impfzahlen!A5", col_names = FALSE, reformat=FALSE)
+
+
+range_write(aaa_id,as.data.frame(paste0(
+  "<strong>Erst- / Zweit- /Boosterimpfungen</strong> sind am ",
+  format.Date(impf_df$am,"%d.%m."),
+  " dazugekommen.")),
+  range="Impfzahlen!B5", col_names = FALSE, reformat=FALSE)
+
+
+
+#Impfquote Ü60 - Zeile 6
+range_write(aaa_id,as.data.frame(paste0(
+  format(impf_df$quote_erst_ue60,big.mark = ".",decimal.mark=","),
+  "% / ",format(impf_df$quote_zweit_ue60,big.mark = ".",decimal.mark=","),
+  "% / ",format(impf_df$quote_dritt_ue60,big.mark = ".",decimal.mark=","),"%")),
   range="Impfzahlen!A6", col_names = FALSE, reformat=FALSE)
 
-range_write(aaa_id,as.data.frame(paste0("<strong>Auffrischungsimpfungen",
-                                        "</strong> - ",
-                                        format(he_3_df$ue60_3,
-                                               big.mark = ".",
-                                               decimal.mark = ","),
-                                        " über 60-Jährige, ",
-                                        format(he_3_df$ue18_59_3,
-                                               big.mark = ".",
-                                               decimal.mark = ","),
-                                        " 18-59-Jährige, ",
-                                        format(he_3_df$ue12_17_3,
-                                               big.mark = ".",
-                                               decimal.mark = ","),
-                                        " 12-17-Jährige ")),
-            range="Impfzahlen!B6", col_names = FALSE, reformat=FALSE)
+range_write(aaa_id,as.data.frame(paste0("der <strong>besonders gefährdeten Menschen über 60",
+                                        "</strong>",
+                                        " sind inzwischen erst-/ durchgeimpft / geboostert.")),
+  range="Impfzahlen!B6", col_names = FALSE, reformat=FALSE)
 
 
-
+faelle_df <- read_sheet(aaa_id,sheet="Fallzahl4Wochen")
+impf_tabelle <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen") %>% filter(am <= today()-14)
 
 fehlen_str = paste0("Noch nicht geimpft in Hessen:<ul><br>- ",
                     format(100-impf_df$quote_erst_ue60,big.mark=".",decimal.mark = ",",digits = 3),
@@ -633,6 +662,7 @@ impftempo_df <- bl_tbl %>%
   summarize(Datum=max(Datum),
             erstgeimpft=sum(`1`,na.rm = TRUE),
             zweitgeimpft=sum(`2`,na.rm = TRUE),
+            geboostert=sum(`3`,na.rm = TRUE),
             p=0) 
 
 # Jetzt ganz stumpf aus dem Trend der letzten 7 Tage im Vergleich zur Vorwoche
@@ -644,10 +674,20 @@ n <- nrow(impftempo_df)
 # nimm das als Prognose, und zieh die schon verimpften Dosen davon ab. 
 # p ist das, was man dann noch anzeigen kann. 
 impftempo_df$p[n] <- round(
-  (impftempo_df$erstgeimpft[n-1]* (impftempo_df$erstgeimpft[n-1]/impftempo_df$erstgeimpft[n-2])) +
-  (impftempo_df$zweitgeimpft[n-1]* (impftempo_df$zweitgeimpft[n-1]/impftempo_df$zweitgeimpft[n-2])) - 
-  (impftempo_df$erstgeimpft[n]+impftempo_df$zweitgeimpft[n]))
-
+  # Erstimpfungen als die Zahl der letzten Woche mal Veränderung zur Vorwoche
+  (impftempo_df$erstgeimpft[n-1] * 
+     (impftempo_df$erstgeimpft[n-1]/impftempo_df$erstgeimpft[n-2])) +
+    # Zweitimpfungen als die Zahl der letzten Woche mal Veränderung zur Vorwoche
+    (impftempo_df$zweitgeimpft[n-1] * 
+     (impftempo_df$zweitgeimpft[n-1]/impftempo_df$zweitgeimpft[n-2])) +
+    # Boosterimpfungen als die Zahl der letzten Woche mal Veränderung zur Vorwoche
+    (impftempo_df$geboostert[n-1] * 
+     (impftempo_df$geboostert[n-1]/impftempo_df$geboostert[n-2])) - 
+    # Abziehen, was schon verimpft wurde in dieser Woche
+  (impftempo_df$erstgeimpft[n]+
+     impftempo_df$zweitgeimpft[n]+
+     impftempo_df$geboostert[n]))
+  
 if (impftempo_df$p[n] < 0) impftempo_df$p[n] <- 0
 
 if (wday(impftempo_df$Datum[n]) > 1) {
@@ -659,9 +699,11 @@ if (wday(impftempo_df$Datum[n]) > 1) {
     Datum = impftempo_df$Datum[n-1]+7,
     erstgeimpft= NULL,
     zweitgeimpft= NULL,
+    geboostert= NULL,
     p = impftempo_df$erstgeimpft[n] +
-                          impftempo_df$zweitgeimpft[n] +
-                          impftempo_df$p[n]))
+      impftempo_df$zweitgeimpft[n] +
+      impftempo_df$geboostert[n] +
+      impftempo_df$p[n]))
 } else {
   # Falls letzter Tag ein Sonntag; Woche abgeschlossen: Prognose auf 0 setzen
   impftempo_df$p[n] <- 0
@@ -764,17 +806,23 @@ sec$text(paste0("<h4>",format(impf_df$quote_erst,decimal.mark=",",big.mark=".",
                 "% mindestens einmal geimpft; ",
                 format(impf_df$quote_zweit,decimal.mark=",",big.mark=".",
                        digits=4),
-                "% durchgeimpft</h4>"))
+                "% zweimal geimpft; ",
+                format(impf_df$quote_dritt,decimal.mark=",",big.mark=".",
+                       digits=4),
+                "% geboostert</h4>"))
   
 
 sec$add_fact("Erstgeimpfte: ",format(impf_df$personen,decimal.mark=",",big.mark="."))
 sec$add_fact("Zweitgeimpfte: ",format(impf_df$durchgeimpft,decimal.mark=",",big.mark="."))
-sec$add_fact("Nachgeimpfte",format(sum(he_3_df),big.mark=".",decimal.mark=","))
+sec$add_fact("Geboosterte: ",format(impf_df$geboostert,decimal.mark=",",big.mark="."))
 
 sec$add_fact(paste0("Erstimpfungen ",format.Date(i_d_max,"%d.%m.:")),
              format(impf_df$neu,decimal.mark=",",big.mark="."))
 sec$add_fact(paste0("Zweitimpfungen ",format.Date(i_d_max,"%d.%m.:")),
              format(impf_df$neu_zweit,decimal.mark=",",big.mark="."))
+sec$add_fact(paste0("Boosterimpfungen ",format.Date(i_d_max,"%d.%m.:")),
+             format(impf_df$neu_dritt,decimal.mark=",",big.mark="."))
+
 sec$add_fact("Impfquote Ü60: ",
              paste0(format(impf_df$quote_erst_ue60,big.mark=".",
                            decimal.mark = ",",digits=4),"%"))

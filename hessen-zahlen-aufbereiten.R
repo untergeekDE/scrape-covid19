@@ -148,7 +148,7 @@ get_esri_status <- function() {
   # Beschreibung des Services: https://www.arcgis.com/home/item.html?id=cd0eda38e31d41259465f9c763de1941  esri_base_url <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/ArcGIS/rest/services/rki_service_status_v/FeatureServer/0/query"
   esri_base_url <- "https://services7.arcgis.com/mOBPykOjAyBO2ZKk/ArcGIS/rest/services/rki_service_status_v/FeatureServer/0/query"
   response <- httr::GET(esri_base_url, 
-                        query = list(f = "json", 
+                        query = list(f = "pjson", 
                                      outfields = "*",
                                      where = "Url='https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/RKI_COVID19/FeatureServer/0'") ) %>% 
     httr::content() %>% jsonlite::fromJSON()  
@@ -173,10 +173,10 @@ read_esri_rki_data <- function(use_json = TRUE) {
   # Wenn ESRI-Datenbank noch nicht OK, warte!
   
   if (use_json) {
-    while(get_esri_status()$Status != "OK") {
-      msg("ESRI-Status: ", get_esri_status()$Status)
-      Sys.sleep(60)
-    }
+  #   while(get_esri_status()$Status != "OK") {
+  #     msg("ESRI-Status: ", get_esri_status()$Status)
+  #     Sys.sleep(60)
+  #   }
     
     # Anmerkung zur Schnittstelle (März 2021):
     # Der Service RKI_COVID19 wird zwar vom Corona-Dashboard der ESRI
@@ -185,14 +185,14 @@ read_esri_rki_data <- function(use_json = TRUE) {
     
     # JSON-Abfrage-Code von Till (danke!)
     # Dokumentation: https://github.com/br-data/corona-deutschland-api/blob/master/RKI-API.md
+    # Demo-Abfrage: https://services7.arcgis.com/mOBPykOjAyBO2ZKk/ArcGIS/rest/services/RKI_COVID19/FeatureServer/0/query?where=1%3D1&objectIds=&time=&resultType=standard&outFields=*&returnIdsOnly=false&returnUniqueIdsOnly=false&returnCountOnly=false&returnDistinctValues=false&cacheHint=true&orderByFields=&groupByFieldsForStatistics=&outStatistics=&having=&resultOffset=&resultRecordCount=&sqlFormat=none&f=pjson&token=
     rki_json_link <- paste0("https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/",
                             "rest/services/RKI_COVID19/FeatureServer/0/query?",
                             "where=1%3D1",            # where 1=1
                             "&outFields=*",           # alle Ausgabefelder
-                            "&returnGeometry=false",
                             "&cacheHint=true",
                             "&f=json",
-                            "&resultRecordCount=5000")  # 5000 Fälle pro Abfrage (Maximum sind 5k)
+                            "&resultRecordCount=20000")  # 20000 Fälle pro Abfrage (Maximum sind 25k)
     
     
     # ---- GRABSTEIN für rekursiver_offset() ----
@@ -207,7 +207,7 @@ read_esri_rki_data <- function(use_json = TRUE) {
     # den unbarmherzigen OOM-kill-daemon herauf. 
     # Möge sie in Frieden ruhen. 
     
-    # Muss in Stückchen gelesen werden, weil per JSON nicht mehr als 5000 Datensätze zurückgegeben werden
+    # Muss in Stückchen gelesen werden, weil per JSON nicht mehr als 25000 Datensätze zurückgegeben werden
     rki_ <- NULL
     offset <- 0
     
@@ -272,10 +272,16 @@ read_esri_rki_data <- function(use_json = TRUE) {
 
 # rki_df vom Repository lesen. 
 rki_df <- read_github_rki_data()
-
 # Wenn noch keine Daten da sind: 
+# (Oder die Daten nicht plausibel sind)
 # Starte alternative Datenabfrage bei der ESRI
 
+if (exists("rki_df")) {
+  if (max(rki_df$Meldedatum) != today()-1) rki_df <- NULL
+  } else {
+    rki_df <- NULL
+  }
+   
 # JSON-Schnittstelle für Datenimport nutzen? CSV geht schneller, 
 # ist aber ab und zu fehleranfällig. 
 
@@ -297,7 +303,7 @@ if (is.null(rki_df)) {
     }
     # alternierend versuchen, das CSV zu lesen
     use_json <- !use_json
-    rki_df <- read_rki_data(use_json)
+    rki_df <- read_esri_rki_data(use_json)
     # Datum auslesen; was uns hierher gebracht hat, ist schließlich die Beobachtung, 
     # dass der Datensatz von gestern ist. 
     ts <- rki_df$Datenstand[1]

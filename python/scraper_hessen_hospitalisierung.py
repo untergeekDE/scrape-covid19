@@ -8,13 +8,14 @@
 #
 # Hessischer Rundfunk
 # Autor: Sandra Kiefer
-# Datum: 23.09.2021
+# Datum: 11.10.2021
 #
 #
 
 import re
 import csv
 import glob
+import pytz
 import gspread
 import os.path
 import requests
@@ -28,12 +29,21 @@ from oauth2client.service_account import ServiceAccountCredentials
 regExDate = r'^\s*(3[01]|[12][0-9]|0?[1-9])\.(1[012]|0?[1-9])\.((?:19|20)\d{2})\s*$'
 
 
+class ReadInputError(Exception):
+    """ Fehler bein Einlesen der Daten """
+    def __init__(self, message='Fehler bein Einlesen der Daten'):
+        self.message = message
+        super().__init__(self.message)
+
+
 def getHospitalisierungsinzidenz(txt_hi):
     """
     Liefert die gesuchten Werte zur Hospitalisierungsinzidenz aus dem Text und gibt diese formatiert zurueck
 
     :param txt_hi:  String
                     Text/Absatz auf der Website, welcher die Zahlen zur Hospitalisierungsinzidenz beinhaltet
+
+    :raise ReadInputError:  wirft Exception wenn beim Dateneinlesen etwas schief gelaufen ist
 
     :return:        dict {  'Hospitalisierungsindzidenz aktuell': number (float),
                             'Hospitalisierungsindzidenz letzte Woche': number (float) }
@@ -46,6 +56,7 @@ def getHospitalisierungsinzidenz(txt_hi):
             if float(s) < 99: numbers_hi.append(float(s))
         except ValueError:
             continue
+    if len(numbers_hi) != 2: raise ReadInputError()
     return {'Hospitalisierungsindzidenz aktuell': numbers_hi[0], 'Hospitalisierungsindzidenz letzte Woche': numbers_hi[1]}
 
 
@@ -55,6 +66,8 @@ def getIntensivbettenauslastung(txt_ia):
 
     :param txt_ia:  String
                     Text/Absatz auf der Website, welcher die Zahlen zur Intensivbettenauslastung beinhaltet
+
+    :raise ReadInputError:  wirft Exception wenn beim Dateneinlesen etwas schief gelaufen ist
 
     :return:        dict {  'Intensivbettenauslastung Datum': date (dd.mm.YYYY),
                             'Intensivbettenauslastung aktuell': number (int),
@@ -72,6 +85,8 @@ def getIntensivbettenauslastung(txt_ia):
             numbers_ia.append(int(s))
         except ValueError:
             continue
+    del numbers_ia[-1]      # Wert von letzter Woche ignorieren
+    if date_ia is None or len(numbers_ia) != 3: raise ReadInputError()
     return {'Intensivbettenauslastung Datum': date_ia, 'Intensivbettenauslastung aktuell': numbers_ia[0], 'Intensivbettenauslastung bestaetigt': numbers_ia[1], 'Intensivbettenauslastung Verdacht': numbers_ia[2]}
 
 
@@ -81,6 +96,8 @@ def getNormalbettenauslastung(txt_na):
 
     :param txt_na:  String
                     Text/Absatz auf der Website, welcher die Zahlen zur Normalbettenauslastung beinhaltet
+
+    :raise ReadInputError:  wirft Exception wenn beim Dateneinlesen etwas schief gelaufen ist
 
     :return:        dict {  'Normalbettenauslastung Datum': date (dd.mm.YYYY),
                             'Normalbettenauslastung aktuell': number (int),
@@ -98,6 +115,7 @@ def getNormalbettenauslastung(txt_na):
             numbers_na.append(int(s))
         except ValueError:
             continue
+    if date_na is None or len(numbers_na) != 3: raise ReadInputError()
     return {'Normalbettenauslastung Datum': date_na, 'Normalbettenauslastung aktuell': numbers_na[0], 'Normalbettenauslastung bestaetigt': numbers_na[1], 'Normalbettenauslastung Verdacht': numbers_na[2]}
 
 
@@ -107,6 +125,8 @@ def getImpfstatusHospitalisierte(txt_ih):
 
     :param txt_ih:  String
                     Text/Absatz auf der Website, welcher die Zahlen zum Impfstatus der Hospitalisierten beinhaltet
+
+    :raise ReadInputError:  wirft Exception wenn beim Dateneinlesen etwas schief gelaufen ist
 
     :return:        dict {  'Hospitalisierte ungeimpft': number (float),
                             'Hospitalisierte Impfstatus unbekannt': number (float),
@@ -120,6 +140,7 @@ def getImpfstatusHospitalisierte(txt_ih):
             numbers_ih.append(float(s))
         except ValueError:
             continue
+    if len(numbers_ih) != 3: raise ReadInputError()
     return {'Hospitalisierte ungeimpft': numbers_ih[0], 'Hospitalisierte Impfstatus unbekannt': numbers_ih[2], 'Hospitalisierte geimpft': numbers_ih[1]}
 
 
@@ -129,6 +150,8 @@ def getImpfquote(txt_iq):
 
     :param txt_iq:  String
                     Text/Absatz auf der Website, welcher die Zahlen zur Impfquote beinhaltet
+
+    :raise ReadInputError:  wirft Exception wenn beim Dateneinlesen etwas schief gelaufen ist
 
     :return:        dict {  'Impfquote Datum': date (dd.mm.YYYY),
                             'Impfquote': number (float),
@@ -147,6 +170,7 @@ def getImpfquote(txt_iq):
             numbers_iq.append(float(s))
         except ValueError:
             continue
+    if date_iq is None or len(numbers_iq) != 2: raise ReadInputError()
     return {'Impquote Datum': date_iq, 'Impquote': numbers_iq[0], 'Impquote nur Impffaehige': numbers_iq[1]}
 
 
@@ -200,6 +224,24 @@ def sendTeamsMessage(data_dict):
     print('Nachricht in MS-Teams Chat von "hr-Datenteam corona" geschickt')
 
 
+def sendTeamsMessageWarning(mode, text):
+    """
+    Sendet eine Warnung bei Teams in die 'corona'-Gruppe vom 'hr-Datenteam'
+
+    :param mode:    Art der Nachricht (WARNUNG oder FEHLER)
+
+    :param text:   Text der angezeigt werden soll
+    """
+    # hrDatenteamCorona = pymsteams.connectorcard('https://hrhessen.webhook.office.com/webhookb2/7cea83e5-54d9-4ef1-b745-29a8c632ad00@daaae532-0750-4b35-8f3f-fdd6ba4c86f0/IncomingWebhook/0b1deea18e494a14b7f4008c7cb9644f/dbe95101-4eda-4ed0-b2ac-5e03d25c0398')
+    hrDatenteamCorona = pymsteams.connectorcard('https://hrhessen.webhook.office.com/webhookb2/7cea83e5-54d9-4ef1-b745-29a8c632ad00@daaae532-0750-4b35-8f3f-fdd6ba4c86f0/IncomingWebhook/cb2b0da4990948a4abf8c75faa97e0a7/dbe95101-4eda-4ed0-b2ac-5e03d25c0398')
+    hrDatenteamCorona.title(mode + ' - Update Leitindikatoren zur Bestimmung des Pandemiegeschehens ')
+    hrDatenteamCorona.color("#ff1100")
+    hrDatenteamCorona.text('<strong style="color:red;">' + text + '</strong>')
+    hrDatenteamCorona.addLinkButton("Link zur Webseite", "https://soziales.hessen.de/Corona/Bulletin/Tagesaktuelle-Zahlen")
+    hrDatenteamCorona.send()
+    print('Warnung in MS-Teams Chat von "hr-Datenteam corona" geschickt')
+
+
 def editDataLocations(data_dict):
     """
     Verwaltet/Aktualisiert alle vorhanden Datenschnittstellen (lokales CSV, online Google Sheets, Teams Message, Datawrapper, Newswire Bucket)
@@ -208,30 +250,39 @@ def editDataLocations(data_dict):
                         wird von der main erstellt (durch Aufruf der verschiedenen get...()-Funktionen und Zusammenfuegen in ein gemeinsames Dict)
     """
     # aktuellesten Pfad (durch Datum) speichern
-    newPath = '/home/jan_eggers_hr_de/hessen_hospitalisierungen_' + datetime.now().strftime('%Y-%m-%d') + '.csv'    # newPath = 'hessen_hospitalisierungen_' + datetime.now().strftime('%Y-%m-%d') + '.csv'
+    newPath = '/home/jan_eggers_hr_de/hessen_hospitalisierungen_' + datetime.now().astimezone(pytz.timezone("Europe/Berlin")).strftime('%Y-%m-%d') + '.csv'
+    # newPath = 'hessen_hospitalisierungen_' + datetime.now().astimezone(pytz.timezone("Europe/Berlin")).strftime('%Y-%m-%d') + '.csv'
     # CSV aktualisieren
-    if glob.glob('/home/jan_eggers_hr_de/hessen_hospitalisierungen_*.csv'):     # if glob.glob('hessen_hospitalisierungen_*.csv'):
-        oldPath = glob.glob('/home/jan_eggers_hr_de/hessen_hospitalisierungen_*.csv')[0]    # oldPath = glob.glob('hessen_hospitalisierungen_*.csv')[0]
+    if glob.glob('/home/jan_eggers_hr_de/hessen_hospitalisierungen_*.csv'):
+    # if glob.glob('hessen_hospitalisierungen_*.csv'):
+        oldPath = glob.glob('/home/jan_eggers_hr_de/hessen_hospitalisierungen_*.csv')[0]
+        # oldPath = glob.glob('hessen_hospitalisierungen_*.csv')[0]
         # Dateiname aktualisieren
         if newPath != oldPath: os.rename(oldPath, newPath)
+        data = []
         # bereitsvorhandene/erstellte CSV Datei einlesen
         with open(newPath, 'r', newline='') as file:
             reader = csv.reader(file)
-            data = list(reader)
+            data = list(reader).copy()
         # Datum bei Abgleich vernachlaessigen (hat sich was seit letztem mal veraendert?)
-        compData = data[-1].copy()
+        compData = data[len(data) - 1].copy()
         compData.pop(0)
         compOut = list(output.values()).copy()
         compOut.pop(0)
         if all(str(x) in compData for x in compOut):
             # es hat keine Aktualisierung der Daten stattgefunden
             print('CSV ist auf dem aktuellsten Stand!')
+            currentTime = datetime.now().astimezone(pytz.timezone("Europe/Berlin")).strftime('%d.%m.%Y %H %M')
+            # Warnung schreiben, falls bis 13 Uhr noch keine neuen Daten da sind
+            if datetime.strptime(data[len(data) - 1][0].split()[0], '%d.%m.%Y') < datetime.strptime(currentTime.split()[0], '%d.%m.%Y') and int(currentTime.split()[1]) == 13 and int(currentTime.split()[2]) <= 30:
+                sendTeamsMessageWarning("WARNUNG", "Es ist bereits nach 13 Uhr und es sind noch keine neuen Daten da! Schau mal auf der Webseite nach, ob das so korrekt ist.")
+                return
         else:
             # CSV neu schreiben
             with open(newPath, 'w', newline='') as file:
                 writer = csv.writer(file)
                 # bereits vorhandene Informationen wieder speichern (Daten aus letzter CSV)
-                if data[-1][0].split()[0] == datetime.now().strftime('%d.%m.%Y'):
+                if data[-1][0].split()[0] == datetime.now().astimezone(pytz.timezone("Europe/Berlin")).strftime('%d.%m.%Y'):
                     # ohne die letzte Zeile (Aktualisierung)/letzte Zeile loeschen
                     writer.writerows(data[:-1])
                     editGoogleSheets(data_dict, 'UPDATE')   # Google Sheets updaten
@@ -283,13 +334,13 @@ def editGoogleSheets(data_dict, method):
     sheet1.update_cell(6, 1, (str(list(excelDict.keys())[0]) + data_dict['Intensivbettenauslastung Datum'][:-4]))
     sheet1.update_cell(6, 2, list(excelDict.values())[0])
     # Hospitalisierungsinzidenz
-    sheet1.update_cell(7, 1, (str(list(excelDict.keys())[1])))
+    sheet1.update_cell(7, 1, list(excelDict.keys())[1])
     sheet1.update_cell(7, 2, list(excelDict.values())[1])
     # Corona Warnstufe Hessen
-    sheet1.update_cell(8, 1, (str(list(excelDict.keys())[2])))
+    sheet1.update_cell(8, 1, list(excelDict.keys())[2])
     sheet1.update_cell(8, 2, list(excelDict.values())[2])
     # Datum aktualisieren
-    sheet1.update_cell(2, 1, datetime.now().strftime('%d.%m.%Y, %H:%M Uhr'))
+    sheet1.update_cell(2, 1, datetime.now().astimezone(pytz.timezone("Europe/Berlin")).strftime('%d.%m.%Y, %H:%M Uhr'))
 
     # entsprechende Tabbelenseite Aufrufen (hier 'Krankenhauszahlen')
     sheet2 = client.open('AAA Covid19-Daten hessenschau.de').worksheet('Krankenhauszahlen') # sheet2 = client.open('Temp').worksheet('Leitindikatoren Pandemiegeschehen')
@@ -357,19 +408,61 @@ def writeTXTforNewswire(data_dict):
     print('Daten wurden fuer Newswire abgelegt!')
 
 
+def writeLogfile():
+    """
+    Fehlermedung beim Einlesen der Daten kommt maximal einmal am Tag
+    """
+    path = '/home/jan_eggers_hr_de/pscripts/log_warnings.txt'
+    # path = 'log_warnings.txt'
+    data = []
+    with open(path) as file:
+        data = file.readlines().copy()
+    if len(data) > 0:
+        date = datetime.now().astimezone(pytz.timezone("Europe/Berlin")).strftime('%d.%m.%Y')
+        if datetime.strptime(data[len(data) - 1].split()[0], '%d.%m.%Y') < datetime.strptime(date, '%d.%m.%Y'):
+            sendTeamsMessageWarning("FEHLER", "Beim Einlesen der Daten von der Webseite ist ein Fehler passiert! Vielleicht hat sich ja etwas am Aufbau der Webseite verändert?")
+            with open(path, 'a', newline='') as file:
+                file.write(date + ' Fehler beim Einlesen der Daten \n')
+
+
 if __name__ == "__main__":
-    page = requests.get('https://soziales.hessen.de/gesundheit/corona-in-hessen/taegliche-uebersicht-ueber-die-indikatoren-zur-pandemiebestimmung')
+    page = requests.get('https://soziales.hessen.de/Corona/Bulletin/Tagesaktuelle-Zahlen')
     soup = BeautifulSoup(page.content, 'html.parser')
 
-    div = soup.find_all('div', attrs={'class': 'he_content_body'})[0]               # relevanten HTML-Tag rausholen
+    div = soup.find_all('div', attrs={'class': 'tp-article__field-content-paragraphs'})[0]  # relevanten HTML-Tag rausholen
     p = div.find_all('p')
 
-    output = {'Letzte Aktualisierung': datetime.now().strftime('%d.%m.%Y %H:%M')}   # Zeitpunkt Datenabfrage
-    output.update(getHospitalisierungsinzidenz(p[0].text))                          # Hospitalisierungsindzidenz
-    output.update(getIntensivbettenauslastung(p[2].text))                           # Intensivbettenauslastung
-    output.update(getNormalbettenauslastung(p[3].text))                             # Normalbettenauslastung
-    output.update(getImpfstatusHospitalisierte(p[4].text))                          # Impfstatus Hospitalisierte
-    output.update(getImpfquote(p[5].text))                                          # Impfquote
+    output = {'Letzte Aktualisierung': datetime.now().astimezone(pytz.timezone("Europe/Berlin")).strftime('%d.%m.%Y %H:%M')}   # Zeitpunkt Datenabfrage
+    try:
+	# update Struktur am 12.11.2021
+        output.update(getHospitalisierungsinzidenz(p[0].text))    # Hospitalisierungsindzidenz
+        output.update(getIntensivbettenauslastung(p[2].text))     # Intensivbettenauslastung
+        output.update(getNormalbettenauslastung(p[4].text))       # Normalbettenauslastung
+        output.update(getImpfstatusHospitalisierte(p[5].text))    # Impfstatus Hospitalisierte
+        output.update(getImpfquote(p[6].text))                    # Impfquote
 
-    editDataLocations(output)                                                       # Daten im CSV und Tabelle speichern
+        # update Struktur am 5.11.2021
+        # output.update(getHospitalisierungsinzidenz(p[0].text))    # Hospitalisierungsindzidenz
+        # output.update(getIntensivbettenauslastung(p[3].text))     # Intensivbettenauslastung
+        # output.update(getNormalbettenauslastung(p[6].text))       # Normalbettenauslastung
+        # output.update(getImpfstatusHospitalisierte(p[7].text))    # Impfstatus Hospitalisierte
+        # output.update(getImpfquote(p[8].text))                    # Impfquote
+
+        # output.update(getHospitalisierungsinzidenz(p[0].text))    # Hospitalisierungsindzidenz
+        # output.update(getIntensivbettenauslastung(p[2].text))     # Intensivbettenauslastung
+        # output.update(getNormalbettenauslastung(p[3].text))       # Normalbettenauslastung
+        # output.update(getImpfstatusHospitalisierte(p[4].text))    # Impfstatus Hospitalisierte
+        # output.update(getImpfquote(p[5].text))                    # Impfquote
+
+        # mit Infokasten wegen fehlenden Daten (von RKI)
+        # output.update(getHospitalisierungsinzidenz(p[0].text))      # Hospitalisierungsindzidenz
+        # output.update(getIntensivbettenauslastung(p[4].text))       # Intensivbettenauslastung
+        # output.update(getNormalbettenauslastung(p[5].text))         # Normalbettenauslastung
+        # output.update(getImpfstatusHospitalisierte(p[6].text))      # Impfstatus Hospitalisierte
+        # output.update(getImpfquote(p[7].text))                      # Impfquote
+
+        editDataLocations(output)                                   # Daten im CSV und Tabelle speichern
+    except ReadInputError:
+        print('Fehler beim Einlesen der Daten!')
+        writeLogfile()
 

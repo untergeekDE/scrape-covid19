@@ -327,8 +327,36 @@ impfen_alle_df <- bev_bl_df %>%
   
 write_sheet(impfen_alle_df,aaa_id,sheet = "ImpfzahlenNational")
 
+# Tabelle nur mit den Boosterimpfungen anlegen
+# Dafür erst Gesamt-Quote berechnen
+pop_de <- sum(as.numeric(pop_bl_df$Insgesamt))
+booster_de <- sum(impfen_alle_df$geboostert)
+booster_de_df <- tibble(Bundesland="<br><br><strong>Deutschland</strong><br><br>",quote_dritt=booster_de/pop_de*100)
+
+booster_bl_df <- impfen_alle_df %>% 
+  select(Bundesland,quote_dritt) %>% 
+  arrange(desc(quote_dritt)) %>% 
+  mutate(r =row_number()) %>% 
+  # erste drei, letzte drei, Hessen
+  filter(r < 4 | r > 13 | (Bundesland=="Hessen") ) %>%
+  # Bundesland mit Rangnummer versehen
+  mutate(Bundesland = paste0(r,". ",Bundesland)) %>% 
+  # Rangnummer wieder rausschmeißen, brauchen wir nicht
+  select(-r) %>% 
+  # Deutschland insgesamt dazu und nochmal sortieren 
+  bind_rows(booster_de_df) %>% 
+  arrange(desc(quote_dritt))
+
+msg("Booster-Reihenfolge aktualisieren...")
+dw_data_to_chart(booster_bl_df,chart_id = "rMYWv")
+dw_edit_chart(chart_id = "rMYWv",
+              annotate = paste0(
+                "Geboosterte als Anteil der Gesamtbevölkerung - Stand: ",
+                format.Date(i_d,"%d.%m.%Y"),", 8 Uhr"))
+dw_publish_chart(chart_id = "rMYWv")
+
 msg("Deutschland-Karte aktualisieren...")
-# dw_data_to_chart(impfen_alle_df,chart_id="6PRAe")
+dw_data_to_chart(impfen_alle_df,chart_id="6PRAe")
 dw_publish_chart("6PRAe") # Karte mit dem Impffortschritt nach BL
 
 # ---- Hessen isolieren ----
@@ -528,9 +556,6 @@ dw_edit_chart(chart_id ="l5KKN", intro = fehlen_str)
 dw_publish_chart("l5KKN")
 
 
-# TODO: 
-# - u18, 18-59,ü60 Tabelle
-
 # ---- Impfstoffe ----
 
 
@@ -559,7 +584,11 @@ dw_publish_chart(chart_id="BfPeh")
 
 
 quoten_alter_df <- impf_df %>%
-  select(quote_zweit_u18,
+  select(quote_dritt_u18,
+         quote_dritt_18_60,
+         quote_dritt_ue60,
+         quote_dritt_Hessen = quote_dritt,
+         quote_zweit_u18,
          quote_zweit_18_60,
          quote_zweit_ue60,
          quote_zweit_Hessen = quote_zweit,
@@ -568,14 +597,21 @@ quoten_alter_df <- impf_df %>%
          quote_erst_ue60,
          quote_erst_Hessen = quote_erst,
   ) %>%
-  # Aufbereiten in zwei Spalten "Erstgeimpft" und "Zweitgeimpft"
+  # Aufbereiten in Spalten "erst","zweit","dritt"
+  # Erst mal eine Liste
   pivot_longer(everything()) %>%
-  mutate(erstzweit = ifelse(str_detect(name,"_erst_"),"nur erstgeimpft","durchgeimpft")) %>%
+  mutate(impfung = str_extract(name,"(?<=\\_)[a-z]+(?=\\_)")) %>%
   mutate(name = str_replace(name,"quote_.+_","")) %>%
-  pivot_wider(names_from=erstzweit,values_from=value) %>%
-  # Spalte "Erstgeimpft" um Zweitgeimpfte verringern, um 
-  # als gestapelte Säulen anzeigen zu können
-  mutate(`nur erstgeimpft`= `nur erstgeimpft`-durchgeimpft)
+  pivot_wider(names_from=impfung,values_from=value) %>%
+  # Um die Säulen stapeln zu können:
+  # - "nur erstgeimpft" = erst-zweit
+  # - zweitgeimpft, nicht geboostert = zweit-dritt
+  mutate(erst=erst-zweit,
+         zweit=zweit-dritt) %>% 
+  # Namen der Kompatibilität halber anpassen
+  rename(`nur erstgeimpft`= erst,
+         `durchgeimpft` = zweit,
+         geboostert = dritt)
   
 
   
@@ -868,3 +904,50 @@ cc$add_section(new_section = sec)
 cc$send()
 
 msg("OK")
+
+#--- Helfercode: Impfen nach Kreisen und nach AG ----
+
+kreise_impf_df <- lk_tbl %>% filter(str_detect(id_lk,"^06")) %>%
+  # wochenweise zusammenfassen
+  filter(Datum > as.Date("2021-01-03")) %>% 
+  mutate(woche = isoweek(Datum)) %>% 
+           group_by(woche,id_lk) %>% 
+           summarize(Anzahl=sum(Anzahl,na.rm=T)) %>% 
+           ungroup() %>% 
+  left_join(read.xlsx("index/kreise-namen-index.xlsx"),by=c("id_lk"="AGS")) %>% 
+  select(woche,Name=StatName,Anzahl)%>% 
+           pivot_wider(names_from=Name,values_from=Anzahl,values_fill=0)
+
+write.xlsx(kreise_impf_df,"daten/impfdosen-nach-kreis.xlsx",overwrite=TRUE)
+
+# Daten online aktualisieren
+AKUTALISIERE <- FALSE
+if (AKTUALISIERE) {
+  dw_data_to_chart(kreise_impf_df,chart_id="1KVMX")         
+  dw_publish_chart(chart_id="1KVMX") 
+}
+
+
+# Impfungen letzte 7 Tage in Hessen nach AG
+
+impfen_7_tage_nach_alter_df <- lk_tbl %>%
+  # letzte 7 Tage
+  filter(Datum > max(Datum)-7) %>% 
+  # nur Hessen
+  filter(str_detect(id_lk,"^06")) %>%
+  # Datum und Kreis wegwerfen
+  select(Altersgruppe, Impfschutz, Anzahl) %>% 
+  pivot_wider(names_from=Impfschutz,values_from=Anzahl,values_fn=sum,values_fill=0) %>% 
+  left_join(bev_bl_df %>% 
+              filter(id=="06") %>% 
+              select(-id,-Bundesland) %>% 
+              pivot_longer(cols = everything(),names_to="Altersgruppe", values_to="pop"),
+            by="Altersgruppe") %>% 
+  rename(Erstimpfung = `1`,
+         Zweitimpfung = `2`,
+         Booster = `3`) %>% 
+  mutate(Erstimpfung = Erstimpfung/pop*100,
+         Zweitimpfung = Zweitimpfung/pop*100,
+         Booster = Booster/pop*100)
+
+write.xlsx(impfen_7_tage_nach_alter_df,"daten/impfen_7_tage_alter.xlsx", overwrite=TRUE)  

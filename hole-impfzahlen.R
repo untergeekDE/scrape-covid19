@@ -728,18 +728,9 @@ if (impftempo_df$p[n] < 0) impftempo_df$p[n] <- 0
 
 if (wday(impftempo_df$Datum[n]) > 1) {
   # Falls die Woche noch unvollständig ist: 
-  # Noch eine Tabellenzeile einfügen mit dem Datum des nächsten Sonntags
-  # und dem Prognosewert
-  impftempo_df <- bind_rows(impftempo_df, tibble(
-    woche = impftempo_df$woche[n],
-    Datum = impftempo_df$Datum[n-1]+7,
-    erstgeimpft= NULL,
-    zweitgeimpft= NULL,
-    geboostert= NULL,
-    p = impftempo_df$erstgeimpft[n] +
-      impftempo_df$zweitgeimpft[n] +
-      impftempo_df$geboostert[n] +
-      impftempo_df$p[n]))
+  # Tabellendatum auf Datum des nächsten Sonntags setzen
+  # (Der Prognosewert steht ja schon im Dataframe)
+  impftempo_df$Datum[n] <- impftempo_df$Datum[n-1]+7
 } else {
   # Falls letzter Tag ein Sonntag; Woche abgeschlossen: Prognose auf 0 setzen
   impftempo_df$p[n] <- 0

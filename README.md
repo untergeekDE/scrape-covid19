@@ -67,6 +67,7 @@ Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Dat
 
 ### Changelog:
 
+* 8.12.: Prognose-Wert für Impftempo und bisher verimpfte Dosen der laufenden Woche anders anzeigen (als Wert für die ganze Woche)
 * 5.12.: Impfdaten-Auswertung endlich auf den Stand der Boosterimpfungen gebracht; Ländervergleich jetzt anhand des Booster-Fortschritts
 * 2.12.: Bevölkerungsdaten aufbereitet (jetzt Stand 31.12.2020 aus Destatis-Tabelle 12411-04-02-04)
 * 23.9.: Python-Scraper kümmert sich jetzt um Hospitalisierung und Krankenhauszahlen vom HMSI

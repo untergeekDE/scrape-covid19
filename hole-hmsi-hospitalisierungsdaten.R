@@ -168,7 +168,7 @@ write_sheet(hosp_daten_df,ss=aaa_id,sheet="Krankenhauszahlen")
 
 # Plausibilitätscheck: Veränderung gegenüber letztem Eintrag um mehr als 50%?
 n <-nrow(hosp_daten_df)
-for (i in c(3,4,6:14)) {
+for (i in c(3,4,6:12,14)) {
   if (abs(1-hosp_daten_df[n,i]/hosp_daten_df[n-1,i])>=.50) {
     teams_error("Veränderung zum Vortag > 50% in Spalte",i)
   }

@@ -1141,12 +1141,39 @@ tote_woche_df <- fallzahl_df %>%
   select(Stichtag = datum, Tote = tote_steigerung) %>%
   filter(wday(Stichtag) == 1)
 
+# Leichte Verzerrungen in der Sterbestatistik nach Meldedatum, 
+# weil insbesondere in Wochen, in denen die Sterbezahlen hoch sind, 
+# Verzögerungen entstehen und der Meldetag später ist als der Sterbetag. 
+# Deshalb die RKI-Statistik nach Sterbetag auswerten. 
+rki_tote_df <- read.xlsx("https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Projekte_RKI/COVID-19_Todesfaelle.xlsx?__blob=publicationFile",sheet=2) %>% 
+  filter(Bundesland=="HE") %>% 
+  select(2,3,n=4) %>% 
+  mutate(n = ifelse(str_detect(n,"<4"),0,as.numeric(n))) %>%
+  # Sterbewoche muss zweistellig sein, sonst kommt ISOweek durcheinander
+  mutate (Sterbewoche = ifelse(str_length(Sterbewoche)<2,
+                               paste0("0",Sterbewoche),Sterbewoche)) %>% 
+  mutate(datum= paste0(Sterbejahr,"-W",Sterbewoche,"-7")) %>% 
+  # Stichtag aus Jahr und Woche berechnen
+  mutate(datum=ISOweek::ISOweek2date(datum)) %>%
+  # aufsteigend nach Datum sortieren
+  arrange(datum) %>% 
+  select(Stichtag = datum,n) %>% 
+  # Spätesttes Datum der RKI-Zeitreihe brauchen wir noch
+  mutate(kill_here = Stichtag < max(Stichtag)) %>% 
+  full_join(tote_woche_df,by="Stichtag")%>% 
+  # aus der Zeitreihe der gemeldeten Daten alle Daten vor dem letzten
+  # Stichtag in der RKI-Tabelle rausnehmen
+  mutate(kill_here = ifelse(is.na(kill_here),F,kill_here)) %>% 
+  mutate(Tote = ifelse(kill_here==TRUE,NA,Tote)) %>% 
+  select(Stichtag,`Nach Sterbedatum` = n,`Nach Meldedatum` = Tote)
+
+
 # Datawrapper-Grafik Tote wochenweise aktualisieren
 dw_data_to_chart(tote_woche_df, chart_id="KCHmS") # Flächengrafik 
 dw_publish_chart(chart_id="KCHmS")
-
-
-
+# Datawrapper-Grafik mit den Toten je Woche nach Sterbedatum
+dw_data_to_chart(rki_tote_df,chart_id="At51m")  
+dw_publish_chart("At51m")
 
 # ---- Wochensummen, Anteile der Altersgruppen im zeitlichen Verlauf ----
 # Wochensummen der Neufälle (gruppiert nach Meldedatum), aufgeschlüsselt nach Altersgruppe
@@ -1352,6 +1379,111 @@ msg("Alle Datawrapper-Grafiken aktualisiert.")
 
 # Dies Skript erstellt und aktualisiert die Ampel-Tabelle aus den Archivdaten
 source("./berechne-notbremse.R")
+
+# ---- Newswire-Meldung Inzidenzen Hessen und Bund ----
+
+# Alles schnell nochmal neu berechnen. 
+
+sink(file = "daten/nw_inzidenzen.txt")
+cat('Aktuelle Corona-Inzidenzen für Hessen und D - ',format.Date(ts,"%d.%m.%Y"),', 0 Uhr \n\n')
+
+cat('\n# Deutschland\n\n')
+
+# Kurze Plausibilitätsprüfung: haben alle Kreise Neufälle gemeldet?
+meldekreise <- rki_df %>% group_by(IdLandkreis) %>% 
+  filter(NeuerFall %in% c(-1,1)) %>% summarize(n = sum(AnzahlFall)) %>% 
+  filter(n==0) %>% pull(IdLandkreis)
+# Haben Kreise keine Fälle gemeldet? 
+if (length(meldekreise)!=0) {
+  cat("!!!Keine Neufälle gemeldet aus folgenden Kreisen - bitte prüfen!!!\n")
+  for (i in meldekreise) {cat(i,", ")}
+  cat("\n\n")
+}
+
+# schnell noch die Bevölkerungszahlen holen
+load("index/pop.rda")
+# Inzidenz
+cat("- Inzidenz: ", format(
+  round(sum(rki_df %>% filter(Meldedatum > ts-8) %>%
+                       filter(NeuerFall %in% c(0,1)) %>% 
+                       pull(AnzahlFall)) / sum(as.integer(pop_bl_df$Insgesamt)) *100000, digits = 1),big.mark = ".",decimal.mark=","),
+  "\n")
+cat("- Neufälle zum Vortag: ",
+    format(sum(rki_df %>% 
+                  filter(NeuerFall %in% c(-1,1)) %>% 
+                           pull(AnzahlFall)),
+           big.mark = ".",decimal.mark=","),
+    "\n")
+cat("- Neufälle letzte 7 Tage (nach Meldedatum): ",
+    format(sum(rki_df %>% filter(Meldedatum > ts-8) %>% 
+                 filter(NeuerFall %in% c(0,1)) %>% 
+                 pull(AnzahlFall)),
+           big.mark = ".",decimal.mark=","),
+    "\n")
+cat("- Todesfälle zum Vortag: ",
+    format(sum(rki_df %>% filter(NeuerTodesfall %in% c(-1,1)) %>% 
+                 pull(AnzahlTodesfall)),
+           big.mark = ".",decimal.mark=","),
+    "\n- Todesfälle insgesamt: ",
+    format(sum(rki_df %>% filter(NeuerTodesfall %in% c(0,1)) %>% 
+                 pull(AnzahlTodesfall)),
+           big.mark = ".",decimal.mark=","),
+    
+    "\n")
+
+cat('\n# Hessen \n')
+
+# Inzidenz
+cat("- Inzidenz: ", format(
+  round(sum(rki_he_df %>% filter(Meldedatum > ts-8) %>%
+              filter(NeuerFall %in% c(0,1)) %>% 
+              pull(AnzahlFall)) / sum(pop_bl_df %>% 
+                                                   filter(id=="06") %>%
+                                        mutate(n = as.integer(Insgesamt)) %>% 
+                                                   pull(n))
+                            * 100000, digits = 1),big.mark = ".",decimal.mark=","),
+  "\n")
+cat("- Neufälle zum Vortag: ",
+    format(sum(rki_he_df %>% 
+                 filter(NeuerFall %in% c(-1,1)) %>% 
+                 pull(AnzahlFall)),
+           big.mark = ".",decimal.mark=","),
+    "\n")
+cat("- Neufälle letzte 7 Tage (nach Meldedatum): ",
+    format(sum(rki_he_df %>% filter(Meldedatum > ts-8) %>% 
+                 filter(NeuerFall %in% c(0,1)) %>% 
+                 pull(AnzahlFall)),
+           big.mark = ".",decimal.mark=","),
+    "\n")
+cat("- 7 Tage Vorwoche",paste0(format(steigerung_7t_vorwoche,
+                                big.mark = ".", 
+                                decimal.mark = ",", nsmall =0),
+                         " (",ifelse(steigerung_7t-steigerung_7t_vorwoche > 0,"+",""),
+                         format(steigerung_7t - steigerung_7t_vorwoche,big.mark = ".", decimal.mark = ",", nsmall =0),
+                         ")\n"))
+cat("- Todesfälle zum Vortag: ",
+    format(sum(rki_he_df %>% filter(NeuerTodesfall %in% c(-1,1)) %>% 
+                 pull(AnzahlTodesfall)),
+           big.mark = ".",decimal.mark=","),
+    "\n- Todesfälle insgesamt: ",
+    format(sum(rki_he_df %>% filter(NeuerTodesfall %in% c(0,1)) %>% 
+                 pull(AnzahlTodesfall)),
+           big.mark = ".",decimal.mark=","),
+    
+    "\n")
+
+
+cat('\n\nQuelle: Github-Repository des Robert-Koch-Instituts \n')
+cat('Skript: hole-hmsi-hospitalisierungsdaten.R auf 35.207.90.86 \n')
+cat('Redaktionelle Fragen an jan.eggers@hr.de')
+sink()
+
+# fuehre Befehl aus um Datei an gwuenschten Ort zu kopieren
+if (server) {
+  system('gsutil -h "Cache-Control:no-cache, max_age=0" cp daten/nw_inzidenzen.txt gs://d.data.gcp.cloud.hr.de/nw_inzidenzen.txt')
+}
+msg('Daten wurden fuer Newswire abgelegt!')
+
 
 # ---- Generiere Infokarte in Teams ----
 

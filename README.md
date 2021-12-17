@@ -10,6 +10,7 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des Robert-Koch-I
 - Quelle RKI: [Nowcast und 7-Tage-R auf Github](https://github.com/robert-koch-institut/SARS-CoV-2-Nowcasting_und_-R-Schaetzung)
 - Quelle RKI: [Testzahlen donnerstags als Excel-Tabelle](https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Testzahlen-gesamt.html;jsessionid=EF5B74A0B2AEE46C92BE7A6C719305A9.internet082?nn=13490888)
 - Quelle RKI: Impfdaten auf Github](https://github.com/robert-koch-institut/COVID-19-Impfungen_in_Deutschland) (alte Quelle: [Impfzahlen Mo-Fr als Excel-Tabelle](https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquoten-Tab.html;jsessionid=63BB094C521A1D8D2E1767E9A97F2699.internet061))
+- Quelle RKI: [Todesfälle nach Sterbedatum](https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Projekte_RKI/COVID-19_Todesfaelle.html) (statt nach Meldedatum des Todesfalls)
 - Quelle DIVI: Intensivregister via [CSV]h(ttps://diviexchange.blob.core.windows.net/%24web/DIVI_Intensivregister_Auszug_pro_Landkreis.csv) und API
 - Quelle Helmholtz-Zentrum für Infektologie: [R-Wert-Schätzungen für Hessen als CSV](https://gitlab.com/simm/covid19/secir/-/tree/master/img/dynamic/Rt_rawData)
 - Quelle Johns-Hopkins-Universität: [Länder als CSV](https://gitlab.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/)
@@ -67,6 +68,7 @@ Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Dat
 
 ### Changelog:
 
+* 17.12.: Wochenweise Sterbefälle nach Sterbedatum (soweit vorhanden) statt nach Meldedatum des Todesfalls wie bisher. 
 * 8.12.: Prognose-Wert für Impftempo und bisher verimpfte Dosen der laufenden Woche anders anzeigen (als Wert für die ganze Woche)
 * 5.12.: Impfdaten-Auswertung endlich auf den Stand der Boosterimpfungen gebracht; Ländervergleich jetzt anhand des Booster-Fortschritts
 * 2.12.: Bevölkerungsdaten aufbereitet (jetzt Stand 31.12.2020 aus Destatis-Tabelle 12411-04-02-04)

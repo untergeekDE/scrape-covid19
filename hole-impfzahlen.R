@@ -8,7 +8,7 @@
 # Datenquelle auslesen, die Excel-Datei mit dem "Digitalen Impfquotenmonitoring auf rki.de -
 # ...mit allen ihren Schwierigkeiten und Risiken. 
 
-# Stand: 2.12.2021
+# Stand: 14.12.2021
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -65,7 +65,8 @@ bev_bl_df <- pop_bl_df %>%
                     as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
   # Zusätzliche Variable mit der Altersgruppe
   mutate(Altersgruppe = case_when(
-         ag < 12 ~ "u12",
+         ag < 05 ~ "u5",
+         ag < 12 ~ "5-11",
          ag < 18 ~ "12-17",
          ag < 60 ~"18-59",
          TRUE    ~ "60+")) %>% 
@@ -83,7 +84,8 @@ bev_kr_df <- pop_kr_df %>%
                      as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
   # Zusätzliche Variable mit der Altersgruppe
   mutate(Altersgruppe = case_when(
-    ag < 12 ~ "u12",
+    ag < 5 ~ "u5",
+    ag < 12 ~ "5-11",
     ag < 18 ~ "12-17",
     ag < 60 ~"18-59",
     TRUE    ~ "60+")) %>% 
@@ -100,9 +102,9 @@ hessen=sum(bev_bl_df %>% filter(id=="06") %>% select(-id,-Bundesland))
 ue60 = bev_bl_df %>% filter(id=="06") %>% pull(`60+`)
 ue18_59 = bev_bl_df %>% filter(id=="06") %>% pull(`18-59`)
 ue12_17 = bev_bl_df %>% filter(id=="06") %>% pull(`12-17`)
+ue5_11 = bev_bl_df %>% filter(id=="06") %>%  pull(`5-11`)
 u60 = hessen - ue60
-# Vergleiche https://corona-impfung.hessen.de/faq/impfstrategie
-# Auskunft Innenministerium an Tobias Lübben 15.1.2021
+
 
 # ---- Daten aus RKI-Github-Repository lesen und aufarbeiten ----
 # Seit Juli 2021 werden die Daten nicht mehr als XLSX-Datei auf der
@@ -492,8 +494,7 @@ he_3_df <- bl_3_df %>%
 
 
 range_write(aaa_id,as.data.frame(
-  paste0(format(sum(he_3_df),big.mark = ".",decimal.mark=","),
-         " (",
+  paste0(impf_df$geboostert, " (",
          format(impf_df$quote_dritt,big.mark=".",decimal.mark = ",",digits=4),
          "%)")),
   range="Impfzahlen!A4", col_names = FALSE, reformat=FALSE)
@@ -912,11 +913,10 @@ kreise_impf_df <- lk_tbl %>% filter(str_detect(id_lk,"^06")) %>%
 write.xlsx(kreise_impf_df,"daten/impfdosen-nach-kreis.xlsx",overwrite=TRUE)
 
 # Daten online aktualisieren
-AKUTALISIERE <- FALSE
-if (AKTUALISIERE) {
+
   dw_data_to_chart(kreise_impf_df,chart_id="1KVMX")         
   dw_publish_chart(chart_id="1KVMX") 
-}
+
 
 
 # Impfungen letzte 7 Tage in Hessen nach AG

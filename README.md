@@ -68,6 +68,7 @@ Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Dat
 
 ### Changelog:
 
+* 10.1.22: Kleines Linkcheck-Skript für die Links zu den Gesundheitsämtern
 * 17.12.: Wochenweise Sterbefälle nach Sterbedatum (soweit vorhanden) statt nach Meldedatum des Todesfalls wie bisher. 
 * 8.12.: Prognose-Wert für Impftempo und bisher verimpfte Dosen der laufenden Woche anders anzeigen (als Wert für die ganze Woche)
 * 5.12.: Impfdaten-Auswertung endlich auf den Stand der Boosterimpfungen gebracht; Ländervergleich jetzt anhand des Booster-Fortschritts

@@ -80,12 +80,13 @@ while(i_d < today()) {
   
   if(exists("hmsi_daten")) {
     # aktuelles Datum aus dem CSV lesen
-    i_d <- hmsi_daten$Inzidenz_Datum
+    i_d <- as_date(hmsi_daten$Inzidenz_Datum)
+    if (!is.Date(i_d)) i_d <- today()-1
   }
   
   if (i_d < today())  {
     # Leider keine Daten von heute. 
-    # Timeout?
+    # Timeout? (nach 6 Stunden)
     if (now() > tsi+(8*3600)) {
       msg("KEINE NEUEN DATEN GEFUNDEN")
       # TEAMS-NACHRICHT ERGÄNZEN
@@ -168,9 +169,9 @@ write_sheet(hosp_daten_df,ss=aaa_id,sheet="Krankenhauszahlen")
 
 # Plausibilitätscheck: Veränderung gegenüber letztem Eintrag um mehr als 50%?
 n <-nrow(hosp_daten_df)
-for (i in c(3,4,6:12,14)) {
-  if (abs(1-hosp_daten_df[n,i]/hosp_daten_df[n-1,i])>=.50) {
-    teams_error("Veränderung zum Vortag > 50% in Spalte",i)
+for (i in c(3,4,6,7,9:12,14)) {
+  if (abs(1-hosp_daten_df[n,i]/hosp_daten_df[n-1,i])>=.80) {
+    teams_error("Veränderung zum Vortag > 80% in Spalte",i)
   }
 }
 
@@ -188,7 +189,9 @@ range_write(aaa_id,as.data.frame(format(hmsi_daten$Intensivbettenauslastung_aktu
             range="Basisdaten!B6", col_names = FALSE, reformat=FALSE)
 
 # H-Inzidenz (Zeile 7)
-range_write(aaa_id,as.data.frame("Hospitalisierungs-Inzidenz"),
+range_write(aaa_id,as.data.frame(paste0("H-Inzidenz (",
+                                        format.Date(hmsi_daten$Inzidenz_Datum,"%d.%m."),
+                                        ")")),
             range="Basisdaten!A7", col_names=F, reformat=F)
 
 range_write(aaa_id,as.data.frame(paste0(

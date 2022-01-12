@@ -68,6 +68,7 @@ Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Dat
 
 ### Changelog:
 
+* 12.1.: Impfquoten 5-11jährige (aus Github)
 * 12.1.: Die ehemalige Bundesnotbremsen-Tabelle auf 350er-Hotspot-Regel bereinigt, historischen Ballast abgeworfen - neues Skript berechne-inzidenz-ampel.R übernimmt das jetzt
 * 10.1.2022: Kleines Linkcheck-Skript für die Links zu den Gesundheitsämtern
 * 17.12.: Wochenweise Sterbefälle nach Sterbedatum (soweit vorhanden) statt nach Meldedatum des Todesfalls wie bisher. 

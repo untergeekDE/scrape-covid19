@@ -1375,10 +1375,11 @@ msg("Alle Datawrapper-Grafiken aktualisiert.")
 # Die Anschluss-Skripte aufrufen
 
 # ---- Bundesnotbremse ----
-
+# ...die natürlich längst keine BNB mehr ist.
+# Im Winter 2021/22 gilt als einziges in Hessen eine "Hotspot"-Regelung
 
 # Dies Skript erstellt und aktualisiert die Ampel-Tabelle aus den Archivdaten
-source("./berechne-notbremse.R")
+source("./berechne-inzidenz-ampel.R")
 
 # ---- Newswire-Meldung Inzidenzen Hessen und Bund ----
 

@@ -622,6 +622,11 @@ dw_publish_chart(chart_id="BfPeh")
 
 # ---- Quoten nach Alter ----
 
+# Kleine Sonderbedingung: 
+# Die Quote der Zweitgeimpften ist in der RKI-Tabelle höher als die 
+# der Erstgeimpften. Wenn ja: gib Erklärtext dazu mit aus. 
+
+ZWEITIMPFPARADOX <- impf_df$quote_erst_18_60 < impf_df$quote_zweit_18_60
 
 quoten_alter_df <- impf_df %>%
   select(quote_dritt_u12,
@@ -665,6 +670,9 @@ write_sheet(quoten_alter_df,ss=aaa_id,sheet="ImpfquotenAlter")
 
 dw_data_to_chart(quoten_alter_df,chart_id="vgJSw")
 dw_edit_chart(chart_id="vgJSw",annotate = paste0(
+  ifelse(ZWEITIMPFPARADOX,
+  "Das RKI gibt derzeit für die Altersgruppe 18-59 eine höhere Zweitimpfquote als Erstimpfungs-Quote an. Mögliche Ursachen für diese Unstimmigkeit: ",
+  ""),
   "Mit dem Johnson&Johnson-Impfstoff Geimpfte und Geimpfte mit Vorerkrankung ",
   "werden seit 1.8.21 als Durchgeimpfte gezählt. Genesene werden trotz ",
   "vollständigem Immunschutz z.T. nur als erstgeimpft gezählt - ",

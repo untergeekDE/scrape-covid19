@@ -115,7 +115,7 @@ v_ags_df <- verzuege_df %>%
   pivot_wider(names_from = kreis, values_from = m_delay) %>%
   ungroup()
 
-write.xlsx(v_ags_df,"daten/mean_meldeverzug.xlsx")
+write.xlsx(v_ags_df,"daten/mean_meldeverzug.xlsx",overwrite=T)
 
 
 v_ags_df <- v_ags_df %>%  
@@ -176,7 +176,7 @@ wi_df <- verzuege_df %>%
   # Histogramm:
   count(delta)
 
-write.xlsx(wi_df,"daten/wi-histogramm.xlsx")
+write.xlsx(wi_df,"daten/wi-histogramm.xlsx",overwrite=T)
 
 bergstr_df <- verzuege_df %>%
   filter(AGS == "06431") %>%
@@ -184,7 +184,7 @@ bergstr_df <- verzuege_df %>%
   # Histogramm:
   count(delta)
 
-write.xlsx(bergstr_df,"daten/bergstr-histogramm.xlsx")
+write.xlsx(bergstr_df,"daten/bergstr-histogramm.xlsx",overwrite=T)
 
 ldk_df <- verzuege_df %>%
   filter(AGS == "06532") %>%
@@ -192,7 +192,7 @@ ldk_df <- verzuege_df %>%
   # Histogramm:
   count(delta)
 
-write.xlsx(ldk_df,"daten/ldk-histogramm.xlsx")
+write.xlsx(ldk_df,"daten/ldk-histogramm.xlsx",overwrite=T)
 
 ffm_df <- verzuege_df %>%
   filter(AGS == "06412") %>%
@@ -200,7 +200,7 @@ ffm_df <- verzuege_df %>%
   # Histogramm:
   count(delta)
 
-write.xlsx(ffm_df,"daten/ffm-histogramm.xlsx")
+write.xlsx(ffm_df,"daten/ffm-histogramm.xlsx",overwrite=T)
 
 rtk_df <- verzuege_df %>%
   filter(AGS == "06439") %>%
@@ -208,7 +208,7 @@ rtk_df <- verzuege_df %>%
   # Histogramm:
   count(delta)
 
-write.xlsx(rtk_df,"daten/rtk-histogramm.xlsx")
+write.xlsx(rtk_df,"daten/rtk-histogramm.xlsx", overwrite=T)
 
 wk_df <- verzuege_df %>%
   filter(AGS == "06440") %>%
@@ -216,7 +216,7 @@ wk_df <- verzuege_df %>%
   # Histogramm:
   count(delta)
 
-write.xlsx(wk_df,"daten/wk-histogramm.xlsx")
+write.xlsx(wk_df,"daten/wk-histogramm.xlsx",overwrite=T)
 
 of_df <- verzuege_df %>%
   filter(AGS == "06413") %>%
@@ -224,7 +224,7 @@ of_df <- verzuege_df %>%
   # Histogramm:
   count(delta)
 
-write.xlsx(of_df,"daten/of-histogramm.xlsx")
+write.xlsx(of_df,"daten/of-histogramm.xlsx",overwrite=T)
 msg("Histogrammdaten WI, LDK, Bergstrasse, FFM lokal geschrieben")
 # ---- Jetzt berechnen: Abweichung Inzidenz nach Tagen ----
 
@@ -301,7 +301,7 @@ inz_delta2_df <- kreise %>%
   pivot_wider(names_from = kreis, values_from = inz)
   
 
-write.xlsx(inz_delta2_df,"daten/vollstaendigkeit-kreise-wochen.xlsx")
+write.xlsx(inz_delta2_df,"daten/vollstaendigkeit-kreise-wochen.xlsx", overwrite=T)
 # Ins Google Sheet nur die letzten 8 Wochen: 8*7=56 
 # für die letzte 
 sheet_write(inz_delta2_df %>% filter(Datum > today()-56), ss = aaa_id, sheet = "Abweichung Inzidenz")
@@ -371,10 +371,11 @@ inz_wt_sum_df <- inz_wt_df %>%
 
 
 sheet_write(inz_wt_df,ss=aaa_id,sheet="Abweichung Inzidenz")
-write.xlsx(inz_wt_df,"vollstaendigkeit-kreise-wochentage.xlsx")
+write.xlsx(inz_wt_df,"vollstaendigkeit-kreise-wochentage.xlsx", overwrite=T)
 sheet_write(inz_wt_sum_df, ss = aaa_id, sheet = "Abweichung Wochentage" )
 msg("Abweichungen Wochentage berechnet und geschreiben")
 
-
+# Die Grafik, die das anzeigt: 
+dw_publish_chart(chart_id="2j6K9")
 
 msg("OK")

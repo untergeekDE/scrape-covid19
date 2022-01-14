@@ -79,8 +79,11 @@ while(i_d < today()) {
     mutate(Zeitstempel = now()))
   
   if(exists("hmsi_daten")) {
+    # Hart codierter Test: falsche Spaltenanzahl?
+    if (ncol(hmsi_daten) != 30) { teams_error("Formatänderung")}
     # aktuelles Datum aus dem CSV lesen
-    i_d <- as_date(hmsi_daten$Inzidenz_Datum)
+    # Wegen Bezugs auf Spaltennamen mit Try
+    try(i_d <- as_date(hmsi_daten$Inzidenz_Datum))
     if (!is.Date(i_d)) i_d <- today()-1
   }
   

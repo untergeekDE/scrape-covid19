@@ -41,7 +41,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 3.9.2021
+# Stand: 14.1.2022
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -412,22 +412,41 @@ write_csv2(rki_he_df,paste0("archiv/rki-",heute,".csv"))
 # klar ist - ein alter Zopf. Ich behalte ihn vorerst mal. 
 # Eine Verbesserung pro Schritt. 
 
-heute_df <- rki_he_df %>% 
-  filter(NeuerFall %in% c(-1,1))    # so zählt man laut RKI die Summe der Fälle
-faelle_neu <- sum(heute_df$AnzahlFall)
-heute_df <- rki_he_df %>%
-  filter(NeuerFall %in% c(0,1))
-faelle_gesamt <- sum(heute_df$AnzahlFall)
-heute_df <- rki_he_df %>% 
-  filter(NeuGenesen %in% c(0,1))
-genesen_gesamt <- sum(heute_df$AnzahlGenesen)
+faelle_neu <- rki_he_df %>% 
+  # so zählt man laut RKI die Summe der Fälle
+  filter(NeuerFall %in% c(-1,1))    %>% 
+  pull(AnzahlFall) %>% 
+  sum()
 
-heute_df <- rki_he_df %>% 
-  filter(NeuerTodesfall %in% c(0,1))
-tote_gesamt <- sum(heute_df$AnzahlTodesfall)
-heute_df <- rki_he_df %>% 
-  filter(NeuerTodesfall %in% c(-1,1))
-tote_neu <- sum(heute_df$AnzahlTodesfall)
+faelle_gesamt <- rki_he_df %>% 
+  filter(NeuerFall %in% c(0,1)) %>% 
+  pull(AnzahlFall) %>% 
+  sum()
+
+genesen_gesamt <- rki_he_df %>% 
+  filter(NeuGenesen %in% c(0,1)) %>% 
+  pull(AnzahlGenesen) %>% 
+  sum()
+
+tote_gesamt <- rki_he_df %>% 
+  filter(NeuerTodesfall %in% c(0,1)) %>% 
+  pull(AnzahlTodesfall) %>% 
+  sum()
+
+tote_neu <- rki_he_df %>% 
+  filter(NeuerTodesfall %in% c(-1,1)) %>% 
+  pull(AnzahlTodesfall) %>% 
+  sum()
+
+neu7tage <- rki_he_df %>% 
+  mutate(Meldedatum = as_date(Meldedatum)) %>% 
+  filter(Meldedatum > as_date(heute-8) & Meldedatum < heute) %>%
+  # Auf die Summen filtern?
+  filter(NeuerFall %in% c(0,1)) %>%
+  pull(AnzahlFall) %>% 
+  sum()
+
+inzidenz_gemeldet <- neu7tage/sum(kreise$pop)*100000
 
 aktiv_gesamt <- faelle_gesamt - genesen_gesamt  - tote_gesamt
 
@@ -457,6 +476,8 @@ fallzahl_df$tote_steigerung[fallzahl_ofs] <- tote_neu
 fallzahl_df$aktiv[fallzahl_ofs] <- faelle_gesamt-genesen_gesamt-tote_gesamt
 fallzahl_df$neu[fallzahl_ofs] <- faelle_neu
 fallzahl_df$aktiv_ohne_neu[fallzahl_ofs] <- faelle_gesamt-genesen_gesamt-tote_gesamt-faelle_neu
+fallzahl_df$neu7tage[fallzahl_ofs] <- neu7tage
+fallzahl_df$inzidenz_gemeldet[fallzahl_ofs] <- inzidenz_gemeldet 
 
 # Neumeldungen letzte 4 Wochen; jeweils aktueller (also korrigierter) Stand. 
 # Weicht fatalerweise von den fall4w_df-Meldungsdaten leicht ab. 

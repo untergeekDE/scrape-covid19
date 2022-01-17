@@ -1015,24 +1015,19 @@ msg("Aufschlüsselung Neufälle nach Alter...")
 # altersgruppen_df <- range_read(aaa_id,sheet="AltersgruppenPop") %>%
 #   mutate(Altersgruppe = as.factor(Altersgruppe))
 
+
+# Tabelle, in der die Bevölkerungszahlen in der jeweiligen RKI-Altersgruppe aufgerechnet sind
+# Nutzt die Daten aus der Regionalstatistik.de 12411-04-02-4
+
 # Bevölkerungstabelle für alle Bundesländer vorbereiten,
 # Altersgruppen: 0-4, 5-14, 15-34, 35-59, 60-79, 80+
 # Ausgangspunkt ist der File aus GENESIS mit der Altersschichtung
 # nach Lebensjahren und Bundesland. 
-# Q: 12411-04-02-4, Stichtag 31.12.2019
-# library(readr)
-altersgruppen_df <- read_delim("index/12411-04-02-4-B.csv", 
-                        delim = ";", escape_double = FALSE, 
-                        locale = locale(date_names = "de",         
-                                        decimal_mark = ",", grouping_mark = ".",
-                                        encoding = "ISO-8859-1"), trim_ws=TRUE, 
-                        skip = 6,
-                        show_col_types=FALSE) %>%
-  # Länder-ID und Altersgruppen insgesamt/männlich/weiblich nutzen
-  select(id=1,Bundesland=2,ag=3,4:6) %>% 
-  # Datei enthält auch "Insgesamt"-Zeilen mit den Ländersummen - weg damit
-  filter(ag!="Insgesamt") %>% 
-  # Altersgruppen; 90 (die höchste) umfasst alle darüber. 
+# Q: 12411-04-02-4, Stichtag 31.12.2020
+load("index/pop.rda")
+
+# Altersgruppen; 90 (die höchste) umfasst alle darüber. 
+bev_bl_df <- pop_bl_df %>% 
   mutate(ag = ifelse(str_detect(ag,"^unter"),0,
                      as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
   # Zusätzliche Variable mit der Altersgruppe
@@ -1043,14 +1038,26 @@ altersgruppen_df <- read_delim("index/12411-04-02-4-B.csv",
     ag < 60 ~ "A35-A59",
     ag < 80 ~ "A60-A79",
     TRUE    ~ "A80+")) %>% 
-  select(id,Bundesland,Altersgruppe,Insgesamt) %>% 
+  select(id,Bundesland=Name,Altersgruppe,Insgesamt) %>% 
+  mutate(Insgesamt = as.numeric(Insgesamt)) %>% 
   # Tabelle bauen: Bevölkerung in der jeweiligen Altersgruppe nach BL,
   # Werte aus der Variable aufsummieren. 
   pivot_wider(names_from=Altersgruppe, values_from=Insgesamt,values_fn=sum) %>% 
-  # Hessen!
-  filter(id == "06") %>% 
-  pivot_longer(cols=starts_with("A") ,names_to="Altersgruppe",values_to="pop") %>% 
+  # Aus irgendwelchen Gründen enthält die GENESIS-Tabelle die Landesbezeichnung
+  # "Baden-Württemberg, Land". Korrigiere das. 
+  mutate(Bundesland = str_replace(Bundesland,"\\, Land$",""))
+
+# Für Hessen!
+# Ländercode hier ggf. anpassen. 
+bl = "06"
+
+altersgruppen_df <- bev_bl_df %>% 
+  filter(id == bl) %>% 
+  pivot_longer(cols=starts_with("A"), 
+               names_to="Altersgruppe",
+               values_to="pop") %>% 
   select(-id, -Bundesland)
+
 
 # Auf aktive Fälle filtern, nach Alter und Geschlecht anordnen
 
@@ -1132,11 +1139,6 @@ tote_df <- rbind(tote_df, unbek_tote_df)
 
 write_sheet(neu7tage_df, ss = aaa_id, sheet="NeufälleAlter")
 write_sheet(tote_df,ss = aaa_id, sheet="ToteAlter")
-
-
-options(scipen=100,           # Immer normale Kommazahlen ausgeben, Keine wissenschaftlichen Zahlen
-        OutDec=","	          # Komma ist Dezimaltrennzeichen bei Ausgabe
-)  
 
 write_csv2(neu7tage_df, "daten/rki-alter.csv")
 write_csv2(tote_df,"daten/rki-tote.csv")

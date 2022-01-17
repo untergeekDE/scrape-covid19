@@ -87,6 +87,7 @@ for (k in kreise$kreis) {
                                  # Schauen: war der Kreis schon Hotspot?
                                  # Oder wird er grad erst?
                                  ifelse(lag(inz,3)>g,"HOTSPOT","<HOTSPOT>"),
+                                 "HOTSPOT",
                                  paste0("<",g," erreicht>")),
                           # Inzidenz unter der Grenze?
                           # Wenn in den letzten 5 Tagen durchgängig

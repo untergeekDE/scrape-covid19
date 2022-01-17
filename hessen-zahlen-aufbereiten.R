@@ -1318,16 +1318,16 @@ t_stellen_dw <- dw_publish_chart(chart_id=t_stellen_id)
 # ---- Aufräumarbeiten, Grafiken pingen ---- 
 
 msg("Alte Basisdaten-Seite pflegen...")
-basisdaten <- range_read(ss=aaa_id,sheet="Basisdaten")
+basisdaten_df <- range_read(ss=aaa_id,sheet="Basisdaten")
 alte_basisdaten_id = "1m6hK7s1AnDbeAJ68GSSMH24z4lL7_23RHEI8TID24R8"
-write_sheet(basisdaten, ss=alte_basisdaten_id,sheet="LIVEDATEN")
-basisdaten <- basisdaten %>%
+write_sheet(basisdaten_df, ss=alte_basisdaten_id,sheet="LIVEDATEN")
+basisdaten_alt_df <- basisdaten_df %>%
   select(1,Messzahl = 2) %>%
   mutate(Messzahl = as.character(Messzahl)) %>%
   mutate(Messzahl = str_replace(Messzahl,"NULL"," "))
 # Den ganzen HTML-Kram aus der Steigerung zur Vorwoche verschwinden lassen
-basisdaten$Messzahl[4] <- as.character(steigerung_prozent_vorwoche)
-write_csv2(basisdaten,"daten/Basisdaten.csv",quote_escape="double")
+basisdaten_alt_df$Messzahl[4] <- as.character(steigerung_prozent_vorwoche)
+write_csv2(basisdaten_alt_df,"daten/Basisdaten.csv",quote_escape="double")
 
 
 #msg("Daten auf alte Basisdaten-Seite kopiert")
@@ -1354,11 +1354,17 @@ msg(as.character(now()),"Datawrapper-Grafiken pingen...","\n")
 # Alle einmal ansprechen, damit sie die neuen Daten ziehen
 # - Neu publizieren, damit der DW-Server einmal die Google-Sheet-Daten zieht.
 
+# Sicherheitsfeature: Basisdaten einmal direkt schreiben
+dw_data_to_chart(basisdaten_df,chart_id="OXn7r")
+# ...und auch die Neufälle und Karten-Daten
+kreisdaten_df <- read_sheet(aaa_id,sheet="KreisdatenAktuell")
+dw_data_to_chart(kreisdaten_df,chart_id="m7sqt")
+
 dw_publish_chart(chart_id = "OXn7r") # Basisdaten
 dw_publish_chart(chart_id = "NrBYs") # Neufälle und Trend letzte 4 Wochen
 dw_publish_chart(chart_id = "jLkVj") # Neufälle je Woche seit März
 dw_publish_chart(chart_id = "k8nUv") # Flächengrafik
-dw_publish_chart(chart_id = "ALaUp") # Choropleth-Karte Fallinzidenz
+# dw_publish_chart(chart_id = "ALaUp") # Choropleth-Karte Fallinzidenz
 dw_publish_chart(chart_id = "m7sqt") # Choropleth 7-Tage-Dynamik
 dw_publish_chart(chart_id = "XpbpH") # Neufälle 7-Tage nach Alter und Geschlecht
 dw_publish_chart(chart_id = "JQobx") # Todesfälle nach Alter und Geschlecht

@@ -173,18 +173,19 @@ tabelle4 <- read.xlsx(rki_xlsx_url,sheet=4)
 impfquoten_xlsx_df <- tabelle2 %>% 
                                    select(ID=1,
                                           impfdosen = 3,
-                                          zahl_u12 = 5,
-                                          quote_erst = 8,
-                                          quote_erst_u18 = 9,
-                                          quote_erst_18_60 =11, 
-                                          quote_erst_ue60 = 12,
-                                          quote_zweit = 13,
-                                          quote_zweit_u18 = 14,
-                                          quote_zweit_18_60 = 16,
-                                          quote_zweit_ue60 =17,
-                                          quote_dritt_u18 = 19,
-                                          quote_dritt_18_60 = 21,
-                                          quote_dritt_ue60 = 22) %>%
+                                          quote_erst = 7,
+                                          quote_erst_u12 = 9,
+                                          quote_erst_u18 = 10,
+                                          quote_erst_18_60 =12, 
+                                          quote_erst_ue60 = 13,
+                                          quote_zweit = 14,
+                                          quote_zweit_u12 = 16,
+                                          quote_zweit_u18 = 17,
+                                          quote_zweit_18_60 = 19,
+                                          quote_zweit_ue60 =20,
+                                          quote_dritt_u18 = 22,
+                                          quote_dritt_18_60 = 24,
+                                          quote_dritt_ue60 = 25) %>%
                                    filter(as.numeric(ID) %in% 1:16)
 
 # ---- Länder-Vergleichstabelle erstellen ----
@@ -330,7 +331,11 @@ impfen_alle_df <- bev_bl_df %>%
   # Tabelle hat die gleichen Spaltennahmen; Spalten 
   left_join(impfquoten_xlsx_df %>% 
               # Spalten aussortieren, die es in der anderen Tabelle schon gibt
-              select(-quote_erst,-quote_zweit) %>% 
+              select(-quote_erst,-quote_zweit,
+                     # Quoten u12 leiden nicht unter J&J-Verzerrung,
+                     # einstweilen mal aus der Github-Berechnung holen
+                     -quote_erst_u12,
+                     -quote_zweit_u12) %>% 
               # Quoten von Strings in Zahlen umwandeln
               mutate(across(starts_with("quote_"),as.numeric)) %>%
               # Nur die Quoten nach Altersgruppen aufheben
@@ -936,7 +941,14 @@ sec$add_fact(paste0("Ungeimpfte 12-17J (",
                     format(100-impf_df$quote_erst_u18,big.mark=".",decimal.mark = ",",digits = 3),
                     "%):"),
                     format(((100-impf_df$quote_erst_u18)*ue12_17 %/% 100000)*1000,
-                           big.mark=".",decimal.mark = ","))      
+                           big.mark=".",decimal.mark = ","))  #
+
+sec$add_fact(paste0("Ungeimpfte 5-11J (",
+                    format(100-impf_df$quote_erst_u12,big.mark=".",decimal.mark = ",",digits = 3),
+                    "%):"),
+             format((((100-impf_df$quote_erst_u12)*ue05_11) %/% 100000)*1000,
+                    big.mark=".",decimal.mark = ","))      
+
 
 # Wenn du auf dem Server bist: 
 # Importiere eine PNG-Version des Impffortschritts, 

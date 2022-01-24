@@ -76,11 +76,13 @@ while(i_d < today()) {
                                trim_ws = TRUE) %>%  
         # falls mehr als eine Zeile, wirf alles außer der letzten weg
         tail(1) %>% 
-    mutate(Zeitstempel = now()))
+    mutate(Zeitstempel = now()) %>% 
+    # Zeitstempel in die erste Spalte
+    relocate(Zeitstempel))
   
   if(exists("hmsi_daten")) {
     # Hart codierter Test: falsche Spaltenanzahl?
-    if (ncol(hmsi_daten) != 30) { teams_error("Formatänderung")}
+    if (ncol(hmsi_daten) != 34) { teams_error("Formatänderung")}
     # aktuelles Datum aus dem CSV lesen
     # Wegen Bezugs auf Spaltennamen mit Try
     try(i_d <- as_date(hmsi_daten$Inzidenz_Datum))
@@ -123,20 +125,20 @@ risiko <- round((intensiv_ungeimpft/ungeimpft)/(intensiv_geimpft/impfquote), dig
 
 # Diese Spalten hätte ich gern. 
 try(hmsi_daten <- hmsi_daten %>% 
-  select(Zeitstempel = 30,
-         Inzidenz_Datum = 2,
-         Hospitalisierungsinzidenz_aktuell = 1,
-         Hospitalisierungsinzidenz_letzte_Woche = 3,
-         Bettenauslastung_Datum = 9,
-         Intensivbettenauslastung_aktuell = 5,
-         Intensivbettenauslastung_bestaetigt = 6,
-         Intensivbettenauslastung_Verdacht = 7,
-         Normalbettenauslastung_aktuell = 10,
-         Normalbettenauslastung_bestaetigt = 11,
-         Normalbettenauslastung_Verdacht = 12,
-         ITS_Hospitalisierte_ungeimpft = 14,
-         ITS_Hospitalisierte_unbekannt = 16,
-         ITS_Hospitalisierte_geimpft = 15
+  select(Zeitstempel = 1,
+         Inzidenz_Datum = 3,
+         Hospitalisierungsinzidenz_aktuell = 2,
+         Hospitalisierungsinzidenz_letzte_Woche = 4,
+         Bettenauslastung_Datum = 10,
+         Intensivbettenauslastung_aktuell = 6,
+         Intensivbettenauslastung_bestaetigt = 7,
+         Intensivbettenauslastung_Verdacht = 8,
+         Normalbettenauslastung_aktuell = 11,
+         Normalbettenauslastung_bestaetigt = 12,
+         Normalbettenauslastung_Verdacht = 13,
+         ITS_Hospitalisierte_ungeimpft = 15,
+         ITS_Hospitalisierte_unbekannt = 17,
+         ITS_Hospitalisierte_geimpft = 16
   ))
 ####TODO: Fehlerroutine Spaltennamen, Spalten nach Nummer? 
 
@@ -223,8 +225,10 @@ if (hmsi_daten$Hospitalisierungsinzidenz_aktuell > 15 |
   
 }
 
-# Grafik pushen
+# Grafiken pushen
 dw_publish_chart(chart_id = "OXn7r") # Basisdaten
+dw_publish_chart(chart_id = "I1p2e") # Schwere Fälle
+
 
 
 # Teams und Newswire

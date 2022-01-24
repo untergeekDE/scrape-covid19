@@ -946,7 +946,7 @@ sec$add_fact(paste0("Ungeimpfte 12-17J (",
 sec$add_fact(paste0("Ungeimpfte 5-11J (",
                     format(100-impf_df$quote_erst_u12,big.mark=".",decimal.mark = ",",digits = 3),
                     "%):"),
-             format((((100-impf_df$quote_erst_u12)*ue05_11) %/% 100000)*1000,
+             format((((100-impf_df$quote_erst_u12)*ue5_11) %/% 100000)*1000,
                     big.mark=".",decimal.mark = ","))      
 
 

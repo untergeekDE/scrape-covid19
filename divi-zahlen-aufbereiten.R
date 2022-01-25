@@ -317,6 +317,49 @@ try(alter_df <- read_csv(url(alter_url)) %>%
 dw_data_to_chart(alter_df,chart_id="Jf7Kw")
 dw_edit_chart(chart_id="Jf7Kw",annotate=paste0("Stand: ",format(ts,"%d.%m.%Y")))
 dw_publish_chart(chart_id="Jf7Kw")
+
+#---- Zeitreihe Neuaufnahmen ----
+
+laender_url <- "https://diviexchange.blob.core.windows.net/%24web/zeitreihe-bundeslaender.csv"
+
+# Erstaufnahme-Daten aus dem Länderdatensatz filtern
+# (gilt nur für Erwachsene)
+# Isoliere die letzten 6 Wochen 
+try(erstaufnahmen_df <- read_csv(url(laender_url)) %>% 
+      filter(Bundesland =="HESSEN") %>% 
+      select(-Bundesland,-Behandlungsgruppe) %>% 
+      mutate(Datum = as_date(Datum)) %>% 
+      select(Datum,Erstaufnahmen =faelle_covid_erstaufnahmen) %>% 
+      filter(!is.na(Erstaufnahmen)) %>%
+      # Gleitendes 7-Tage-Mittel
+      mutate(erst7t = (Erstaufnahmen+
+                         lag(Erstaufnahmen)+
+                         lag(Erstaufnahmen,2)+
+                         lag(Erstaufnahmen,3)+
+                         lag(Erstaufnahmen,4)+
+                         lag(Erstaufnahmen,5)+
+                         lag(Erstaufnahmen,6))/7) %>% 
+      # Letzte 6 Wochen filtern
+      filter(Datum >= today()-42))
+
+# Archivkopie auf dem Server
+if (server) {
+  write.xlsx(erstaufnahmen_df,
+             paste0("archiv/erstaufnahmen-",
+                    max(erstaufnahmen_df$Datum),
+                    ".xlsx"),overwrite=T)
+} else {
+  write.xlsx(erstaufnahmen_df,
+             paste0("daten/erstaufnahmen-",
+                    max(erstaufnahmen_df$Datum),
+                    ".xlsx"),overwrite=T)
+  
+}
+
+# in die Datawrapper-Grafik pushen
+dw_data_to_chart(erstaufnahmen_df,chart_id = "E9tIz")
+dw_publish_chart(chart_id = "E9tIz")
+
 # ---- Generiere Infokarte in Teams ----
 
 library(teamr)

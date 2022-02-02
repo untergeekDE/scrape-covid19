@@ -1,5 +1,13 @@
-# Hospitalisierungs-Daten lesen
-# 
+#--- hole-hmsi-hospitalisierungsdaten.R ----
+# Sucht aus der Aktuelle-Daten-Seite des Sozialministeriums 
+# die CSV mit den tagesaktuellen Hospitalisierungsdaten
+# und bereitet sie auf (bzw. gibt Alarm, wenn was schief geht)
+#
+# Aktualisiert außerdem die Kurve der schweren Verläufe daraus
+# und das Ungeimpften-Intensiv-Risiko
+#
+# Stand: 25.1.2022
+
 
 
 # Alles weg, was noch im Speicher rumliegt
@@ -44,7 +52,7 @@ teams_warning <- function(...) {
   warning(alert_str)
 } 
 
-
+#---- Hole die tagesaktuelle CSV beim Ministerium ab ----
 # URL der Ministeriumsseite mit CSV und Corona-Daten
 hmsi_url <- "https://soziales.hessen.de/Corona/Bulletin/Tagesaktuelle-Zahlen"
 
@@ -112,6 +120,8 @@ write.xlsx(hmsi_daten,
                   "hmsi-hosp-",
                   format.Date(i_d,"%Y-%m-%d"),
                   ".xlsx"),overwrite=T)
+
+# Archivierte Daten aus dem Google Sheet holen
 hosp_daten_df <- read_sheet(ss=aaa_id, sheet="Krankenhauszahlen") 
   
 
@@ -122,6 +132,8 @@ ungeimpft <- 100-impfquote
 intensiv_ungeimpft <- hmsi_daten$ITS_Hospitalisierte_ungeimpft
 intensiv_geimpft <- hmsi_daten$ITS_Hospitalisierte_geimpft
 risiko <- round((intensiv_ungeimpft/ungeimpft)/(intensiv_geimpft/impfquote), digits=1) # auf eine Nachkommastelle gerundet
+
+#---- Daten formatieren und prüfen ----
 
 # Diese Spalten hätte ich gern. 
 try(hmsi_daten <- hmsi_daten %>% 
@@ -182,7 +194,7 @@ for (i in c(3,4,6,7,9:12,14)) {
 
 
 
-# In die Basisdaten
+#---- Basisdaten anpassen----
 # Intensiv-Patienten Hessen (Zeile 6)
 
 range_write(aaa_id,as.data.frame(paste0("Intensiv-Patienten (",
@@ -225,14 +237,52 @@ if (hmsi_daten$Hospitalisierungsinzidenz_aktuell > 15 |
   
 }
 
-# Grafiken pushen
+#---- Grafiken pushen, Intensivrisiko-String berechnen ----
+# Leider nötig: Daten nicht nur ins Google Doc, sondern auch direkt über die API
+# 
+basisdaten_df <- range_read(ss=aaa_id,sheet="Basisdaten") %>% 
+  select(Indikator = 1,Wert = 2) %>%
+  mutate(Wert = as.character(Wert)) %>%
+  mutate(Wert = str_replace(Wert,"NULL"," "))
+
+dw_data_to_chart(basisdaten_df,chart_id = "OXn7r")
 dw_publish_chart(chart_id = "OXn7r") # Basisdaten
 dw_publish_chart(chart_id = "I1p2e") # Schwere Fälle
 
+intensivrisiko_df <- tibble(Zahl=paste(format(risiko, big.mark = "."
+                                              ,decimal.mark=",",nsmall=1),"x"),
+                            Text="so viele Ungeimpfte wie Geimpfte")
+  
+# Diese Mini-Tabelle an Datawrapper übergeben...
+dw_data_to_chart(intensivrisiko_df,chart_id = "1XuU9")
+#... und den String mit den Daten generieren. 
+dw_edit_chart(chart_id = "1XuU9",
+              annotate = paste0("<strong>Stand ",
+                format.Date(i_d,"%d.%m.%Y"),
+                ":</strong> Grundimmunisierte (2x geimpft o. genesen und geimpft) ",
+                "machen mindestens ",
+                format(impfquote,big.mark = ".",decimal.mark=",",nsmall=1),
+                "% der Bevölkerung aus und ",
+                format(intensiv_geimpft,big.mark = ".",decimal.mark=",",nsmall=1),
+                "% der Intensivpatienten. Ungeimpfte und Teilgeimpfte ",
+                "machen höchstens ",
+                format(100-impfquote,big.mark = ".",decimal.mark=",",nsmall=1),
+                "% der Bevölkerung aus und ",
+                format(intensiv_ungeimpft,big.mark = ".",decimal.mark=",",nsmall=1),
+                "% der Intensivpatienten. Die ",
+                format(100-intensiv_geimpft-intensiv_ungeimpft,big.mark = ".",decimal.mark=",",nsmall=1),
+                "% der Corona-Intensivpatienten, deren Impfstatus unbekannt ist, ",
+                "gehen nicht in die Berechnung ein."
+                
+                
+              ))
+
+dw_publish_chart(chart_id ="1XuU9") # Ungeimpfte Intensivrisiko
 
 
-# Teams und Newswire
-# Newswire
+
+#---- Newswire-Meldung generieren ----
+# Eine schnöde Textdatei, die der Newswire-Cron-Job sich abholt. 
 
 sink(file = "daten/newswiremeldung.txt")
 cat('Corona-Update: Klinikzahlen Hessen \n')
@@ -287,7 +337,7 @@ if (server) {
 }
 msg('Daten wurden fuer Newswire abgelegt!')
 
-# Teams-Karte schicken
+#---- Teams-Karte schicken ----
 cc <- connector_card$new(hookurl = Sys.getenv("WEBHOOK_CORONA"))
 cc$title(paste0("Corona-Update: Klinikzahlen Hessen - ",format.Date(i_d,"%d.%m.%y")))
 cc$text("hole-hmsi-hospitalisierungsdaten.R")

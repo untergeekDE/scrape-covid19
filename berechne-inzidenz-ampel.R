@@ -9,7 +9,7 @@
 # Der AAA-Daten-Tab "Sperren-Status-Tabelle" wird fortgeschrieben,
 # aber nicht mehr neu aufgebaut (was der alte Code immer getan hatte)
 #
-# Stand: 12.1.22
+# Stand: 25.1.22
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 
@@ -86,8 +86,7 @@ for (k in kreise$kreis) {
                           ifelse((lag(inz)>g) & (lag(inz,2)>g),
                                  # Schauen: war der Kreis schon Hotspot?
                                  # Oder wird er grad erst?
-                                 ifelse(lag(inz,3)>g,"HOTSPOT","<HOTSPOT>"),
-                                 "HOTSPOT",
+                                 ifelse(lag(inz,3)>g,"HOTSPOT",">HOTSPOT<"),
                                  paste0("<",g," erreicht>")),
                           # Inzidenz unter der Grenze?
                           # Wenn in den letzten 5 Tagen durchgängig
@@ -98,7 +97,7 @@ for (k in kreise$kreis) {
                                    lag(inz,3)>g |
                                    lag(inz,4)>g |
                                    lag(inz,5)>g),
-                                 paste0("<",g," unterschritten>"),
+                                 paste0("<HOTSPOT>"),
                                  status)))   
   }
 

@@ -348,13 +348,9 @@ if (server) {
              paste0("archiv/erstaufnahmen-",
                     max(erstaufnahmen_df$Datum),
                     ".xlsx"),overwrite=T)
-} else {
-  write.xlsx(erstaufnahmen_df,
-             paste0("daten/erstaufnahmen-",
-                    max(erstaufnahmen_df$Datum),
-                    ".xlsx"),overwrite=T)
+} 
+  write.xlsx(erstaufnahmen_df,"daten/erstaufnahmen.xlsx",overwrite=T)
   
-}
 
 # in die Datawrapper-Grafik pushen
 dw_data_to_chart(erstaufnahmen_df,chart_id = "E9tIz")

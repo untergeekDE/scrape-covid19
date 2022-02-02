@@ -40,7 +40,9 @@ while (nrow(tests_df) == nrow(aktuell_df)) {
     mutate(jahr = as.numeric(str_extract(kw,"20[0-9][0-9]"))) %>%
     mutate(kw = as.numeric(str_replace(str_extract(kw,"[0-9]+/"),"[^0-9]",""))) %>%
     # Sonderlösung für 2020 und 2021 - weil es 2020 eine KW53 gab, 371 Tage bis KW1/2021
-    mutate(stichtag = as_date("2020-03-15")+(kw-11)*7+(jahr-2020)*371) %>%
+    mutate(stichtag = ceiling_date(make_date(jahr),
+                                   unit="week",
+                                   week_start=7)+7*kw) %>%
     select(kw ,stichtag, tests, positiv, quote)
   if (now() > ts+(24*3600)) {
     msg("KEINE DATEN GEFUNDEN")

@@ -1,46 +1,33 @@
 ################ meldeverzug-inzidenzfehler.R
-# #
-# Sehr roh, sehr beta - 
+# 
 # Wochenweise Auswertung der im Archiv gespeicherten Daten auf den Meldeverzug - 
-# - wie stark war der durchschnittliche Meldeverzug (also die Abweichung vom Datum des
-#   Tagesreports) in der jeweiligen Woche?
-# - Wie stark haben die Verzögerungen die Fallzahlen (und damit die Inzidenz) beeinflusst?
-#   Vergleich der in der jeweiligen Woche gemeldeten Fälle mit der "richtigen" Berechnung 
-#   aus der Woche danach, die auch die inzwischen nachgemeldeten Fälle erhält
+# - wie stark war der durchschnittliche Meldeverzug - anders gesagt: wie alt
+#   waren die gemeldeten Fälle? (Vergleich Meldedatum/Datenstand-Datum)
+# - Wie stark haben die Verzögerungen die Fallzahlen (und damit die Inzidenz) 
+#   beeinflusst? Vergleich der 7-Tage Inzidenz mit der 7TI, wie sie sich eine
+#   Woche später darstellt, mit Nachmeldungen - und dann die prozentuale
+#   Abweichung. 
 #
+#   Überblick je Tag und je Kreis für die letzten sechs Wochen. 
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 10.12.2020
+# Stand: 27.1.2022
 #
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
 rm(list=ls())
 
-msgTarget <- "B20:C20"
+msgTarget <- NULL
 
 if (file.exists("./server-msg-googlesheet-include.R")) {
   source("./server-msg-googlesheet-include.R")
 } else {
   source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
 }
-
-# Google Sheets
-
-risklayer_id = "1wg-s4_Lz2Stil6spQEYFdZaBEp8nWW26gVyfHqvcl8s"
-
-# Geht öfter mal schief - Seite ist notorisch überlastet
-
-# Im Moment kein Vergleich mit den Risklayer-Daten
-# risklayer_df <- tibble()
-# while (nrow(risklayer_df) < 10) {
-#   tryCatch(risklayer_df <- read_sheet(risklayer_id, sheet = "Haupt"))
-# }
-
-
+library(data.table)
 
 # Kreisnamen
-
 
 
 kreise <- read.xlsx("index/kreise-namen-index.xlsx") %>%
@@ -48,11 +35,59 @@ kreise <- read.xlsx("index/kreise-namen-index.xlsx") %>%
   
 
 # Abfragedaten ab start_date im definierten Pfad
-# 49 Tage zurück
+# 42 Tage (6 Wochen) zurück
 
-start_date <- as_date(today()-49)
-path <- "./archiv/"
 
+start_date <- as_date(today()-42)
+# Auf dem Server: Archivverzeichnis, überall sonst: lokales Archiv versuchen
+archiv_path <- ifelse(server,
+                      "./archiv/",
+                      "~/rki-archiv-lokal/")
+
+#---- Importfunktionen ----
+# Funktion liest den jeweiligen Tag aus dem RKI-Archiv
+read_github_rki_data <- function(d = today()) {
+  # Repository auf Github
+  repo <- "robert-koch-institut/SARS-CoV-2_Infektionen_in_Deutschland/"
+  # Pfad
+  path <- "Archiv/"
+  fn <- paste0(as_date(d),"_Deutschland_SarsCov2_Infektionen.csv")
+  # Wann war der letzte Commit des Github-Files? Das als Prognosedatum prog_d.
+  
+  csv_path <- paste0("https://github.com/",
+                 repo,
+                 "raw/master/",
+                 path,
+                 fn
+                 )
+  # Sicherheitsfeature: wenn kein Dataframe, probiere nochmal. 
+  err <- try(rki_ <- read_csv(csv_path))
+  if ("try-error" %in% class(err)) {
+    stop(err)
+  }
+  # Einfacher Check: Jüngste Fälle mit Meldedatum gestern?
+  # (Oh, dass dieser Check eines Tages scheitern möge!)
+  if (max(rki_$Meldedatum) != d-1) {
+    warning("Keine Neufälle von gestern")
+  }
+  # Daten in der Tabelle ergänzen, um kompatibel zu bleiben
+  rki_ <- rki_ %>% 
+    # Datenstand (Lesedatum)
+    mutate(Datenstand = d) %>% 
+    # IdLandkreis in char, Landkreis-Namen für Hessen ergänzen
+    mutate(IdLandkreis =ifelse(IdLandkreis>9999,
+                               as.character(IdLandkreis),
+                               paste0("0",IdLandkreis))) %>% 
+    left_join(kreise %>% select(AGS,Landkreis=kreis),
+              by=c("IdLandkreis"="AGS")) %>% 
+    # IdBundesland numerisch; Hessen ergänzen
+    mutate(IdBundesland = as.numeric(str_sub(IdLandkreis,1,2))) %>% 
+    mutate(Bundesland = ifelse(IdBundesland == 6,"Hessen",""))
+  # Raus damit. 
+  return(rki_)
+}
+
+# Spaltenbeschreibungen Tagesmeldungs-Tabelle
 col_descr <- cols(
   IdBundesland = col_double(),
   Bundesland = col_character(),
@@ -69,110 +104,125 @@ col_descr <- cols(
   NeuerTodesfall = col_double(),
   Refdatum = col_character(), # als String lesen und wandeln
   NeuGenesen = col_double(),
-  AnzahlGenesen = col_double(),
-  IstErkrankungsbeginn = col_double(),
-  Altersgruppe2 = col_character()
+  AnzahlGenesen = col_double()
 )
 
-# ---- Erste Runde: Meldeverzug in eine Tabelle schreiben. -----
+get_archived_data <- function(d = as.integer(today())) {
+  file_name <- paste0(archiv_path,"rki-",as_date(d),".csv")
+  if(file.exists(file_name)) {
+    tagesmeldung_df <- read_csv2(file_name,col_types = col_descr)
+  } else {
+    # Kein lokaler File gefunden; hole ihn vom RKI-Github
+    tagesmeldung_df <- read_github_rki_data(d) %>% 
+      # gleich auf Hessen filtern
+      filter(Bundesland == "Hessen")
+    write_csv2(tagesmeldung_df,file_name)
+  }
+  # Rückgabe der Hessen-Fallmeldungs-Tabelle für diesen Meldetag
+  return(tagesmeldung_df)
+}
+
+# ---- Erste Runde: Meldeverzug je Tag in eine Tabelle schreiben. -----
 
 verzuege_df <- NULL
 
-for (d in start_date:today()) { # Irritierenderweise ist d eine Integer-Zahl
-  # Deshalb die Woche erst mal so berechnen
-  # wk <- isoweek(as_date(d))
-  file_name <- paste0(path,"rki-",as_date(d),".csv")
-  if(file.exists(file_name)) {
-    tagesmeldung_df <- read_csv2(file_name,col_types = col_descr) %>%
-    # Fälle, die neu zum Vortag waren
-      filter(NeuerFall == 1) %>%
-      mutate(datum = as_date(Datenstand),
-             Meldedatum = as_date(Meldedatum),
+for (d in start_date:today()) { 
+  # Irritierenderweise ist d eine Integer-Zahl
+  #
+  # Lies die "Briefkastenmeldung" (also die Meldungen vom Tag d)
+  tagesmeldung_df <- kreise %>% 
+    select(AGS) %>% 
+    # Kreise als Basis
+    mutate(datum = as_date(d)) %>% 
+    full_join(get_archived_data(d) %>% 
+                rename(AGS=IdLandkreis) %>% 
+                # Neufälle ausfiltern
+                # Normalerweise wäre der Filter: in c(-1,1) - 
+                # unter -1 verbergen sich die Korrekturen. Die wollen wir aber nicht.
+                filter(NeuerFall == 1),
+              by="AGS") %>% 
+    mutate(Meldedatum = as_date(Meldedatum),
              Refdatum = as_date(Refdatum)) %>%
-      mutate(delta = as_date(datum) - as_date(Meldedatum)) %>%
-      select(datum, delta, n = AnzahlFall, AGS = IdLandkreis)
+    # Ganz einfach: für jeden Fall (bzw. Gruppe von Fällen)
+    # die Differenz von Meldedatum (wann wurde der Fall dem GA gemeldet)
+    # und Publikationsdatum (das Datum des Briefkasten-Meldedatensatzes)
+
+          mutate(delta = as_date(datum) - as_date(Meldedatum)) %>%
+    mutate(AnzahlFall = ifelse(is.na(AnzahlFall),0,AnzahlFall)) %>% 
+    # Alles außer Datum, Delta, Kreis und Anzahl der Fälle in dieser Meldung weg
+      select(datum, delta, n = AnzahlFall, AGS)
     # Die Fallmeldungen auspacken: 
     # Funktion rep wiederholt die jeweilige df-Zeile n mal
     tmn_df <- as.data.frame(lapply(tagesmeldung_df,rep,tagesmeldung_df$n)) %>%
-      select(delta, AGS, datum) %>%
-      mutate(wk = isoweek(as_date(d)))
-    
-      
+      select(delta, AGS, datum)
+    # in tmn_df hängen jetzt alle Fallmeldungen dran.   
     if (is.null(verzuege_df)) {
-      verzuege_df <- tmn_df
+      verzuege_df <- tmn_df 
     } else {
-      verzuege_df <- rbind(verzuege_df, tmn_df)
+      verzuege_df <- bind_rows(verzuege_df, tmn_df)
     }
-  }
   msg("Meldeverzüge ",as_date(d))
 }
 
-v_ags_df <- verzuege_df %>%
-  right_join(kreise, by = "AGS") %>%
-  select(-AGS, -datum) %>%
-  group_by(kreis, wk) %>%
-  summarize(m_delay = mean(delta)) %>%
-  pivot_wider(names_from = kreis, values_from = m_delay) %>%
-  ungroup()
+# Jetzt nach Tagen das mittlere Alter der gemeldeten Fälle.
+# Am Ende hat man eine Tabelle, die für jeden Kreis und jeden Tag
+# das Durchschnittsalter zeichnet. 
+alter_faelle_df <- verzuege_df %>% 
+  arrange(datum) %>% 
+  group_by(datum,AGS) %>%
+  # Lubridate-Tage in eine Integer-Zahl umwandeln
+  mutate(delta = as.integer(delta)) %>% 
+  # Anteil der Meldungen, die älter als 3 Tage sind
+  mutate(verspätet = delta > 3) %>% 
+  summarize(delta = mean(delta,na.rm=TRUE),
+            alte_meldungen = sum(verspätet,na.rm=TRUE)/n()*100) %>% 
+  ungroup() %>% 
+  right_join(kreise, by = "AGS")
 
-write.xlsx(v_ags_df,"daten/mean_meldeverzug.xlsx",overwrite=T)
+# Kleine Anmerkung zu dieser Tabelle: 
+# Da sie die mittleren Alter pro Tag und die prozentualen Anteile
+# der Fälle älter 3 Tage enthält, und da sie "lang" ist, kann man
+# sie wunderbar von Hand filtern.
+
+wi_verspätung_df <- alter_faelle_df %>% 
+  # Wiesbaden
+  filter(AGS == "06414") %>% 
+  select(-AGS,-kreis)
+write.xlsx(wi_verspätung_df,
+           paste0("daten/verspätung-wi-",
+                  today(),
+                  ".xlsx"),overwrite=T)
 
 
-v_ags_df <- v_ags_df %>%  
-  # auf die letzten 12 Wochen filtern
-  filter(wk > isoweek(today())-12)
+tab_alte_meldungen <- alter_faelle_df %>%
+  mutate(datum = format.Date(datum,"%d.%m.%Y")) %>% 
+  select(-AGS,-delta) %>%  
+  pivot_wider(names_from=datum,values_from=alte_meldungen)
+
+tab_medianalter <- alter_faelle_df %>% 
+  select(-AGS,-alte_meldungen) %>%
+  mutate(datum = format.Date(datum,"%d.%m.%Y")) %>% 
+  pivot_wider(names_from=datum, values_from=delta)
+
+# 
+small_multiples <- tab_alte_meldungen %>% 
+  full_join(tab_medianalter,by = "kreis")
   
-sheet_write(v_ags_df,ss = aaa_id, sheet = "MeldeverzugWocheKreis") 
-msg("Durchschnittlicher Meldeverzug pro Kreis berechnet und geschrieben")
-
-# ---- Anteil verspätete Meldungen ----
-# Auswertung aktuelle Woche: Wie hoch ist der Anteil der Fälle in den letzten 7 Tagen mit mehr als 3 Tagen Meldeverzug?
-
-delay_ags_today_df <- verzuege_df %>%
-  filter(datum == today()-1) %>%
-  right_join(kreise, by = "AGS") %>% # Kreisnamen reinholen
-  select(-AGS) %>%
-  group_by(kreis) %>%
-  count(delta > 3) %>%
-  pivot_wider(names_from = 'delta > 3',values_from = n) %>%
-  select(1,pünktlich = 2,verspätet = 3) %>%
-  mutate(verspätet = ifelse(is.na(verspätet),0,verspätet),
-         pünktlich = ifelse(is.na(pünktlich),0,pünktlich)) %>%
-  mutate(quote_heute = ifelse(verspätet+pünktlich > 0, verspätet/ (pünktlich + verspätet) * 100,0)) 
-
-q_heute_hessen = sum(delay_ags_today_df$verspätet)/
-  (sum(delay_ags_today_df$pünktlich) + sum(delay_ags_today_df$verspätet) * 100)
-delay_ags_today_df <- delay_ags_today_df %>% select(kreis, quote_heute)
-
-delay_ags_df <- verzuege_df %>%
-  filter(datum > today()-8) %>%
-  right_join(kreise, by = "AGS") %>% # Kreisnamen reinholen
-  select(-AGS) %>%
-  group_by(kreis) %>%
-  count(delta > 3) %>%
-  pivot_wider(names_from = 'delta > 3',values_from = n) %>%
-  select(1,pünktlich = 2,verspätet = 3) %>%
-  mutate(verspätet = ifelse(is.na(verspätet),0,verspätet)) %>%
-  mutate(quote = verspätet/ (pünktlich + verspätet) * 100)
+# in die DW-Grafik packen
+dw_data_to_chart(tab_alte_meldungen, chart_id = "qTjK4")
 
 
+write.xlsx(small_multiples,"daten/mean_meldeverzug.xlsx",overwrite=T)
+sheet_write(tab_alte_meldungen, ss = aaa_id, sheet = "MeldeverzugWocheKreis") 
+sheet_write(tab_medianalter,ss = aaa_id, sheet = "Datenqualität")
 
-# Summe dran
-delay_ags_df <- rbind(delay_ags_df,
-                      tibble(kreis = "HESSEN",
-                             pünktlich = sum(delay_ags_df$pünktlich),
-                             verspätet = sum(delay_ags_df$verspätet),
-                            quote = sum(delay_ags_df$verspätet)/sum(c(delay_ags_df$verspätet,delay_ags_df$pünktlich))*100)) %>%
-                  full_join(delay_ags_today_df, by = "kreis")
-  
+msg("Meldeverzug hessenweit")
 
-sheet_write(delay_ags_df,ss = aaa_id, sheet = "Datenqualität")
-msg("Meldeverzug hessenweit: ",round(delay_ags_df$quote[delay_ags_df$kreis=="HESSEN"],2),"% mehr als 3 Tage verspätet")
+#---- Einzelanalysen ----
 # Die drei großen Sünder: Wiesbaden, Bergstraße, LDK
 
 wi_df <- verzuege_df %>%
   filter(AGS == "06414") %>%
-  filter(wk > 46) %>% # letzte beide Wochen
   # Histogramm:
   count(delta)
 
@@ -180,7 +230,6 @@ write.xlsx(wi_df,"daten/wi-histogramm.xlsx",overwrite=T)
 
 bergstr_df <- verzuege_df %>%
   filter(AGS == "06431") %>%
-  filter(wk > 45) %>% # letzte drei Wochen
   # Histogramm:
   count(delta)
 
@@ -188,7 +237,6 @@ write.xlsx(bergstr_df,"daten/bergstr-histogramm.xlsx",overwrite=T)
 
 ldk_df <- verzuege_df %>%
   filter(AGS == "06532") %>%
-  filter(wk > 45) %>% # letzte drei Wochen
   # Histogramm:
   count(delta)
 
@@ -196,7 +244,6 @@ write.xlsx(ldk_df,"daten/ldk-histogramm.xlsx",overwrite=T)
 
 ffm_df <- verzuege_df %>%
   filter(AGS == "06412") %>%
-  filter(wk > 45) %>% # letzte drei Wochen
   # Histogramm:
   count(delta)
 
@@ -204,7 +251,6 @@ write.xlsx(ffm_df,"daten/ffm-histogramm.xlsx",overwrite=T)
 
 rtk_df <- verzuege_df %>%
   filter(AGS == "06439") %>%
-  filter(wk > 46) %>% # letzte beide Wochen
   # Histogramm:
   count(delta)
 
@@ -212,7 +258,6 @@ write.xlsx(rtk_df,"daten/rtk-histogramm.xlsx", overwrite=T)
 
 wk_df <- verzuege_df %>%
   filter(AGS == "06440") %>%
-  filter(wk > 46) %>% # letzte beide Wochen
   # Histogramm:
   count(delta)
 
@@ -220,7 +265,6 @@ write.xlsx(wk_df,"daten/wk-histogramm.xlsx",overwrite=T)
 
 of_df <- verzuege_df %>%
   filter(AGS == "06413") %>%
-  filter(wk > 46) %>% # letzte beide Wochen
   # Histogramm:
   count(delta)
 
@@ -233,24 +277,26 @@ msg("Histogrammdaten WI, LDK, Bergstrasse, FFM lokal geschrieben")
 # mit allen bis dahin eingetroffenen Nachmeldungen berechnet wird. 
 
 
-t = today()
-
 # Einmal den kompletten Datensatz
 
-d <- t-49 # 7 Wochen zurück 
+# die Tabelle mit den prozentualen Abweichungen
 inz_delta_df <- NULL
+# Die Zeit, die wir für Korrekturen einräumen
+korr <- 5
 
-while (d <= t-7) {
+for (d in start_date:(today()-korr)) {
   
-  kw <- isoweek(as_date(d))
-  # 
-  
+
   # Referenz: Vom aktuellen Tag 7 Tage in die Zukunft gehen
   # und aus dem Datensatz von diesem Tag die Fallzahlen berechnen
-  ref7tage_df <- read_csv2(paste0(path,"rki-",as_date(d+7),".csv"),col_types = col_descr) %>%
-    mutate(datum = as_date(Meldedatum)) %>%
+  # d ist das Referenzdatum - der Tag, für den die Inziden berechnet
+  # werden soll.
+  #
+  # Referenz: Korrigierte Fallzahl (korr) Tage später
+  korr7tage_df <- get_archived_data(as_date(d+korr)) %>% 
+    mutate(Meldedatum = as_date(Meldedatum)) %>%
     # Meldedatum in den 7 zurückliegenenden Tagen
-    filter(datum > as_date(d-8) & datum < as_date(d)) %>%
+    filter(Meldedatum > as_date(d-8) & Meldedatum < as_date(d)) %>%
     # Auf die Summen filtern?
     filter(NeuerFall %in% c(0,1)) %>%
     select(AGS = IdLandkreis,AnzahlFall) %>%
@@ -261,9 +307,9 @@ while (d <= t-7) {
     summarize(AnzahlFall = sum(AnzahlFall)) %>%
     ungroup() %>%
     select(AGS,ref7t = AnzahlFall)
-  alt7tage_df <- read_csv2(paste0(path,"rki-",as_date(d),".csv"),col_types = col_descr) %>%
-    mutate(datum = as_date(Meldedatum)) %>%
-    filter(datum > as_date(d-8) & datum < as_date(d)) %>%
+  orig7tage_df <- get_archived_data(d) %>% 
+    mutate(Meldedatum = as_date(Meldedatum)) %>%
+    filter(Meldedatum > as_date(d-8) & Meldedatum < as_date(d)) %>%
     # Auf die Summen filtern?
     filter(NeuerFall %in% c(0,1)) %>%
     select(AGS = IdLandkreis,AnzahlFall) %>%
@@ -274,108 +320,53 @@ while (d <= t-7) {
     summarize(AnzahlFall = sum(AnzahlFall)) %>%
     ungroup() %>%
     select(AGS,alt7t = AnzahlFall) %>%
-    full_join(ref7tage_df, by = "AGS") %>%
-    mutate(vollst = (100*alt7t/ref7t)-100) %>%
-    select(AGS, vollst) %>%
-    rename(!!as.character(d):=vollst)
+    # Die Fallzahl dazuholen, wie sie (korr) Tage später vorliegt
+    full_join(korr7tage_df, by = "AGS") %>%
+    # Prozentuale Abweichung
+    mutate(abw = (100*alt7t/ref7t)-100) %>%
+    mutate(datum = as_date(d)) %>% 
+    select(datum,AGS, abw) #%>%
+    # Gib der Variablen den Namen des Referenzdatums
+    #rename(!!as.character(as_date(d)):=vollst)
     
-  
+  # Spalte zur Gesamttabelle hinzufügen
   if (is.null(inz_delta_df)) {
-    inz_delta_df <- alt7tage_df  
+    inz_delta_df <- orig7tage_df  
   } else {
-    inz_delta_df <- inz_delta_df %>%
-      full_join(alt7tage_df, by = "AGS")
+    inz_delta_df <- bind_rows(inz_delta_df, orig7tage_df)
   }
   msg("Inzidenz-Fehler ",as_date(d)," berechnet")
-  d <- d+1 # Tageweise durchsteppen 
-  
 }
 
+# Kreisnamen dazuholen
 inz_delta2_df <- kreise %>%
   full_join(inz_delta_df, by = "AGS") %>%
+  # AGS raus
   select(-AGS) %>%
-  # Transponiere: Erst den umgekehrten Pivot nach Datum...
-  pivot_longer(cols = -kreis, names_to = "Datum", values_to ="inz") %>%
-  select(Datum,kreis,inz) %>%
   # ...und dann nach Kreis pivotieren. 
-  pivot_wider(names_from = kreis, values_from = inz)
+  pivot_wider(names_from = kreis, values_from = abw)
+ 
+# Berechne nach Wochentag 
+inz_delta_wt_df <- inz_delta_df %>% 
+  full_join(kreise, by = "AGS") %>%
+  # AGS raus
+  select(-AGS) %>%
   
+  mutate(wt = wday(datum)) %>% 
+  group_by(wt,kreis) %>% 
+  summarize(abw = mean(abw)) %>% 
+  pivot_wider(names_from=wt,values_from = abw)
+ 
 
 write.xlsx(inz_delta2_df,"daten/vollstaendigkeit-kreise-wochen.xlsx", overwrite=T)
-# Ins Google Sheet nur die letzten 8 Wochen: 8*7=56 
-# für die letzte 
-sheet_write(inz_delta2_df %>% filter(Datum > today()-56), ss = aaa_id, sheet = "Abweichung Inzidenz")
+sheet_write(inz_delta2_df, ss = aaa_id, sheet = "Abweichung Inzidenz")
+dw_data_to_chart(inz_delta2_df, chart_id = "2j6K9")
+dw_publish_chart(chart_id = "2j6K9")
 msg("Abweichungen berechnet und geschreiben")
 
-# ---- Letzte 4 Wochen: Abweichungen nach Kreis und Wochentag
-
-t <- today()
-inz_wt_df <- NULL
-
-for (d in (t-31):(t-4)) {
-  
-  tag <- wday(as_date(d),label=TRUE,abbr=TRUE)
-  # 
-  ref7tage_df <- read_csv2(paste0(path,"rki-",as_date(d+4),".csv"),col_types = col_descr) %>%
-    mutate(datum = as_date(Meldedatum)) %>%
-    filter(datum > as_date(d-8) & datum < as_date(d)) %>%
-    # Auf die Summen filtern?
-    filter(NeuerFall %in% c(0,1)) %>%
-    select(AGS = IdLandkreis,AnzahlFall) %>%
-    # Nach Kreis sortieren
-    group_by(AGS) %>%
-    #  pivot_wider(names_from = datum, values_from = AnzahlFall)
-    # Summen für Fallzahl, Genesen, Todesfall bilden
-    summarize(AnzahlFall = sum(AnzahlFall)) %>%
-    ungroup() %>%
-    select(AGS,ref7t = AnzahlFall)
-  alt7tage_df <- read_csv2(paste0(path,"rki-",as_date(d),".csv"),col_types = col_descr) %>%
-    mutate(datum = as_date(Meldedatum)) %>%
-    filter(datum > as_date(d-8) & datum < as_date(d)) %>%
-    # Auf die Summen filtern?
-    filter(NeuerFall %in% c(0,1)) %>%
-    select(AGS = IdLandkreis,AnzahlFall) %>%
-    # Nach Kreis sortieren
-    group_by(AGS) %>%
-    #  pivot_wider(names_from = datum, values_from = AnzahlFall)
-    # Summen für Fallzahl, Genesen, Todesfall bilden
-    summarize(AnzahlFall = sum(AnzahlFall)) %>%
-    ungroup()  %>%
-    select(AGS,alt7t = AnzahlFall) %>%
-    full_join(ref7tage_df, by = "AGS") %>%
-    mutate(vollst = (100*alt7t/ref7t)-100) %>%
-    mutate(wt = tag) %>%
-    # AGS durch Namen ersetzen
-    full_join(kreise, by = "AGS") %>%
-    select(kreis, vollst, wt) %>%
-    pivot_wider(names_from = kreis, values_from = vollst)
-  
-
-  
-  if (is.null(inz_wt_df)) {
-    inz_wt_df <- alt7tage_df  
-  } else {
-    inz_wt_df <- rbind(inz_wt_df,alt7tage_df)
-  }
-  msg("Inzidenz-Fehler ",as_date(d)," berechnet")
-
-}
-
-inz_wt_sum_df <- inz_wt_df %>%
-  pivot_longer(cols = -wt, names_to = "kreis" ,values_to = "vollst") %>%
-  arrange(wt) %>%
-  group_by(wt,kreis) %>%
-  summarize(vollst = mean(vollst)) %>%
-  pivot_wider(names_from = kreis, values_from = vollst)
-
-
-
-sheet_write(inz_wt_df,ss=aaa_id,sheet="Abweichung Inzidenz")
-write.xlsx(inz_wt_df,"vollstaendigkeit-kreise-wochentage.xlsx", overwrite=T)
-sheet_write(inz_wt_sum_df, ss = aaa_id, sheet = "Abweichung Wochentage" )
+sheet_write(inz_delta_wt_df,ss=aaa_id,sheet="Abweichung Inzidenz")
+write.xlsx(inz_delta_wt_df,"vollstaendigkeit-kreise-wochentage.xlsx", overwrite=T)
+sheet_write(inz_delta_wt_df, ss = aaa_id, sheet = "Abweichung Wochentage" )
 msg("Abweichungen Wochentage berechnet und geschreiben")
-
-# Die Grafik, die das anzeigt: 
-dw_publish_chart(chart_id="2j6K9")
 
 msg("OK")

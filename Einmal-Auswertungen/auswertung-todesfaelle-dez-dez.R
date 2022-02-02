@@ -225,7 +225,7 @@ for (i in 1:nrow(wellen_def)) {
                               filter(Datum == wellen_def$from[i]) %>% 
                               pull(quote_zweit_ue60) %>% 
                               ifelse(is.na(.),0,.)
-  
+
   # Enddatum der "Welle" plus 31 Tage suchen: wer ist in diesem Zeitraum gestorben?
   # Am Ende noch mal schauen: wie viele Fälle gemeldet in dieser Zeit?
   for (d in wellen_def$from[i]:(wellen_def$to[i]+31)) {
@@ -296,7 +296,5 @@ for (i in 1:nrow(wellen_def)) {
 }
 
 write.xlsx(wellen_def,"daten/monate.xlsx", overwrite=T)
-
-
 
 # Erst mal bis hier. Weitere Analyse von Hand.

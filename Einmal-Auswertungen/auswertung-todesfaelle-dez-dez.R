@@ -144,6 +144,28 @@ bev_df <- read_delim("index/12411-0015.csv",
                names_to = "Stichtag",
                values_to = "pop")
 
+#  # vorbereitete Datenbank mit den Kreis- und Länder-Bevölkerungszahlen nach Altersjahren laden
+# enthält zwei Dataframes:
+# jeweils id | Name | ag | Insgesamt | männlich | weiblich 
+# - pop_bl_df
+# - pop_kr_df
+
+# Hier schummmele ich ein wenig - das sind die Bevölkerungszahlen für 2020,
+# die eigentlich erst ab 8/2021 zum Einsatz kamen. 
+
+load("index/pop.rda")
+bev_ue60 <- pop_bl_df %>% 
+  mutate(ag = ifelse(str_detect(ag,"^unter"),0,
+                     as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
+  # filtere Ü60
+  filter(ag >= 60) %>% 
+  mutate(Insgesamt = as.numeric(Insgesamt)) %>% 
+  # nur hessen
+  filter(id == "06") %>% 
+  pull(Insgesamt) %>% 
+  sum()
+  
+
 # ---- Alle Meldungen durchgehen, Todesfälle und Gesundmeldungen isolieren -----
 
 # Jetzt durchlaufen: 
@@ -170,6 +192,7 @@ for (i in 1:nrow(wellen_def)) {
   
   tote_n <- 0
   tote_t <- NULL
+  tote_t_e <- NULL
   tote_ue60 <- 0
   
   # Mach's einfach: Bevölkerungszahl für Inzidenzberechnung
@@ -182,20 +205,26 @@ for (i in 1:nrow(wellen_def)) {
     filter(as_date(d) >= as_date(datum)) %>% 
     tail(1) %>% 
     pull(stichtag)
+  # Gesamtbevölkerung zum Stichtag
   hessen <- bev_df %>% 
     filter(bev_Stichtag == Stichtag) %>% 
     filter(str_detect(AGS,"^06")) %>% 
     mutate(pop = as.integer(pop)) %>% 
     pull(pop) %>% 
     sum()
-  # Gesamtbevölkerung
+  # Bevölkerung Ü60 zum Stichtag
+  # gibt's leider nicht, durchgängig mit Werten von 2020 rechnen
   
   # Jetzt noch schnell die Impfquote zu Beginn des Zeitraums
 
-  wellen_def$durchgeimpft[i] = (impftabelle_df %>% 
+  wellen_def$durchgeimpft[i] = impftabelle_df %>% 
                                   filter(Datum == wellen_def$from[i]) %>% 
-                                  pull(durchgeimpft)) / hessen * 100 %>% 
+                                  pull(quote_zweit) %>% 
                                   ifelse(is.na(.),0,.)
+  wellen_def$impf_ue60[i] = impftabelle_df %>% 
+                              filter(Datum == wellen_def$from[i]) %>% 
+                              pull(quote_zweit_ue60) %>% 
+                              ifelse(is.na(.),0,.)
   
   # Enddatum der "Welle" plus 31 Tage suchen: wer ist in diesem Zeitraum gestorben?
   # Am Ende noch mal schauen: wie viele Fälle gemeldet in dieser Zeit?
@@ -227,6 +256,11 @@ for (i in 1:nrow(wellen_def)) {
                        mutate(delta = as.integer(as_date(d)-as_date(Meldedatum))) %>%  
                         pull(delta))
     msg("Stand ",as_date(d)," - ",tote_n_heute)
+    # nur für die Fälle mit Erkrankungsdatum
+    tote_t_e <- c(tote_t_e, tote_df %>% 
+                    filter(IstErkrankungsbeginn == 1) %>% 
+                    mutate(delta = as.integer(as_date(d)-as_date(Refdatum))) %>% 
+                    pull(delta))
   }
   # in tmp_df ist dann die letzte Meldedatei 1 Monat nach der Welle.
   # Die für die Inzidenzberechnung nutzen.
@@ -240,21 +274,25 @@ for (i in 1:nrow(wellen_def)) {
   # Mit fiesem Base R die Werte in die Tabelle eintragen. 
   wellen_def$n[i] <- n
   # Nur Meldungen über 60-Jährige
-  wellen_def$ue60[i] <- tmp_df %>% 
+  n_ue60 <- tmp_df %>% 
     filter(Meldedatum >= wellen_def$from[i] &
              Meldedatum <= wellen_def$to[i]) %>% 
     filter(NeuerFall %in% c(0,1)) %>% 
     filter(Altersgruppe %in% ue60v) %>% 
     pull(AnzahlFall) %>% 
     sum()
+  wellen_def$n_ue60[i] <- n_ue60
   # 7-Tage-Inzidenz: Alle Fälle, umgerechnet auf Hessen, 
   # Tagesmittelwert mal 7
   wellen_def$inz7t[i] <- (n*7/31) / hessen * 100000
+  wellen_def$inz7t_ue60[i] <- (n_ue60*7/31) / bev_ue60 * 100000
   wellen_def$tote[i] <- tote_n
   wellen_def$tote_ue60[i] <- tote_ue60
   # Mittelwerte der Krankheitsfälle 
-  wellen_def$krankheitsdauer_median[i] <- median(tote_t)
-  wellen_def$krankheitsdauer_mean[i] <- mean(tote_t)
+  wellen_def$krankheitsdauer_alle_median[i] <- median(tote_t)
+  wellen_def$krankheitsdauer_alle_mean[i] <- mean(tote_t)
+  wellen_def$krankheitsdauer_median[i] <- median(tote_t_e)
+  wellen_def$krankheitsdauer_mean[i] <- mean(tote_t_e)
 }
 
 write.xlsx(wellen_def,"daten/monate.xlsx", overwrite=T)

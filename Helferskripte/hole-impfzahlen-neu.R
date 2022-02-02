@@ -1,14 +1,25 @@
-##################################### hole-impfzahlen.R #########################
+##################################### hole-impfzahlen-neu.R #########################
 # - Impfzahlen holen und ausgeben
-# Dieses Skript ist ein Zwischenstand: Das RKI hat zwar jetzt ein Github-
-# Repository für die Daten angelegt - das ist zuverlässiger, und die Daten
-# sind vollständiger. Leider lässt sich ein Wert - die Quote der Geimpften nach
-# Altersgruppe - aus den Daten nicht richtig angeben, weil sich die Logik der
-# Zählung verändert hat. Deswegen muss dieses Skript einstweilen auch die alte
-# Datenquelle auslesen, die Excel-Datei mit dem "Digitalen Impfquotenmonitoring auf rki.de -
-# ...mit allen ihren Schwierigkeiten und Risiken. 
+# Versuch, die Daten allein auf Github-Basis zu errechnen und auszugeben
+#
+# Das wird dadurch möglich, dass seit Januar 2022 die Einordnung
+# von J&J eine andere ist: Auch der J&J-Impfstoff muss Teil einer 
+# Impfserie sein, für eine Grundimmunisierung ist nach dem J&J-Erstpiks
+# noch eine zweite Impfung erforderlich 
+# (vgl. https://www.pei.de/DE/newsroom/dossier/coronavirus/coronavirus-inhalt.html?nn=169730&cms_pos=3)
+#
+# Anscheinend kamen die Erst- und Zweitimpfquoten so zustande,
+# dass J&J-Erstimpfungen auf die Zweitimpfquote addiert wurden. 
+# Das konnte aus den Github-Daten aber nicht berechnet werden, 
+# weil die nur entweder nach Impfserie und Impfstoff (bl_tbl) oder
+# nach Impfserie und Altersgruppe (lk_tbl) segmentiert waren. 
+# Gegencheck mit den Hessen_Daten vom 20.1.22 zeigt aber: offenbar
+# hat das RKi genau so gerechnet. 
+#
+# Deshalb jetzt mal eine Variante, mit der alle Daten exklusiv aus 
+# den Github-Daten errechnet werden, zum Vergleich. 
 
-# Stand: 12.1.2022
+# Stand: 20.1.2022
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -18,7 +29,7 @@ rm(list=ls())
 # Definiere Messaging, Server-Parameter, RKI-Lese-Funktion
 # Im WD, bitte!
 
-msgTarget <- "B17:C17"
+msgTarget <- NULL
 
 if (file.exists("./server-msg-googlesheet-include.R")) {
   source("./server-msg-googlesheet-include.R")
@@ -98,12 +109,12 @@ bev_kr_df <- pop_kr_df %>%
 
 
 # Bevölkerung nach Altersgruppen, Hessen
-hessen=sum(bev_bl_df %>% filter(id=="06") %>% select(-id,-Bundesland))
-ue60 = bev_bl_df %>% filter(id=="06") %>% pull(`60+`)
-ue18_59 = bev_bl_df %>% filter(id=="06") %>% pull(`18-59`)
-ue12_17 = bev_bl_df %>% filter(id=="06") %>% pull(`12-17`)
-ue5_11 = bev_bl_df %>% filter(id=="06") %>%  pull(`05-11`)
-u60 = hessen - ue60
+hessen <-sum(bev_bl_df %>% filter(id=="06") %>% select(-id,-Bundesland))
+ue60 <- bev_bl_df %>% filter(id=="06") %>% pull(`60+`)
+ue18_59 <- bev_bl_df %>% filter(id=="06") %>% pull(`18-59`)
+ue12_17 <- bev_bl_df %>% filter(id=="06") %>% pull(`12-17`)
+ue5_11 <- bev_bl_df %>% filter(id=="06") %>%  pull(`05-11`)
+u60 <- hessen - ue60
 
 
 # ---- Daten aus RKI-Github-Repository lesen und aufarbeiten ----
@@ -159,34 +170,7 @@ lk_tbl <- read_csv(paste0("https://raw.githubusercontent.com/",
 # Letzten Datenstand festhalten
 i_d_max <- max(bl_tbl$Datum)
 
-# XLSX-Tabelle dazuholen 
-
-rki_xlsx_url <- "https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquotenmonitoring.xlsx?__blob=publicationFile"
-# Impfquoten nach Altersgruppe
-tabelle2 <- read.xlsx(rki_xlsx_url,sheet=2)
-# Impfquoten nach Impfstoff
-tabelle3 <- read.xlsx(rki_xlsx_url,sheet=3)
-# Zeitreihe Impfungen bundesweit
-tabelle4 <- read.xlsx(rki_xlsx_url,sheet=4)
-
-# Tabelle 2 aufarbeiten - Spaltennamen letztmals angepasst 21.12.2021
-impfquoten_xlsx_df <- tabelle2 %>% 
-                                   select(ID=1,
-                                          impfdosen = 3,
-                                          quote_erst = 7,
-                                          quote_erst_u12 = 9,
-                                          quote_erst_u18 = 10,
-                                          quote_erst_18_60 =12, 
-                                          quote_erst_ue60 = 13,
-                                          quote_zweit = 14,
-                                          quote_zweit_u12 = 16,
-                                          quote_zweit_u18 = 17,
-                                          quote_zweit_18_60 = 19,
-                                          quote_zweit_ue60 =20,
-                                          quote_dritt_u18 = 22,
-                                          quote_dritt_18_60 = 24,
-                                          quote_dritt_ue60 = 25) %>%
-                                   filter(as.numeric(ID) %in% 1:16)
+# XLSX-Tabelle raus
 
 # ---- Länder-Vergleichstabelle erstellen ----
 # Erstes Teil-DF: Absolute Summen nach Impfstoff je Land
@@ -238,7 +222,6 @@ bl_n_df <- bl_tbl %>%
 # Das ist jetzt nicht mehr der Fall - Janssen-Impfungen werden fest der Impfserie 1 zugeordnet.
 # Yay!
 
-
 # Nächste Tabelle: Absolute Summen nach Altersgruppen und Land
 # (Kreis-Infos werden hier nicht genutzt, weil sinnlos: 
 # Angegeben ist der Impfort, nicht der Wohnort der Geimpften - 
@@ -248,24 +231,6 @@ bl_n_df <- bl_tbl %>%
 
 msg("Baue Ländertabelle Impfquoten nach Altersgruppe...")
 
-# Hier stimmt noch was nicht. Die Impfquoten nach AG sind zu niedrig. 
-# Vermutlicher Grund: Die Zählung "Impfschutz" erfasst Vorerkrankte bzw. Janssen-
-# Geimpfte mit Impfstatus 2, auch wenn es erst die erste Impfung ist. 
-# Zitat aus dem RKI-Github-Repository: "Angabe zum Impfschutz - Vollständiger
-# Impfschutz besteht bei zweifacher Impfung, Impfung mit Janssen und einfach 
-# Geimpften mit überstandener SARS-CoV-2 Infektion". Super. 
-
-# Deswegen wird für die Impfquote einstweilen weiter die grausige XLS-Tabelle
-# von der RKI-Website genutzt. 
-
-# DICKE AUSNAHME: Die 5-11jährigen - die ja ohnehin keinen Janssen-Impfstoff 
-# kriegen, und für die Impfquoten noch nicht angegeben sind. Deshalb errechnen 
-# wir die Impfquoten tatsächlich aus der bl_3_df.
-# (Quervergleich mit den Zahlen in der XLS ergibt, dass die Zahlen zumindest
-# für die Anzahl der geimpften Personen identisch sind - entsprechen der 
-# Variable 5-11_1. Offensichtlich geht der Datensatz also vom Regelfall aus - 
-# Erst- und Zweitimpfung - und ignoriert genesene Geimpfte bzw. zählt sie einfach
-# als Erstgeimpfte. Nun gut, tun wir das in den Quoten auch - was sollen wir tun.)
 
 # Erst eine Tabelle, die die absoluten Zahlen enthält (brauchen wir für die
 # Drittimpfung)
@@ -326,32 +291,13 @@ impfen_alle_df <- bev_bl_df %>%
   left_join(bl_n_df, by="id") %>% 
   # Die Tabelle mit den Impfstoffen holen
   left_join(bl_1_df, by="id") %>% 
-  # ...aber nur die Quoten für 
-  # Wie oben erklärt: einstweilen sind wir hier auf die XLSX-Tabelle angewiesen
-  # Tabelle hat die gleichen Spaltennahmen; Spalten 
-  left_join(impfquoten_xlsx_df %>% 
-              # Spalten aussortieren, die es in der anderen Tabelle schon gibt
-              select(-quote_erst,-quote_zweit,
-                     # Quoten u12 leiden nicht unter J&J-Verzerrung,
-                     # einstweilen mal aus der Github-Berechnung holen
-                     -quote_erst_u12,
-                     -quote_zweit_u12) %>% 
-              # Quoten von Strings in Zahlen umwandeln
-              mutate(across(starts_with("quote_"),as.numeric)) %>%
-              # Nur die Quoten nach Altersgruppen aufheben
-              select(id=ID,starts_with("quote_")),by="id") %>% 
-  # Die Tabelle mit den Altersgruppen holen und nutzen, 
-  # um die u12-Quoten zu ergänzen
-  left_join(bl_2_df %>% select(id,
-                               quote_erst_u12,
-                               quote_zweit_u12,
-                               quote_dritt_u12), by="id") %>% 
+  left_join(bl_2_df, by="id") %>% 
   # Kompatibilität mit bisherigem Format: 
   # Spalte umbenennen, personen und durchgeimpft nach vorn sortieren
   relocate(c(personen,durchgeimpft),.after=Bundesland) %>% 
   rename (ID = id)
   
-write_sheet(impfen_alle_df,aaa_id,sheet = "ImpfzahlenNational")
+# write_sheet(impfen_alle_df,aaa_id,sheet = "ImpfzahlenNational")
 
 # Tabelle nur mit den Boosterimpfungen anlegen
 # Dafür erst Gesamt-Quote berechnen
@@ -379,17 +325,17 @@ booster_bl_df <- impfen_alle_df %>%
   bind_rows(booster_de_df) %>% 
   arrange(desc(quote_dritt))
 
-msg("Booster-Reihenfolge aktualisieren...")
-dw_data_to_chart(booster_bl_df,chart_id = "rMYWv")
-dw_edit_chart(chart_id = "rMYWv",
-              annotate = paste0(
-                "Geboosterte als Anteil der Gesamtbevölkerung - Stand: ",
-                format.Date(i_d,"%d.%m.%Y"),", 8 Uhr"))
-dw_publish_chart(chart_id = "rMYWv")
+# msg("Booster-Reihenfolge aktualisieren...")
+# dw_data_to_chart(booster_bl_df,chart_id = "rMYWv")
+# dw_edit_chart(chart_id = "rMYWv",
+#               annotate = paste0(
+#                 "Geboosterte als Anteil der Gesamtbevölkerung - Stand: ",
+#                 format.Date(i_d,"%d.%m.%Y"),", 8 Uhr"))
+# dw_publish_chart(chart_id = "rMYWv")
 
-msg("Deutschland-Karte aktualisieren...")
-dw_data_to_chart(impfen_alle_df,chart_id="6PRAe")
-dw_publish_chart("6PRAe") # Karte mit dem Impffortschritt nach BL
+# msg("Deutschland-Karte aktualisieren...")
+# dw_data_to_chart(impfen_alle_df,chart_id="6PRAe")
+# dw_publish_chart("6PRAe") # Karte mit dem Impffortschritt nach BL
 
 # ---- Hessen isolieren ----
 msg("Hessen-Daten bauen")
@@ -399,7 +345,7 @@ impf_df <- impfen_alle_df %>%
   select(-ID,-Bundesland) 
 
 # Tagestabelle schreiben
-write_sheet(impf_df,ss=aaa_id,sheet="ImpfenTagestabelle")
+# write_sheet(impf_df,ss=aaa_id,sheet="ImpfenTagestabelle")
 
 
 
@@ -451,7 +397,10 @@ janssen_neu <- sum(bl_tbl %>%
                      pull(Anzahl))
 
 # ---- Basisdaten-Seite anpassen und aktualisieren ----
-msg("Impfzahlen und Immunisierungsquote")
+TEST <- TRUE
+# Einstweilen lahm gelegt; nichts schreiben
+if (!TEST) {
+  msg("Impfzahlen und Immunisierungsquote")
 # Geimpft mit Quote und Datum (Zeile 9)
 range_write(aaa_id,as.data.frame(paste0("Geimpft ",
                                          "(",
@@ -486,10 +435,11 @@ range_write(aaa_id, as.data.frame(
 
 
 dw_publish_chart("OXn7r") # Basisdaten-Seite
-
+}
 
 # ---- Impfzahlen-Seite ----
 
+if (!TEST) {
 # Geimpfte Personen - Zeile 2
 # Gesamtzahl der Janssen-Geimpften muss nicht mehr addiert werden, 
 # taucht jetzt ohnehin doppelt auf. 
@@ -600,6 +550,7 @@ fehlen_str = paste0("Noch nicht geimpft in Hessen:<ul><br>- ",
 dw_edit_chart(chart_id ="l5KKN", intro = fehlen_str)
 dw_publish_chart("l5KKN")
 
+}
 
 # ---- Impfstoffe ----
 
@@ -618,10 +569,10 @@ impfstoffe_df <- impf_df %>%
             by="name")
 
 
-write_sheet(impfstoffe_df,ss=aaa_id,sheet="Impfstoffe")
-dw_edit_chart(chart_id="BfPeh",intro=paste0("Wie oft kam in Hessen welcher Impfstoff zum Einsatz? Stand: ",
-                                            format.Date(i_d,"%d.%m."),", 8 Uhr"))
-dw_publish_chart(chart_id="BfPeh")
+# write_sheet(impfstoffe_df,ss=aaa_id,sheet="Impfstoffe")
+# dw_edit_chart(chart_id="BfPeh",intro=paste0("Wie oft kam in Hessen welcher Impfstoff zum Einsatz? Stand: ",
+#                                             format.Date(i_d,"%d.%m."),", 8 Uhr"))
+# dw_publish_chart(chart_id="BfPeh")
 
 
 
@@ -671,20 +622,20 @@ quoten_alter_df <- impf_df %>%
   
 
   
-write_sheet(quoten_alter_df,ss=aaa_id,sheet="ImpfquotenAlter")
-
-dw_data_to_chart(quoten_alter_df,chart_id="vgJSw")
-dw_edit_chart(chart_id="vgJSw",annotate = paste0(
-  ifelse(ZWEITIMPFPARADOX,
-  "Das RKI gibt derzeit für die Altersgruppe 18-59 eine höhere Zweitimpfquote als Erstimpfungs-Quote an. Mögliche Ursachen für diese Unstimmigkeit: ",
-  ""),
-  "Mit dem Johnson&Johnson-Impfstoff Geimpfte und Geimpfte mit Vorerkrankung ",
-  "werden seit 1.8.21 als Durchgeimpfte gezählt. Genesene werden trotz ",
-  "vollständigem Immunschutz z.T. nur als erstgeimpft gezählt - ",
-  " Stand: ",
-                           format.Date(i_d,"%d.%m.%Y"),
-                            ", 8 Uhr"))
-dw_publish_chart(chart_id="vgJSw")
+# write_sheet(quoten_alter_df,ss=aaa_id,sheet="ImpfquotenAlter")
+# 
+# dw_data_to_chart(quoten_alter_df,chart_id="vgJSw")
+# dw_edit_chart(chart_id="vgJSw",annotate = paste0(
+#   ifelse(ZWEITIMPFPARADOX,
+#   "Das RKI gibt derzeit für die Altersgruppe 18-59 eine höhere Zweitimpfquote als Erstimpfungs-Quote an. Mögliche Ursachen für diese Unstimmigkeit: ",
+#   ""),
+#   "Mit dem Johnson&Johnson-Impfstoff Geimpfte und Geimpfte mit Vorerkrankung ",
+#   "werden seit 1.8.21 als Durchgeimpfte gezählt. Genesene werden trotz ",
+#   "vollständigem Immunschutz z.T. nur als erstgeimpft gezählt - ",
+#   " Stand: ",
+#                            format.Date(i_d,"%d.%m.%Y"),
+#                             ", 8 Uhr"))
+# dw_publish_chart(chart_id="vgJSw")
 
 # ---- Tag archivieren ----
 
@@ -747,11 +698,11 @@ archiv_tabelle$quote_dritt_18_60[archiv_tabelle$am==lastdate] <- impf_df$quote_z
 archiv_tabelle$quote_dritt_ue60[archiv_tabelle$am==lastdate] <- impf_df$quote_zweit_ue60
 
   
-write_sheet(archiv_tabelle,aaa_id,sheet = "ArchivImpfzahlen")
+# write_sheet(archiv_tabelle,aaa_id,sheet = "ArchivImpfzahlen")
 
 # ---- Impftempo ----
 # Impftempo-Kurve aktualisieren - aus dem Google Sheet "ArchivImpfzahlen"
-dw_publish_chart(chart_id="SS8ta")
+# dw_publish_chart(chart_id="SS8ta")
 
 # Tabelle mit allen Wochenwerten generieren
 impftempo_df <- bl_tbl %>%
@@ -805,9 +756,9 @@ if (wday(impftempo_df$Datum[n]) > 1) {
 }
 
 
-dw_data_to_chart(impftempo_df %>% select(-woche),"Lch5F")
-dw_publish_chart("Lch5F")
-write_sheet(impftempo_df,ss=aaa_id,sheet="Impftempo wochenweise")
+# dw_data_to_chart(impftempo_df %>% select(-woche),"Lch5F")
+# dw_publish_chart("Lch5F")
+# write_sheet(impftempo_df,ss=aaa_id,sheet="Impftempo wochenweise")
 
 # ---- Baue eine Gesamt-Tabelle mit den vorliegenden Impfdaten ----
 
@@ -879,8 +830,12 @@ impf_hist_df <- bl_tbl %>%
   select(-Bundesland,-`u5`,`05-11`,-`12-17`,-`18-59`,-`60+`) %>% 
   full_join(impf_alter_hist_df,by="Datum")
 
-write_sheet(impf_hist_df,aaa_id,sheet = "ImpfzahlenHistorie")
-
+# write_sheet(impf_hist_df,aaa_id,sheet = "ImpfzahlenHistorie")
+# ---- Generiere Vergleichsdaten (setzt ausgeführtes reguläres Impf-Skript voraus) ----
+vergleich_he_df <- impfen_alle_df %>% filter(ID=="06") %>% bind_rows(read_sheet(aaa_id,sheet="ImpfenTagestabelle") %>% mutate(Bundesland="XLSX-Version"))
+write.xlsx(vergleich_he_df,
+           paste0("daten/vergleich-impfen-",i_d,".xlsx"),
+           overwrite=T)
 
 # ---- Generiere Infokarte in Teams ----
 
@@ -946,7 +901,7 @@ sec$add_fact(paste0("Ungeimpfte 12-17J (",
 sec$add_fact(paste0("Ungeimpfte 5-11J (",
                     format(100-impf_df$quote_erst_u12,big.mark=".",decimal.mark = ",",digits = 3),
                     "%):"),
-             format((((100-impf_df$quote_erst_u12)*ue5_11) %/% 100000)*1000,
+             format((((100-impf_df$quote_erst_u12)*ue05_11) %/% 100000)*1000,
                     big.mark=".",decimal.mark = ","))      
 
 
@@ -976,13 +931,12 @@ msg("OK")
 kreise_impf_df <- lk_tbl %>% filter(str_detect(id_lk,"^06")) %>%
   # wochenweise zusammenfassen
   filter(Datum > as.Date("2021-01-03")) %>% 
-  mutate(jahr = year(Datum)) %>% 
   mutate(woche = isoweek(Datum)) %>% 
-           group_by(jahr,woche,id_lk) %>% 
+           group_by(woche,id_lk) %>% 
            summarize(Anzahl=sum(Anzahl,na.rm=T)) %>% 
            ungroup() %>% 
   left_join(read.xlsx("index/kreise-namen-index.xlsx"),by=c("id_lk"="AGS")) %>% 
-  select(jahr,woche,Name=StatName,Anzahl)%>% 
+  select(woche,Name=StatName,Anzahl)%>% 
            pivot_wider(names_from=Name,values_from=Anzahl,values_fill=0)
 
 write.xlsx(kreise_impf_df,"daten/impfdosen-nach-kreis.xlsx",overwrite=TRUE)

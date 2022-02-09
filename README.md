@@ -68,6 +68,7 @@ Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Dat
 
 ### Changelog:
 
+* 09.2.: ESRI-CSV liefert falsche Daten; Wartezeit auf Github-Daten verlängert (und dafür gesorgt, dass erst ab 4.30 Uhr gesucht wird); read.csv durch fread() aus der data.table-Library ersetzt
 * 14.1.: Inzidenz mit archivieren
 * 12.1.: Impfquoten 5-11jährige (aus Github)
 * 12.1.: Die ehemalige Bundesnotbremsen-Tabelle auf 350er-Hotspot-Regel bereinigt, historischen Ballast abgeworfen - neues Skript berechne-inzidenz-ampel.R übernimmt das jetzt

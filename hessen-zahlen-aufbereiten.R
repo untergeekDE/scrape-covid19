@@ -41,7 +41,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 17.1.2022
+# Stand: 9.2.2022
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -124,6 +124,12 @@ altersgruppen_df <- bev_bl_df %>%
 # in einem Github-Repository. 
 
 read_github_rki_data <- function() {
+  # Vor 4 Uhr 30 erwarten wir vom RKI-Github - nichts. 
+  while (now()<  as_datetime("04:30 CET", format="%H:%M")) {
+    msg("Noch zu früh für Github-Daten")
+    Sys.sleep(300)
+  }
+  starttime <- now()
   # Repository auf Github
   repo <- "robert-koch-institut/SARS-CoV-2_Infektionen_in_Deutschland/"
   path <- "Aktuell_Deutschland_SarsCov2_Infektionen.csv"
@@ -135,9 +141,14 @@ read_github_rki_data <- function() {
                            "&page=1&per_page=1")
   github_data <- read_json(github_api_url, simplifyVector = TRUE)
   d <- as_date(github_data$commit$committer$date)
-  if (d<today()) {
-    warning("Keine aktuellen Daten im Github-Repository")
-    return(NULL)
+  # Immer noch nix? 
+  while (d<today()) {
+    # noch kein Commit von heute?
+    # Ist es nach fünf - und probieren wir schon eine Stunde?
+    if (now() > starttime+3600) {
+      warning("Keine aktuellen Daten im Github-Repository")
+      return(NULL)
+    }
   }
   msg("Aktuelle Daten vom ",d)
   path <- paste0("https://github.com/",
@@ -148,7 +159,6 @@ read_github_rki_data <- function() {
   # Sicherheitsfeature: wenn kein Dataframe, probiere nochmal. 
   try(rki_ <- read_csv(path))
   # Kein Dataframe zurückbekommen (also vermutlich Fehlermeldung)?
-  starttime <- now()
   while (!"data.frame" %in% class(rki_)) {
     msg(rki_," - neuer Versuch in 60s")
     Sys.sleep(60)
@@ -287,17 +297,18 @@ read_esri_rki_data <- function(use_json = TRUE) {
   } else {
     # use_json == FALSE
     msg("Download der CSV-Datei vom RKI-Server läuft...")
-    rki_url <- "https://opendata.arcgis.com/datasets/dd4580c810204019a7b8eb3e0b329dd6_0.csv"  
+    # Datei-URL seit 2/2022 - https://arcgis.esri.de/aenderung-des-rki-covid-19-datensatzes/
+    rki_url <- "https://www.arcgis.com/sharing/rest/content/items/66876b81065340a4a48710b062319336/data"  
     ndr_url <- "https://ndrdata-corona-datastore.storage.googleapis.com/rki_api/rki_api.current.csv"
-    # Zwei Schritte: Erst der Download, dann einlesen
-    download.file(rki_url,"RKI_COVID19.csv",method="curl")
+    library(data.table)
     msg("RKI_COVID19.CSV einlesen...")
-    rki_ = read.csv("RKI_COVID19.csv") 
+    # Die Funktion in data.table scheint etwas zuverlässiger als die in readr
+    rki_ = fread(rki_url) 
     if (ncol(rki_)> 17 & nrow(rki_) > 100000) {
       msg("Daten erfolgreich vom RKI-CSV gelesen")
     } else {
       # Rückfall: Aus dem NDR-Data-Warehouse holen
-      rki_ = read.csv(url(ndr_url))
+      rki_ = fread(ndr_url)
       msg("Daten erfolgreich aus dem NDR Data Warehouse gelesen")
     }
   }

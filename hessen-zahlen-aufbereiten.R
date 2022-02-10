@@ -586,6 +586,14 @@ range_write(aaa_id,as.data.frame(datumsstring),range="Basisdaten!A2",
 range_write(aaa_id,as.data.frame("Neufälle heute"),range="Basisdaten!A3", col_names=FALSE)
 range_write(aaa_id,as.data.frame(faelle_neu),
             range="Basisdaten!B3", col_names = FALSE, reformat=FALSE)
+# Neufälle wie vor 7 Tagen gemeldet
+letzte_woche <- fall4w_df %>% filter(datum == heute-7)
+# In die Zelle "Vorwoche" schreiben
+range_write(aaa_id,
+            as.data.frame(letzte_woche$neu),
+            range="Basisdaten!C3",
+            col_names = FALSE,
+            reformat = FALSE)
 
 
 ## ACHTUNG: ##
@@ -599,8 +607,8 @@ range_write(aaa_id,as.data.frame("Neufälle 7 Tage (Diff. Vorwoche)"),range="Bas
 steigerung_7t=sum(f28_df$AnzahlFall[22:28])
 steigerung_7t_inzidenz <- round(steigerung_7t/sum(kreise$pop)*100000,1)
 
-# Vergleichzahlen Vorwoche berechnen
-steigerung_7t_vorwoche <- sum(f28_df$AnzahlFall[15:21])
+# Vergleichzahlen Vorwoche aus dem Archiv
+steigerung_7t_vorwoche <- letzte_woche$neu7tage
 # prozentuale Veränderung bestimmt den farbigen Marker
 steigerung_prozent_vorwoche <- (steigerung_7t/steigerung_7t_vorwoche*100)-100
 
@@ -618,9 +626,16 @@ range_write(aaa_id,as.data.frame(
   paste0(format(steigerung_7t,big.mark = ".", decimal.mark = ","),
          " (",
          # Veränderung mit Trend-Symbolmarker
+         ifelse(steigerung_7t-steigerung_7t_vorwoche > 0,"+",""),
          format(steigerung_7t - steigerung_7t_vorwoche,big.mark = ".", decimal.mark = ","),
          trend_string,")")),
             range="Basisdaten!B4", col_names = FALSE, reformat=FALSE)
+# 7 Tage Vorwoche
+range_write(aaa_id,
+            as.data.frame(steigerung_7t_vorwoche),
+            range="Basisdaten!C4",
+            col_names = FALSE,
+            reformat = FALSE)
 
 # Wachstumsrate durch Inzidenz ersetzt
 # Durchschnitt der letzten 7 Steigerungsraten (in fall4w_df sind die letzten 4 Wochen)
@@ -632,6 +647,13 @@ range_write(aaa_id,as.data.frame(
 range_write(aaa_id,as.data.frame("7-Tage-Inzidenz"),range="Basisdaten!A5",col_names=FALSE)
 range_write(aaa_id,as.data.frame(format(steigerung_7t_inzidenz,big.mark = ".",decimal.mark=",",nsmall=1)),
             range="Basisdaten!B5", col_names = FALSE, reformat=FALSE)
+# Gemeldet vor 7 Tagen
+range_write(aaa_id,
+            as.data.frame(letzte_woche$inzidenz_gemeldet),
+            range="Basisdaten!C5",
+            col_names = FALSE,
+            reformat = FALSE)
+
 
 # Hospitalisierungsinzidenz, Intensiv-Fälle, Hessen-Warnstufe (Zeile 6-8)
 #
@@ -654,12 +676,25 @@ range_write(aaa_id,as.data.frame(paste0(format(faelle_gesamt,big.mark = ".", dec
 range_write(aaa_id,as.data.frame("Todesfälle gestern"),range="Basisdaten!A12",col_names=FALSE)
 range_write(aaa_id,as.data.frame(tote_neu),
             range="Basisdaten!B12",col_names = FALSE, reformat=FALSE)
+# vor 7 Tagen
+range_write(aaa_id,
+            as.data.frame(letzte_woche$tote_steigerung),
+            range="Basisdaten!C12",
+            col_names = FALSE,
+            reformat = FALSE)
 
 # Todesfälle gesamt (Zeile 13)
 range_write(aaa_id,as.data.frame("Todesfälle gesamt"),range="Basisdaten!A13",col_names=FALSE)
 range_write(aaa_id,as.data.frame(format(tote_gesamt,big.mark=".",decimal.mark = ",")),
             range="Basisdaten!B13",
             col_names = FALSE,reformat=FALSE)
+# vor 7 Tagen
+range_write(aaa_id,
+            as.data.frame(letzte_woche$tote),
+            range="Basisdaten!C13",
+            col_names = FALSE,
+            reformat = FALSE)
+
 
 # ---- Update der Prognose-Sheets NeuPrognose und ICUPrognose ----
 

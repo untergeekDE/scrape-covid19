@@ -976,23 +976,25 @@ msg("OK")
 kreise_impf_df <- lk_tbl %>% filter(str_detect(id_lk,"^06")) %>%
   # wochenweise zusammenfassen
   filter(Datum > as.Date("2021-01-03")) %>% 
-  mutate(jahr = year(Datum)) %>% 
-  mutate(woche = isoweek(Datum)) %>% 
-           group_by(jahr,woche,id_lk) %>% 
-           summarize(Anzahl=sum(Anzahl,na.rm=T)) %>% 
-           ungroup() %>% 
+  mutate(jahr = isoyear(Datum),
+         woche = isoweek(Datum)) %>% 
+  group_by(jahr,woche,id_lk) %>%
+  summarize(Stichtag = min(Datum),
+            Anzahl=sum(Anzahl,na.rm=T)) %>% 
+  ungroup() %>%
+  mutate(Woche = paste0(jahr,"-",
+                        ifelse(woche<10,"0",""),
+                        woche)) %>% 
   left_join(read.xlsx("index/kreise-namen-index.xlsx"),by=c("id_lk"="AGS")) %>% 
-  select(jahr,woche,Name=StatName,Anzahl)%>% 
-           pivot_wider(names_from=Name,values_from=Anzahl,values_fill=0)
+  select(Woche,Name=StatName,Anzahl) %>% 
+  pivot_wider(names_from=Name,values_from=Anzahl,values_fill=0)
 
 write.xlsx(kreise_impf_df,"daten/impfdosen-nach-kreis.xlsx",overwrite=TRUE)
 
 # Daten online aktualisieren
 
-  dw_data_to_chart(kreise_impf_df,chart_id="1KVMX")         
-  dw_publish_chart(chart_id="1KVMX") 
-
-
+dw_data_to_chart(kreise_impf_df,chart_id="1KVMX")         
+dw_publish_chart(chart_id="1KVMX") 
 
 # Impfungen letzte 7 Tage in Hessen nach AG
 

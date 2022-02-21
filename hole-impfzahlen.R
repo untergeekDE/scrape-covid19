@@ -569,6 +569,12 @@ range_write(aaa_id,as.data.frame(paste0("der <strong>besonders gefährdeten Mens
 
 faelle_df <- read_sheet(aaa_id,sheet="Fallzahl4Wochen")
 impf_tabelle <- read_sheet(aaa_id,sheet = "ArchivImpfzahlen") %>% filter(am <= today()-14)
+# Das Impfquotenparadox erhebt sein hässlich Haupt: ausweislich der RKI-Daten sind mehr
+# Menschen in der Altersgruppe 18-60 durchgeimpft als überhaupt geimpft. Deswegen
+# den höheren der beiden Werte heranziehen. 
+impfquote_18_60 <- ifelse(impf_df$quote_erst_18_60 > impf_df$quote_zweit_18_60,
+                          impf_df$quote_erst_18_60,
+                          impf_df$quote_zweit_18_60)
 
 fehlen_str = paste0("Noch nicht geimpft in Hessen:<ul><br>- ",
                     # Ü60
@@ -578,9 +584,10 @@ fehlen_str = paste0("Noch nicht geimpft in Hessen:<ul><br>- ",
                            big.mark=".",decimal.mark = ","), 
                     " Menschen)<br>- ",
                     # 18-59
-                    format(100-impf_df$quote_erst_18_60,big.mark=".",decimal.mark = ",",digits = 3),
+                    format(100-impfquote_18_60,
+                           big.mark=".",decimal.mark = ",",digits = 3),
                     "% der 18-59-Jährigen (",
-                    format(((100-impf_df$quote_erst_18_60)*ue18_59 %/% 100000)*1000, 
+                    format(((100-impfquote_18_60)*ue18_59 %/% 100000)*1000, 
                            big.mark=".",decimal.mark = ","),
                     " Menschen)<br>- ",
                     # 12-17

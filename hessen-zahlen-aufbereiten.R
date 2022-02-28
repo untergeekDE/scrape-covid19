@@ -205,7 +205,7 @@ get_esri_status <- function() {
   response <- httr::GET(esri_base_url, 
                         query = list(f = "pjson", 
                                      outfields = "*",
-                                     where = "Url='https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/rest/services/RKI_COVID19/FeatureServer/0'") ) %>% 
+                                     where = "Url='https://services7.arcgis.com/mOBPykOjAyBO2ZKk/ArcGIS/rest/services/RKI_COVID19/FeatureServer/0'") ) %>% 
     httr::content() %>% jsonlite::fromJSON()  
   attributes <- response["features"][[1]]$attributes# %>% 
   # Erfahrung: Wenn der ESRI-Server sich verschluckt, bricht das Programm
@@ -241,8 +241,7 @@ read_esri_rki_data <- function(use_json = TRUE) {
     # JSON-Abfrage-Code von Till (danke!)
     # Dokumentation: https://github.com/br-data/corona-deutschland-api/blob/master/RKI-API.md
     # Demo-Abfrage: https://services7.arcgis.com/mOBPykOjAyBO2ZKk/ArcGIS/rest/services/RKI_COVID19/FeatureServer/0/query?where=1%3D1&objectIds=&time=&resultType=standard&outFields=*&returnIdsOnly=false&returnUniqueIdsOnly=false&returnCountOnly=false&returnDistinctValues=false&cacheHint=true&orderByFields=&groupByFieldsForStatistics=&outStatistics=&having=&resultOffset=&resultRecordCount=&sqlFormat=none&f=pjson&token=
-    rki_json_link <- paste0("https://services7.arcgis.com/mOBPykOjAyBO2ZKk/arcgis/",
-                            "rest/services/RKI_COVID19/FeatureServer/0/query?",
+    rki_json_link <- paste0("https://services7.arcgis.com/mOBPykOjAyBO2ZKk/ArcGIS/rest/services/Covid19_hubv/FeatureServer/0/query?",
                             "where=1%3D1",            # where 1=1
                             "&outFields=*",           # alle Ausgabefelder
                             "&cacheHint=true",
@@ -304,7 +303,7 @@ read_esri_rki_data <- function(use_json = TRUE) {
     msg("RKI_COVID19.CSV einlesen...")
     # Die Funktion in data.table scheint etwas zuverlässiger als die in readr
     rki_ = fread(rki_url) 
-    if (ncol(rki_)> 17 & nrow(rki_) > 100000) {
+    if (ncol(rki_)>= 17 & nrow(rki_) > 100000) {
       msg("Daten erfolgreich vom RKI-CSV gelesen")
     } else {
       # Rückfall: Aus dem NDR-Data-Warehouse holen
@@ -318,7 +317,7 @@ read_esri_rki_data <- function(use_json = TRUE) {
   }
   # Wenn 'Datenstand' ein String ist, in ein Datum umwandeln. Sonst das Datum nutzen. 
   if (class(rki_$Datenstand) == "character") {
-    rki_$Datenstand <- parse_datetime(rki_$Datenstand[1],format = "%d.%m.%Y, %H:%M Uhr")
+    rki_$Datenstand <- parse_date_time(rki_$Datenstand[1],"%d.%m.%Y, %H:%M ")
   }
   return(rki_)
 }

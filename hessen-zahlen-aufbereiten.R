@@ -317,7 +317,7 @@ read_esri_rki_data <- function(use_json = TRUE) {
   }
   # Wenn 'Datenstand' ein String ist, in ein Datum umwandeln. Sonst das Datum nutzen. 
   if (class(rki_$Datenstand) == "character") {
-    rki_$Datenstand <- parse_date_time(rki_$Datenstand[1],"%d.%m.%Y, %H:%M ")
+    rki_$Datenstand <- parse_datetime(rki_$Datenstand[1],"%d.%m.%Y, %H:%M Uhr")
   }
   return(rki_)
 }

@@ -12,10 +12,11 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 2.2.2022
+# Stand: 1.3.2022
 #
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
+
 rm(list=ls())
 
 msgTarget <- NULL # Messaging zu Google abschalten
@@ -33,14 +34,21 @@ library(data.table)
 # Die aktuelle Welle läuft noch; wegen Meldeverzugs endet sie rechnerisch eine Woche vor dem Auswertungsdatum
 
 wellen <- wellen_def <- data.frame(from=c("2020-12-01",
-                            "2021-12-01"),
+                                          "2021-01-01",
+                            "2021-12-01",
+                            "2022-01-01"),
                      to=c("2020-12-31",
-                          "2021-12-31")) %>% 
+                          "2021-01-31",
+                          "2021-12-31",
+                          "2022-01-31")) %>% 
   mutate_all(as_date)
 
 # Abfragedaten ab start_date im definierten Pfad
 archiv_path <- "~/rki-archiv-lokal/" # für lokales Archiv
 #path <- "./archiv/"
+# Die Kreise nur wegen der Namensdefinitionen
+kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
+  mutate(AGS = paste0("06",str_replace(AGS,"000","")))
 
 
 #---- Importfunktionen ----
@@ -154,17 +162,29 @@ bev_df <- read_delim("index/12411-0015.csv",
 # die eigentlich erst ab 8/2021 zum Einsatz kamen. 
 
 load("index/pop.rda")
-bev_ue60 <- pop_bl_df %>% 
+bev_6079 <- pop_bl_df %>% 
   mutate(ag = ifelse(str_detect(ag,"^unter"),0,
                      as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
   # filtere Ü60
-  filter(ag >= 60) %>% 
+  filter(ag >= 60 & ag < 80) %>% 
   mutate(Insgesamt = as.numeric(Insgesamt)) %>% 
   # nur hessen
   filter(id == "06") %>% 
   pull(Insgesamt) %>% 
   sum()
-  
+
+bev_ue80 <- pop_bl_df %>% 
+  mutate(ag = ifelse(str_detect(ag,"^unter"),0,
+                     as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
+  # filtere Ü60
+  filter(ag >= 80) %>% 
+  mutate(Insgesamt = as.numeric(Insgesamt)) %>% 
+  # nur hessen
+  filter(id == "06") %>% 
+  pull(Insgesamt) %>% 
+  sum()
+
+bev_ue60 <- bev_ue80 + bev_6079
 
 # ---- Alle Meldungen durchgehen, Todesfälle und Gesundmeldungen isolieren -----
 
@@ -174,8 +194,10 @@ bev_ue60 <- pop_bl_df %>%
 # gemeldet wurden. 
 #
 # Altersgruppe Ü60
-u60v = c("A00-A04","A05-A14","A15-A34","A35-A59")
-ue60v = c("A60-A79","A80+")
+u60v <- c("A00-A04","A05-A14","A15-A34","A35-A59")
+ue60v <- c("A60-A79","A80+")
+ue6079 <- "A60-A79"
+ue80 <- "A80+"
 
 # Impfzahlen
 impftabelle_df <- read_sheet(ss = aaa_id, sheet = "ImpfzahlenHistorie")
@@ -194,6 +216,8 @@ for (i in 1:nrow(wellen_def)) {
   tote_t <- NULL
   tote_t_e <- NULL
   tote_ue60 <- 0
+  tote_6079 <- 0
+  tote_ue80 <- 0
   
   # Mach's einfach: Bevölkerungszahl für Inzidenzberechnung
   # orientiert sich am letzten Tag des Zeitraums
@@ -228,7 +252,7 @@ for (i in 1:nrow(wellen_def)) {
 
   # Enddatum der "Welle" plus 31 Tage suchen: wer ist in diesem Zeitraum gestorben?
   # Am Ende noch mal schauen: wie viele Fälle gemeldet in dieser Zeit?
-  for (d in wellen_def$from[i]:(wellen_def$to[i]+31)) {
+  for (d in wellen_def$from[i]:(wellen_def$to[i]+28)) {
     tmp_df <- get_archived_data(d)
     
     # Zähle die in dieser Meldung neu gemeldeten Toten
@@ -247,6 +271,13 @@ for (i in 1:nrow(wellen_def)) {
     tote_ue60 <- tote_ue60 + tote_df %>% 
       filter(Altersgruppe %in% ue60v) %>% 
       pull(AnzahlTodesfall) %>%  sum()
+    tote_6079 <- tote_6079 + tote_df %>% 
+      filter(Altersgruppe == "A60-A79") %>% 
+      pull(AnzahlTodesfall) %>% sum()
+    tote_ue80 <- tote_ue80 + tote_df %>% 
+      filter(Altersgruppe == "A80+") %>% 
+      pull(AnzahlTodesfall) %>% sum()
+    
     # Habe mich entschieden, hier einfach einen Vektor mit allen
     # Einzelwerten anzuhängen. 
     # Dauer bis zum Tod
@@ -281,6 +312,23 @@ for (i in 1:nrow(wellen_def)) {
     filter(Altersgruppe %in% ue60v) %>% 
     pull(AnzahlFall) %>% 
     sum()
+  # Nur Meldungen60-79Jährige
+  n_6079 <- tmp_df %>% 
+    filter(Meldedatum >= wellen_def$from[i] &
+             Meldedatum <= wellen_def$to[i]) %>% 
+    filter(NeuerFall %in% c(0,1)) %>% 
+    filter(Altersgruppe == "A60-A79") %>% 
+    pull(AnzahlFall) %>% 
+    sum()
+  # Nur Meldungen über 80-Jährige
+  n_ue80 <- tmp_df %>% 
+    filter(Meldedatum >= wellen_def$from[i] &
+             Meldedatum <= wellen_def$to[i]) %>% 
+    filter(NeuerFall %in% c(0,1)) %>% 
+    filter(Altersgruppe == "A80+") %>% 
+    pull(AnzahlFall) %>% 
+    sum()
+  
   wellen_def$n_ue60[i] <- n_ue60
   # 7-Tage-Inzidenz: Alle Fälle, umgerechnet auf Hessen, 
   # Tagesmittelwert mal 7
@@ -288,6 +336,14 @@ for (i in 1:nrow(wellen_def)) {
   wellen_def$inz7t_ue60[i] <- (n_ue60*7/31) / bev_ue60 * 100000
   wellen_def$tote[i] <- tote_n
   wellen_def$tote_ue60[i] <- tote_ue60
+  # dito nur 60-79
+  wellen_def$n_6079[i] <- n_6079
+  wellen_def$inz7t_6079[i] <- (n_6079*7/31) / bev_6079 * 100000
+  wellen_def$tote_6079[i] <- tote_6079
+  # dito nur ü80
+  wellen_def$n_ue80[i] <- n_ue80
+  wellen_def$inz7t_ue80[i] <- (n_ue80*7/31) / bev_ue80 * 100000
+  wellen_def$tote_ue80[i] <- tote_ue80
   # Mittelwerte der Krankheitsfälle 
   wellen_def$krankheitsdauer_alle_median[i] <- median(tote_t)
   wellen_def$krankheitsdauer_alle_mean[i] <- mean(tote_t)
@@ -295,6 +351,9 @@ for (i in 1:nrow(wellen_def)) {
   wellen_def$krankheitsdauer_mean[i] <- mean(tote_t_e)
 }
 
-write.xlsx(wellen_def,"daten/monate.xlsx", overwrite=T)
+write.xlsx(wellen_def,
+           paste0("daten/sterblichkeit-monate-",
+                  today(),
+                  ".xlsx"), overwrite=T)
 
 # Erst mal bis hier. Weitere Analyse von Hand.

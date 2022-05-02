@@ -6,7 +6,7 @@
 # Aktualisiert außerdem die Kurve der schweren Verläufe daraus
 # und das Ungeimpften-Intensiv-Risiko
 #
-# Stand: 25.1.2022
+# Stand: 17.3.2022
 
 
 
@@ -18,16 +18,16 @@ rm(list=ls())
 
 msgTarget <- NULL
 
-if (file.exists("./server-msg-googlesheet-include.R")) {
-  source("./server-msg-googlesheet-include.R")
-} else {
-  source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
-}
+# Library zum Finden des Arbeitsverzeichnisses
+# Setzt das WD auf das Verzeichnis des gerade laufenden Skripts
+pacman::p_load(this.path)
+setwd(this.path::this.dir())
+source("Helferskripte/server-msg-googlesheet-include.R")
 
 # Die R-Scraping-Library
-library(rvest)
+pacman::p_load(rvest)
 # MS-Teams-Messaging-Library
-library(teamr)
+pacman::p_load(teamr)
 
 # Funktion, um Fehler und Warnungen zu werfen
 
@@ -224,17 +224,16 @@ range_write(aaa_id,as.data.frame(paste0(
 range_write(aaa_id,as.data.frame("Corona-Warnstufe Hessen"),
             range="Basisdaten!A8", col_names=F, reformat=F)
 
-if (hmsi_daten$Hospitalisierungsinzidenz_aktuell > 8 |
-    hmsi_daten$Intensivbettenauslastung_aktuell > 200) {
-  range_write(aaa_id,as.data.frame("<b style='color:#cc1a14'>Stufe 1</b>"),
-              range="Basisdaten!B8", col_names=F, reformat=F)
-  
-}
-if (hmsi_daten$Hospitalisierungsinzidenz_aktuell > 15 |
+
+# CoSchuV § 29 i.d.F. vom 3.3.2022: 
+if (hmsi_daten$Hospitalisierungsinzidenz_aktuell > 9 |
     hmsi_daten$Intensivbettenauslastung_aktuell > 400) {
-  range_write(aaa_id,as.data.frame("<b style='color:#cc1a14'>Stufe 2</b>"),
+  range_write(aaa_id,as.data.frame("<b style='color:#cc1a14'>ERREICHT</b>"),
               range="Basisdaten!B8", col_names=F, reformat=F)
   
+} else {
+  range_write(aaa_id,as.data.frame("<b style='color:#cc1a14'>--</b>"),
+              range="Basisdaten!B8", col_names=F, reformat=F)
 }
 
 #---- Grafiken pushen, Intensivrisiko-String berechnen ----

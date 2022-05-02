@@ -838,6 +838,9 @@ write.xlsx(vergleich_he_df,
            overwrite=T)
 
 # ---- Generiere Infokarte in Teams ----
+# ALLE AUSGABEN DERZEIT BLOCKIEREN
+if (FALSE) {
+  
 
 # Legt eine Karte mit den aktuellen Impfzahlen im Teams-Team "hr-Datenteam", 
 # Channel "Corona" an. 
@@ -901,7 +904,7 @@ sec$add_fact(paste0("Ungeimpfte 12-17J (",
 sec$add_fact(paste0("Ungeimpfte 5-11J (",
                     format(100-impf_df$quote_erst_u12,big.mark=".",decimal.mark = ",",digits = 3),
                     "%):"),
-             format((((100-impf_df$quote_erst_u12)*ue05_11) %/% 100000)*1000,
+             format((((100-impf_df$quote_erst_u12)*ue5_11) %/% 100000)*1000,
                     big.mark=".",decimal.mark = ","))      
 
 
@@ -931,12 +934,17 @@ msg("OK")
 kreise_impf_df <- lk_tbl %>% filter(str_detect(id_lk,"^06")) %>%
   # wochenweise zusammenfassen
   filter(Datum > as.Date("2021-01-03")) %>% 
-  mutate(woche = isoweek(Datum)) %>% 
-           group_by(woche,id_lk) %>% 
-           summarize(Anzahl=sum(Anzahl,na.rm=T)) %>% 
-           ungroup() %>% 
+  mutate(jahr = isoyear(Datum),
+         woche = isoweek(Datum)) %>% 
+  group_by(jahr,woche,id_lk) %>%
+  summarize(Stichtag = min(Datum),
+            Anzahl=sum(Anzahl,na.rm=T)) %>% 
+  ungroup() %>%
+  mutate(Woche = paste0(jahr,"-",
+                        ifelse(woche<10,"0",""),
+                        woche)) %>% 
   left_join(read.xlsx("index/kreise-namen-index.xlsx"),by=c("id_lk"="AGS")) %>% 
-  select(woche,Name=StatName,Anzahl)%>% 
+  select(Woche,Name=StatName,Anzahl) %>% 
            pivot_wider(names_from=Name,values_from=Anzahl,values_fill=0)
 
 write.xlsx(kreise_impf_df,"daten/impfdosen-nach-kreis.xlsx",overwrite=TRUE)
@@ -949,6 +957,7 @@ write.xlsx(kreise_impf_df,"daten/impfdosen-nach-kreis.xlsx",overwrite=TRUE)
 
 
 # Impfungen letzte 7 Tage in Hessen nach AG
+
 
 impfen_7_tage_nach_alter_df <- lk_tbl %>%
   # letzte 7 Tage
@@ -971,4 +980,4 @@ impfen_7_tage_nach_alter_df <- lk_tbl %>%
          Booster = Booster/pop*100)
 
 write.xlsx(impfen_7_tage_nach_alter_df,"daten/impfen_7_tage_alter.xlsx", overwrite=TRUE)  
-
+}

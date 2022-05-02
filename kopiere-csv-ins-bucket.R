@@ -5,8 +5,11 @@
 # Init-Werte fürs Logging, das Arbeitsverzeichnis und die Keyfile-Auswahl
 server <- FALSE
 
-# Definiere Messaging, Server-Parameter, RKI-Lese-Funktion
-source("server-msg-googlesheet-include.R")
+# Library zum Finden des Arbeitsverzeichnisses
+# Setzt das WD auf das Verzeichnis des gerade laufenden Skripts
+pacman::p_load(this.path)
+setwd(this.path::this.dir())
+source("Helferskripte/server-msg-googlesheet-include.R")
 
 
 if (server) {

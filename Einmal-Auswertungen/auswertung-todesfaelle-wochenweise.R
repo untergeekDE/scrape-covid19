@@ -12,7 +12,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 1.3.2022
+# Stand: 23.3.2022
 #
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -21,11 +21,12 @@ rm(list=ls())
 
 msgTarget <- NULL # Messaging zu Google abschalten
 
-if (file.exists("./server-msg-googlesheet-include.R")) {
-  source("./server-msg-googlesheet-include.R")
-} else {
-  source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
-}
+# Library zum Finden des Arbeitsverzeichnisses
+# Setzt das WD auf das Verzeichnis des gerade laufenden Skripts
+pacman::p_load(this.path)
+setwd(this.path::this.dir())
+source("../Helferskripte/server-msg-googlesheet-include.R")
+
 
 # Die brauchen wir noch: 
 library(data.table)
@@ -33,18 +34,24 @@ library(data.table)
 # Definitionen
 # Die aktuelle Welle läuft noch; wegen Meldeverzugs endet sie rechnerisch eine Woche vor dem Auswertungsdatum
 
-wellen <- wellen_def <- data.frame(from=c("2020-12-01",
-                                          "2021-01-01",
-                                          "2021-02-01",
-                            "2021-12-01",
-                            "2022-01-01",
-                            "2022-02-01"),
-                     to=c("2020-12-31",
-                          "2021-01-31",
-                          "2021-02-15",
-                          "2021-12-31",
-                          "2022-01-31",
-                          "2022-02-15")) %>% 
+wellen <- wellen_def <- data.frame(from=c("2021-01-01",
+                                          "2021-12-30",
+                                          "2022-01-06",
+                                          "2022-01-13",
+                                          "2022-01-20",
+                                          "2022-01-27",
+                                          "2022-02-03",
+                                          "2022-02-10",
+                                          "2022-02-17"),
+                     to=c("2021-01-07",
+                          "2022-01-05",
+                          "2022-01-12",
+                          "2022-01-19",
+                          "2022-01-26",
+                          "2022-02-02",
+                          "2022-02-09",
+                          "2022-02-16",
+                          "2022-02-23")) %>% 
   mutate_all(as_date)
 
 # Abfragedaten ab start_date im definierten Pfad
@@ -336,7 +343,9 @@ for (i in 1:nrow(wellen_def)) {
   wellen_def$n_ue60[i] <- n_ue60
   # 7-Tage-Inzidenz: Alle Fälle, umgerechnet auf Hessen, 
   # Tagesmittelwert mal 7
-  wellen_def$inz7t[i] <- (n*7/31) / hessen * 100000
+  # Den Wellen-Zeitraum als Divisor errechnen
+  dd <- as.integer(wellen_def$to[i] - wellen_def$from[i])
+  wellen_def$inz7t[i] <- (n*7/dd) / hessen * 100000
   wellen_def$inz7t_ue60[i] <- (n_ue60*7/31) / bev_ue60 * 100000
   wellen_def$tote[i] <- tote_n
   wellen_def$tote_ue60[i] <- tote_ue60
@@ -355,7 +364,17 @@ for (i in 1:nrow(wellen_def)) {
   wellen_def$krankheitsdauer_mean[i] <- mean(tote_t_e)
 }
 
-write.xlsx(wellen_def,
+wellen_cfr <- wellen_def %>% 
+  mutate(cfr_alle = tote/n*100,
+         cfr_ue60 = tote_ue60/n_ue60*100,
+         cfr_6079 = tote_6079/n_6079*100,
+         cfr_ue80 = tote_ue80/n_ue80*100) %>% 
+  select(-krankheitsdauer_alle_mean,
+         -krankheitsdauer_alle_median,
+         -krankheitsdauer_median,
+         -krankheitsdauer_mean)
+
+write.xlsx(wellen_cfr,
            paste0("daten/sterblichkeit-monate-",
                   today(),
                   ".xlsx"), overwrite=T)

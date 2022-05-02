@@ -20,12 +20,13 @@ rm(list=ls())
 
 msgTarget <- NULL
 
-if (file.exists("./server-msg-googlesheet-include.R")) {
-  source("./server-msg-googlesheet-include.R")
-} else {
-  source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
-}
-library(data.table)
+# Library zum Finden des Arbeitsverzeichnisses
+# Setzt das WD auf das Verzeichnis des gerade laufenden Skripts
+pacman::p_load(this.path)
+setwd(this.path::this.dir())
+source("Helferskripte/server-msg-googlesheet-include.R")
+
+p_load(data.table)
 
 # Kreisnamen
 

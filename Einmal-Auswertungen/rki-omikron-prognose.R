@@ -2,6 +2,7 @@
 # Aufbereitung und Umrechnung der RKI-Omikron-Schätzung auf 
 # hessische Verhältnisse
 # 
+# aktualisiert 21.3.2022 zur Frage: Warum traf die Prognose nicht ein?
 
 library(data.table)
 
@@ -20,6 +21,14 @@ stoch_df <- fread("~/Downloads/de-omicron-wave-results/data/results_stoch.csv")
 fallzahl_df <- read_sheet(aaa_id, sheet = "FallzahlVerlauf") %>% 
   select(datum,neu,inzidenz_gemeldet) %>% 
   mutate(datum = as_date(datum)) %>% 
+  # 7-Tage-Mittel
+  mutate(neu7t = (neu + 
+                    lag(neu,1) +
+                    lag(neu,2) +
+                    lag(neu,3) +
+                    lag(neu,4) +
+                    lag(neu,5) +
+                    lag(neu,6)) / 7) %>% 
   filter(datum >= min(stoch_df$date)) %>% 
   left_join(read_sheet(aaa_id,sheet="Krankenhauszahlen") %>% 
               select(datum = Bettenauslastung_Datum, 
@@ -77,6 +86,21 @@ write.xlsx(match_df,"daten/match_df.xlsx")
 # Hessen ist 4-5 Tage früher. 
 # Okay, produziere Kurven für Hessen. 
 
+# Alternatives Szenario
+alt_df <- scan_df %>% 
+  # Neufälle
+  filter(value_type == "inc") %>% 
+  # Kontaktreduktion -50% bis 15. Februar
+  filter(contact_reduction_scenario_id == 2) %>% 
+  # filter(as.character(relative_risk_hospitalization) == "0.35") %>% 
+  # filter(relative_risk_icu == 0.15) %>% 
+  filter(omicron_latent_period == 2) %>% 
+  filter(infectious_period_both ==2) %>% 
+  filter(booster_reach == "md") %>% 
+  filter(booster_VE == "lo") %>% 
+  mutate(date = as_date(date)) %>%
+  mutate(value = hessify(value)) %>% 
+  select(datum = date, neu7t_prog = value)
 
 hessen_neu_prog <- stoch_df %>%
   filter(value_type=="inc") %>% 
@@ -85,8 +109,15 @@ hessen_neu_prog <- stoch_df %>%
   select(-value_type,-date) %>% 
   mutate_at(vars(-"datum"),hessify) %>% 
   # Daten auf Hessen 
-  left_join(fallzahl_df %>% select(datum,neu), by="datum") %>% 
+  left_join(fallzahl_df %>% select(datum,neu7t), by="datum") %>% 
   filter(datum >= as_date("2022-01-01"))
+
+hessen_alt_prog <- alt_df %>% 
+  mutate(datum = as_date(datum)-4) %>% 
+  # Daten auf Hessen 
+  left_join(fallzahl_df %>% select(datum,neu7t), by="datum") %>% 
+  filter(datum >= as_date("2022-01-01"))
+
 
 hessen_icu_prog <- stoch_df %>%
   filter(value_type=="icu") %>% 
@@ -98,4 +129,5 @@ hessen_icu_prog <- stoch_df %>%
   
 
 write.xlsx(hessen_neu_prog,"daten/rki-omikron-neu.xlsx",overwrite=T)
+write.xlsx(hessen_alt_prog,"daten/rki-omikron-alt.xlsx",overwrite=T)
 write.xlsx(hessen_icu_prog,"daten/rki-omikron-icu.xlsx",overwrite=T)

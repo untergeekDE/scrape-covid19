@@ -15,11 +15,11 @@ rm(list=ls())
 
 msgTarget <- NULL # Messaging zu Google abschalten
 
-if (file.exists("./server-msg-googlesheet-include.R")) {
-  source("./server-msg-googlesheet-include.R")
-} else {
-  source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
-}
+# Library zum Finden des Arbeitsverzeichnisses
+# Setzt das WD auf das Verzeichnis des gerade laufenden Skripts
+pacman::p_load(this.path)
+setwd(this.path::this.dir())
+source("Helferskripte/server-msg-googlesheet-include.R")
 
 k_dir_url <- "https://rocs.hu-berlin.de/viz/contactindex-monitor/contactindex-data/data/"
 k_de_url <- paste0(k_dir_url,"cx_nation_processed.csv")

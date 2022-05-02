@@ -6,11 +6,11 @@
 # Ausgelagert aus hessen-zahlen-aufbereiten.R,
 # wird per source() daraus aufgerufen. 
 
-if (file.exists("./server-msg-googlesheet-include.R")) {
-  source("./server-msg-googlesheet-include.R")
-} else {
-  source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
-}
+# Library zum Finden des Arbeitsverzeichnisses
+# Setzt das WD auf das Verzeichnis des gerade laufenden Skripts
+pacman::p_load(this.path)
+setwd(this.path::this.dir())
+source("Helferskripte/server-msg-googlesheet-include.R")
 
 
 # Wenn ESRI-Datenbank noch nicht OK, warte!

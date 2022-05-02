@@ -52,11 +52,11 @@ rm(list=ls())
 
 msgTarget <- "B12:C12"
 
-if (file.exists("./server-msg-googlesheet-include.R")) {
-  source("./server-msg-googlesheet-include.R")
-} else {
-  source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
-}
+# Library zum Finden des Arbeitsverzeichnisses
+# Setzt das WD auf das Verzeichnis des gerade laufenden Skripts
+pacman::p_load(this.path)
+setwd(this.path::this.dir())
+source("Helferskripte/server-msg-googlesheet-include.R")
 
 library(teamr)
 library(magick)
@@ -125,7 +125,7 @@ altersgruppen_df <- bev_bl_df %>%
 
 read_github_rki_data <- function() {
   # Vor 4 Uhr 30 erwarten wir vom RKI-Github - nichts. 
-  while (now()<  as_datetime("04:30 CET", format="%H:%M")) {
+  while (now()<  as_datetime("03:30 CET", format="%H:%M")) {
     msg("Noch zu früh für Github-Daten")
     Sys.sleep(300)
   }
@@ -145,6 +145,10 @@ read_github_rki_data <- function() {
   while (d<today()) {
     # noch kein Commit von heute?
     # Ist es nach fünf - und probieren wir schon eine Stunde?
+    msg("Daten vom ",format.Date(d,"%d.%m.")," warte 60s")
+    Sys.sleep(60)
+    github_data <- read_json(github_api_url, simplifyVector = TRUE)
+    d <- as_date(github_data$commit$committer$date)
     if (now() > starttime+3600) {
       warning("Keine aktuellen Daten im Github-Repository")
       return(NULL)
@@ -302,22 +306,46 @@ read_esri_rki_data <- function(use_json = TRUE) {
     library(data.table)
     msg("RKI_COVID19.CSV einlesen...")
     # Die Funktion in data.table scheint etwas zuverlässiger als die in readr
-    rki_ = fread(rki_url) 
-    if (ncol(rki_)>= 17 & nrow(rki_) > 100000) {
+    rki_ = data.table::fread(rki_url) %>% 
+      # AGS des Landkreises von Integer in String mit führender 0 wandeln
+      mutate(IdLandkreis = ifelse(as.integer(IdLandkreis) < 10000,
+             paste0("0",as.integer(IdLandkreis)),
+             as.character(IdLandkreis))) %>% 
+      # Datenstand ist hier: "01.03.2022, 00:00 Uhr"
+      mutate(Datenstand = as_date(Datenstand,format="%d.%m.%Y")) %>% 
+      # Datei pinkompatibel zu Github machen
+      select(IdLandkreis,
+             Altersgruppe,
+             Geschlecht,
+             Meldedatum,
+             Refdatum,
+             IstErkrankungsbeginn,
+             NeuerFall,
+             NeuerTodesfall,
+             NeuGenesen,
+             AnzahlFall,
+             AnzahlTodesfall,
+             AnzahlGenesen,
+             Datenstand,
+             Landkreis,
+             IdBundesland,
+             Bundesland
+             )
+    if (ncol(rki_)== 16 & nrow(rki_) > 100000) {
       msg("Daten erfolgreich vom RKI-CSV gelesen")
     } else {
       # Rückfall: Aus dem NDR-Data-Warehouse holen
       rki_ = fread(ndr_url)
       msg("Daten erfolgreich aus dem NDR Data Warehouse gelesen")
+      # Sollte die Spalte mit der Landkreis kein String sein, umwandeln und mit führender 0 versehen
+      if(class(rki_$IdLandkreis) != "character") {
+        rki_$IdLandkreis <- paste0("0",rki_$IdLandkreis)
+      }
+      # Wenn 'Datenstand' ein String ist, in ein Datum umwandeln. Sonst das Datum nutzen. 
+      if (class(rki_$Datenstand) == "character") {
+        rki_$Datenstand <- parse_date(rki_$Datenstand[1],"%d.%m.%Y")
+      }
     }
-  }
-  # Sollte die Spalte mit der Landkreis kein String sein, umwandeln und mit führender 0 versehen
-  if(class(rki_$IdLandkreis) != "character") {
-    rki_$IdLandkreis <- paste0("0",rki_$IdLandkreis)
-  }
-  # Wenn 'Datenstand' ein String ist, in ein Datum umwandeln. Sonst das Datum nutzen. 
-  if (class(rki_$Datenstand) == "character") {
-    rki_$Datenstand <- parse_datetime(rki_$Datenstand[1],"%d.%m.%Y, %H:%M Uhr")
   }
   return(rki_)
 }
@@ -326,7 +354,10 @@ read_esri_rki_data <- function(use_json = TRUE) {
 # RKI-Daten lesen und auf Hessen filtern
 
 # rki_df vom Repository lesen. 
-rki_df <- read_github_rki_data()
+# (Wenn nicht über FORCE_CSV übersprungen werden soll)
+if (!FORCE_CSV) {
+  rki_df <- read_github_rki_data()
+}
 # Wenn noch keine Daten da sind: 
 # (Oder die Daten nicht plausibel sind)
 # Starte alternative Datenabfrage bei der ESRI

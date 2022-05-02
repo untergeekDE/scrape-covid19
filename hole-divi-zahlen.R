@@ -21,11 +21,12 @@ rm(list=ls())
 # Im WD, bitte!
 
 msgTarget <- "B8:C8"
-if (file.exists("./server-msg-googlesheet-include.R")) {
-  source("./server-msg-googlesheet-include.R")
-} else {
-  source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
-}
+
+# Library zum Finden des Arbeitsverzeichnisses
+# Setzt das WD auf das Verzeichnis des gerade laufenden Skripts
+pacman::p_load(this.path)
+setwd(this.path::this.dir())
+source("Helferskripte/server-msg-googlesheet-include.R")
 
 msg("Starte DIVI-Abfrage... \n")
 
@@ -315,7 +316,8 @@ try(alter_df <- read_csv(url(alter_url)) %>%
     ) 
 
 dw_data_to_chart(alter_df,chart_id="Jf7Kw")
-dw_edit_chart(chart_id="Jf7Kw",annotate=paste0("Stand: ",format(ts,"%d.%m.%Y")))
+dw_edit_chart(chart_id="Jf7Kw",annotate=
+                paste0("Stand: ",format(ts,"%d.%m.%Y")))
 dw_publish_chart(chart_id="Jf7Kw")
 
 #---- Zeitreihe Neuaufnahmen ----

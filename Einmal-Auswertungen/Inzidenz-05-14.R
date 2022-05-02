@@ -1,5 +1,7 @@
-# Auswertung: Anteil AG 60-79 und 80+ an den Neuinfektionen; Inzidenz
-# 
+# Auswertung: Anteil AG 05-14 (Schüler) an den Neuinfektionen; Inzidenz
+# Angepasst, um die Inzidenzen unter den Schülern zum Vergleich
+# zu den Tests zu haben (die Zahlen gibt es seit Beginn des 
+# Schuljahrs Ende August 2021)
 
 
 # Alles weg, was noch im Speicher rumliegt
@@ -17,7 +19,7 @@ setwd(this.path::this.dir())
 source("../Helferskripte/server-msg-googlesheet-include.R")
 
 # start- und enddatum
-startdatum <- as_date("2022-01-01")
+startdatum <- as_date("2021-08-30") # erster Schultag 2021
 enddatum <- today()
 # enddatum <- today()-1
 
@@ -129,9 +131,9 @@ altersgruppen_df <- bev_bl_df %>%
                values_to="pop") %>% 
   select(-id, -Bundesland)
 
-popA6079 = altersgruppen_df %>% filter(Altersgruppe=="A60-A79") %>% pull(pop) 
-popA80plus = altersgruppen_df %>% filter(Altersgruppe=="A80+") %>% pull(pop) 
-popu60 = sum(altersgruppen_df$pop)-popA6079-popA80plus
+popA0514 = altersgruppen_df %>% filter(Altersgruppe=="A05-A14") %>% pull(pop) 
+popA0004 = altersgruppen_df %>% filter(Altersgruppe=="A00-A04") %>% pull(pop) 
+popue14 = sum(altersgruppen_df$pop)-popA0514-popA0004
 
 
 # Fälle aus Hessen ausfiltern
@@ -143,9 +145,9 @@ inzidenz_alter_df <- rki_bl_df %>%
   filter(NeuerFall %in% c(0,1)) %>% 
   select(Meldedatum, AnzahlFall,Altersgruppe) %>%
   mutate(Altersgruppe = case_when(
-    Altersgruppe == "A60-A79" ~ "A6079",
-    Altersgruppe == "A80+" ~ "A80plus",
-    TRUE    ~ "u60")) %>% 
+    Altersgruppe == "A00-A04" ~ "A0004",
+    Altersgruppe == "A05-A14" ~ "A0514",
+    TRUE    ~ "ue14")) %>% 
   mutate(Meldedatum = as_date(Meldedatum)) %>%
   # Nach Meldedatum gruppieren; Inzidenzen
   group_by(Meldedatum,Altersgruppe) %>%
@@ -153,23 +155,23 @@ inzidenz_alter_df <- rki_bl_df %>%
   pivot_wider(names_from = Altersgruppe, values_from = AnzahlFall, values_fill=0) %>%
   ungroup() %>% 
   # Neufälle 7 Tage für Altersgruppen
-  mutate(S7A6079= A6079+lag(A6079,n=1,default=0)+lag(A6079,n=2,default=0)+
-           lag(A6079,n=3,default=0)+lag(A6079,n=4,default=0)+
-           lag(A6079,n=5,default=0)+lag(A6079,n=6,default=0)) %>%
-  mutate(S7A80plus= A80plus+lag(A80plus,n=1,default=0)+lag(A80plus,n=2,default=0)+
-           lag(A80plus,n=3,default=0)+lag(A80plus,n=4,default=0)+
-           lag(A80plus,n=5,default=0)+lag(A80plus,n=6,default=0)) %>%
-  mutate(S7u60 = u60+lag(u60,n=1,default=0)+lag(u60,n=2,default=0)+
-           lag(u60,n=3,default=0)+lag(u60,n=4,default=0)+
-           lag(u60,n=5,default=0)+lag(u60,n=6,default=0)) %>%
-  mutate(InzA6079=S7A6079/popA6079*100000,
-         InzA80plus=S7A80plus/popA80plus*100000,
-         Inzu60=S7u60/popu60*100000) %>% 
+  mutate(S7A0004= A0004+lag(A0004,n=1,default=0)+lag(A0004,n=2,default=0)+
+           lag(A0004,n=3,default=0)+lag(A0004,n=4,default=0)+
+           lag(A0004,n=5,default=0)+lag(A0004,n=6,default=0)) %>%
+  mutate(S7A0514= A0514+lag(A0514,n=1,default=0)+lag(A0514,n=2,default=0)+
+           lag(A0514,n=3,default=0)+lag(A0514,n=4,default=0)+
+           lag(A0514,n=5,default=0)+lag(A0514,n=6,default=0)) %>%
+  mutate(S7ue14 = ue14+lag(ue14,n=1,default=0)+lag(ue14,n=2,default=0)+
+           lag(ue14,n=3,default=0)+lag(ue14,n=4,default=0)+
+           lag(ue14,n=5,default=0)+lag(ue14,n=6,default=0)) %>%
+  mutate(InzA0004=S7A0004/popA0004*100000,
+         InzA0514=S7A0514/popA0514*100000,
+         Inzue14=S7ue14/popue14*100000) %>% 
   # 6 Wochen zurück
   filter(Meldedatum >= startdatum) %>% 
   filter(Meldedatum <= enddatum)
 # Mal nix ausfiltern, sondern im Zweifelsfall lieber ausblenden
-#  select(Meldedatum,InzA0514,Inzu60,A0514)
+#  select(Meldedatum,InzA0514,Inzue14,A0514)
 
 # ggplot
 library(ggplot2)
@@ -177,14 +179,24 @@ plot <- ggplot2::ggplot(data = inzidenz_alter_df %>%
                           select(Meldedatum, 
                                  starts_with("Inz")),
                         aes(x=Meldedatum)) +
-                          geom_line(aes(y = InzA6079, colour = "A60-79")) +
-                          geom_line(aes(y = InzA80plus, colour = "A80")) +
-                          geom_line(aes(y = Inzu60, colour="unter 60")) 
+                          geom_line(aes(y = InzA0004, colour = "A00-04")) +
+                          geom_line(aes(y = InzA0514, colour = "A05-14")) +
+                          geom_line(aes(y = Inzue14, colour="über 14")) 
 
 plot
-ggsave(paste0("daten/a6080-",ymd(today()),".png"),device = png)
+ggsave(paste0("daten/a0514-",ymd(today()),".png"),device = png)
 write.xlsx(inzidenz_alter_df,
-           paste0("daten/inzidenz-ue60-",
+           paste0("daten/inzidenz-0514-",
                   today(),
            ".xlsx"),overwrite=T)
 
+# Gib die Inzidenz 05-14 freitags aus (für Vergleich Schultestungen)
+inzA0514_df <- inzidenz_alter_df %>%
+  # Freitage?
+  filter(wday(Meldedatum) == 6) %>% 
+  select(Datum=Meldedatum, InzA0514)
+
+write.xlsx(inzA0514_df,
+           paste0("daten/inz0514-freitags-",
+                  today(),
+                  ".xlsx"),overwrite=T)

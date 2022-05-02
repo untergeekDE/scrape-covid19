@@ -17,11 +17,11 @@
 # Im WD, bitte!
 
 
-if (file.exists("./server-msg-googlesheet-include.R")) {
-  source("./server-msg-googlesheet-include.R")
-} else {
-  source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
-}
+# Library zum Finden des Arbeitsverzeichnisses
+# Setzt das WD auf das Verzeichnis des gerade laufenden Skripts
+pacman::p_load(this.path)
+setwd(this.path::this.dir())
+source("Helferskripte/server-msg-googlesheet-include.R")
 
 # ---- Archiv vorige 7 Tage auswerten, Inzidenztabelle bauen ----
 # Aus den Kreisdaten mit der Population erst mal ein df anlegen
@@ -86,7 +86,7 @@ for (k in kreise$kreis) {
                           ifelse((lag(inz)>g) & (lag(inz,2)>g),
                                  # Schauen: war der Kreis schon Hotspot?
                                  # Oder wird er grad erst?
-                                 ifelse(lag(inz,3)>g,"HOTSPOT",">HOTSPOT<"),
+                                 ifelse(lag(inz,3)>g,"HOCH",">HOCH<"),
                                  paste0("<",g," erreicht>")),
                           # Inzidenz unter der Grenze?
                           # Wenn in den letzten 5 Tagen durchgängig

@@ -3,6 +3,11 @@ title: "Schultests"
 output: html_document
 ---
 
+# Dieses Dokument im Github lesen: 
+
+http://htmlpreview.github.io/?https://github.com/untergeekDE/scrape-covid19/blob/master/Einmal-Auswertungen/Schultests-April-2022.html
+
+
 ```{r include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -256,6 +261,16 @@ print(zusaetzlich_gefunden)
 ```
 ...zusätzliche Fälle an den Schulen gefunden. 
 
+## Wenn Hessen wie Baden-Württemberg wird...
+
+...gehen die gefundenen Fälle in der Altersgruppe in ähnlichem Ausmaß zurück:
+
+```{r}
+print("Umrechnung des Schultestfund-Verhältnisses Ba-Wü/Hessen: ")
+print((100+11)/(100+zusaetzlich_gefunden))
+```
+
+
 ## Durchseuchungsquote
 
 ...wird einfach so gerechnet: Alle, die dieses Jahr - also in den letzten 4 Monaten - eine Infektion hatten, nach Altersgruppen. 
@@ -281,5 +296,7 @@ dw_data_to_chart(summe_alter_df, chart_id ="45xT7")
 
 head(summe_alter_df)
 ```
+
+
 
 

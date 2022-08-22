@@ -67,7 +67,10 @@ Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umg
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog:
-
+* 22.08.: HMSI liefert Hospitalisierungs-Daten nur noch 2x wöchentlich und nicht mehr als CSV; umgestellt auf Scraping
+(länger nicht aktualisiert...)
+* 2.6.: Viertimpfungen sauber ausgewertet
+* 30.4.: Impfdaten enthalten endlich die Viertimpfungen und Novavax. Überarbeitung. 
 * 10.2.: Vergleich mit Vorwochen-Zahlen nach den vor 7 Tagen gemeldeten Werten, nicht denen Stand heute mit Nachmeldungen
 * 09.2.: ESRI-CSV liefert falsche Daten; Wartezeit auf Github-Daten verlängert (und dafür gesorgt, dass erst ab 4.30 Uhr gesucht wird); read.csv durch fread() aus der data.table-Library ersetzt
 * 14.1.: Inzidenz mit archivieren

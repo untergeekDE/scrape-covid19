@@ -317,7 +317,11 @@ try(alter_df <- read_csv(url(alter_url)) %>%
 
 dw_data_to_chart(alter_df,chart_id="Jf7Kw")
 dw_edit_chart(chart_id="Jf7Kw",annotate=
-                paste0("Stand: ",format(ts,"%d.%m.%Y")))
+                paste0("Stand: ",format(ts,"%d.%m.%Y"),
+                       ". Es wird nicht zwischen Fällen unterschieden, ",
+                       "bei denen Covid die Ursache für die Aufnahme ist, ",
+                       "und solchen, die nur ein Nebenbefund des Tests bei ",
+                       "der Aufnahme ist. "))
 dw_publish_chart(chart_id="Jf7Kw")
 
 #---- Zeitreihe Neuaufnahmen ----
@@ -326,7 +330,7 @@ laender_url <- "https://diviexchange.blob.core.windows.net/%24web/zeitreihe-bund
 
 # Erstaufnahme-Daten aus dem Länderdatensatz filtern
 # (gilt nur für Erwachsene)
-# Isoliere die letzten 6 Wochen 
+# Isoliere die letzten 12 Wochen 
 try(erstaufnahmen_df <- read_csv(url(laender_url)) %>% 
       filter(Bundesland =="HESSEN") %>% 
       select(-Bundesland,-Behandlungsgruppe) %>% 
@@ -342,7 +346,7 @@ try(erstaufnahmen_df <- read_csv(url(laender_url)) %>%
                          lag(Erstaufnahmen,5)+
                          lag(Erstaufnahmen,6))/7) %>% 
       # Letzte 6 Wochen filtern
-      filter(Datum >= today()-42))
+      filter(Datum >= today()-84))
 
 # Archivkopie auf dem Server
 if (server) {

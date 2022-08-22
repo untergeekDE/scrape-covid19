@@ -21,30 +21,32 @@ rm(list=ls())
 
 msgTarget <- NULL # Messaging zu Google abschalten
 
-if (file.exists("./server-msg-googlesheet-include.R")) {
-  source("./server-msg-googlesheet-include.R")
-} else {
-  source("/home/jan_eggers_hr_de/rscripts/server-msg-googlesheet-include.R")
-}
+
+pacman::p_load(this.path)
+setwd(this.path::this.dir())
+source("../Helferskripte/server-msg-googlesheet-include.R")
 
 # Die brauchen wir noch: 
-library(data.table)
+pacman::p_load(data.table)
 
 # Definitionen
 # Die aktuelle Welle läuft noch; wegen Meldeverzugs endet sie rechnerisch eine Woche vor dem Auswertungsdatum
 
-wellen <- wellen_def <- data.frame(from=c("2020-12-01",
-                                          "2021-01-01",
-                                          "2021-02-01",
+wellen <- wellen_def <- data.frame(
+                    from=c("2020-12-01",
+                            "2021-01-01",
+                            "2021-02-01",
                             "2021-12-01",
                             "2022-01-01",
-                            "2022-02-01"),
+                            "2022-02-01",
+                            "2022-03-01"),
                      to=c("2020-12-31",
                           "2021-01-31",
-                          "2021-02-15",
+                          "2021-02-28",
                           "2021-12-31",
                           "2022-01-31",
-                          "2022-02-15")) %>% 
+                          "2022-02-28",
+                          "2022-03-30")) %>% 
   mutate_all(as_date)
 
 # Abfragedaten ab start_date im definierten Pfad
@@ -243,16 +245,6 @@ for (i in 1:nrow(wellen_def)) {
   # Bevölkerung Ü60 zum Stichtag
   # gibt's leider nicht, durchgängig mit Werten von 2020 rechnen
   
-  # Jetzt noch schnell die Impfquote zu Beginn des Zeitraums
-
-  wellen_def$durchgeimpft[i] = impftabelle_df %>% 
-                                  filter(Datum == wellen_def$from[i]) %>% 
-                                  pull(quote_zweit) %>% 
-                                  ifelse(is.na(.),0,.)
-  wellen_def$impf_ue60[i] = impftabelle_df %>% 
-                              filter(Datum == wellen_def$from[i]) %>% 
-                              pull(quote_zweit_ue60) %>% 
-                              ifelse(is.na(.),0,.)
 
   # Enddatum der "Welle" plus 31 Tage suchen: wer ist in diesem Zeitraum gestorben?
   # Am Ende noch mal schauen: wie viele Fälle gemeldet in dieser Zeit?
@@ -355,7 +347,39 @@ for (i in 1:nrow(wellen_def)) {
   wellen_def$krankheitsdauer_mean[i] <- mean(tote_t_e)
 }
 
-write.xlsx(wellen_def,
+# Fallsterblichkeiten
+wellen_ergebnis_df <- wellen_def %>% 
+  mutate(tote_u60 = tote-tote_ue60) %>% 
+  mutate(n_u60 = n - n_ue60) %>% 
+  # alles normiert auf Prozentzahlen
+  mutate(cfr_gesamt = tote/n * 100,
+         cfr_u60 = (tote_u60) / (n_u60) *100,
+         cfr_6079 = tote_6079 / n_6079 *100,
+         cfr_ue80 = tote_ue80 / n_ue80 *100) %>% 
+  # Tabelle durchsortieren
+  select(von =from, 
+         to = to,
+         cfr_gesamt,
+         cfr_u60,
+         cfr_6079,
+         cfr_ue80,
+         n_gesamt = n,
+         n_6079,
+         n_ue80,
+         inz7t,
+         inz7t_6079,
+         inz7t_ue80,
+         tote_gesamt = tote,
+         tote_u60,
+         tote_6079,
+         tote_ue80,
+         krankheitsdauer_mean,
+         krankheitsdauer_median
+         
+         )
+
+
+write.xlsx(wellen_ergebnis_df,
            paste0("daten/sterblichkeit-monate-",
                   today(),
                   ".xlsx"), overwrite=T)

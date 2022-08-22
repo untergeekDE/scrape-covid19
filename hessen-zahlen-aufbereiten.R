@@ -456,7 +456,7 @@ check_heute_df <- check_df %>%
 
 # Neue Daten, aber merkwürdig?
 # Anzahl Fälle rückläufig oder unverändert?
-
+# 
 if ((as_date(heute_df$Datenstand[1]) > 
              as_date(check_df$Datenstand[1])) &
      (sum(heute_df$AnzahlFall) <= sum(check_heute_df$AnzahlFall) |
@@ -547,10 +547,26 @@ fallzahl_df <- read_sheet(aaa_id,sheet="FallzahlVerlauf")
 fallzahl_df$datum <- as_date(fallzahl_df$datum)
 fallzahl_ofs <- as.numeric(heute - fallzahl_df$datum[1]) + 1
 
-if (fallzahl_ofs > nrow(fallzahl_df)) {
-  fallzahl_df[fallzahl_ofs,]<- NA
-  fallzahl_df$datum[fallzahl_ofs] <- heute
-  
+# Brutale Korrektur: Wenn wir einen Sprung in den Daten haben, 
+# dann: 
+# - lege leere Datumszeilen an
+while (fallzahl_ofs > nrow(fallzahl_df)) {
+  # Fieses base R: neue letzte Zeile,
+  # dann die mit dem heutigen Datum versehen
+  n <- nrow(fallzahl_df)
+  fallzahl_df[n+1,]<- NA
+  # Datum um 1 Tag fortschreiben
+  fallzahl_df$datum[n+1] <- fallzahl_df$datum[n]+1
+  # Unveränderte Daten kopieren, derzeit nur: Fälle, Tote
+  fallzahl_df$faelle[n+1] <-fallzahl_df$faelle[n]
+  fallzahl_df$tote[n+1] <- fallzahl_df$tote[n]
+  # Inzidenzen weglassen - Zum Loch stehen!
+  # neu7Tage evtl. kopieren - wird mE gebraucht. 
+  # !!!PRÜFEN!!!
+  # Null bei neu und tote_steigerung (sonst klappt die
+  # neu7tage-Berechnung nicht)
+  fallzahl_df$tote_steigerung[n+1] <- 0
+  fallzahl_df$neu[n+1] <- 0
 }
 # Genesen heute eintragen
 
@@ -1336,7 +1352,7 @@ write_sheet(basisdaten_df, ss=alte_basisdaten_id,sheet="LIVEDATEN")
 basisdaten_alt_df <- basisdaten_df %>% 
 # Den ganzen HTML-Kram aus der Steigerung zur Vorwoche verschwinden lassen
   mutate(Wert = str_replace(Wert,"<b.+>(?=.)|<\\/>",""))
-write_csv2(basisdaten_alt_df,"daten/Basisdaten.csv",quote_escape="double")
+write_csv2(basisdaten_alt_df,"daten/Basisdaten.csv",escape="double")
 
 
 #msg("Daten auf alte Basisdaten-Seite kopiert")
@@ -1584,3 +1600,4 @@ if (server) {
 # Karte vorbereiten und abschicken. 
 cc$add_section(new_section = sec)
 if(cc$send()) msg("OK, Teams-Karte abgeschickt") else msg("OK")
+

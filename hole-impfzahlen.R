@@ -164,38 +164,12 @@ i_d_max <- max(bl_tbl$Datum)
 rki_xlsx_url <- "https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Daten/Impfquotenmonitoring.xlsx?__blob=publicationFile"
 # Impfquoten nach Altersgruppe
 tabelle2 <- read.xlsx(rki_xlsx_url,sheet=2)
-# Impfquoten nach Impfstoff
+# Impfzahlen kumulativ nach Impfstoff
 tabelle3 <- read.xlsx(rki_xlsx_url,sheet=3)
 # Zeitreihe Impfungen bundesweit
 tabelle4 <- read.xlsx(rki_xlsx_url,sheet=4)
 
 #### ---- Ab hier beginnt die Verarbeitung der eingelesenen Daten ----
-
-# Tabelle 2 aufarbeiten - Spaltennamen letztmals angepasst 21.12.2021
-impfquoten_xlsx_df <- tabelle2 %>% 
-                                   select(ID=1,
-                                          impfdosen = 3,
-                                          quote_erst = 8,
-                                          quote_erst_u12 = 10,
-                                          quote_erst_12_17 = 11,
-                                          quote_erst_18_59 =13, 
-                                          quote_erst_ue60 = 14,
-                                          quote_zweit = 15,
-                                          quote_zweit_u12 = 17,
-                                          quote_zweit_12_17 = 18,
-                                          quote_zweit_18_59 = 20,
-                                          quote_zweit_ue60 =21,
-                                          quote_dritt = 22,
-                                          quote_dritt_u12 = 23,
-                                          quote_dritt_12_17 = 24,
-                                          quote_dritt_18_59 = 25,
-                                          quote_dritt_ue60 = 26,
-                                          quote_viert = 27,
-                                          quote_viert_u12 = 28,
-                                          quote_viert_12_17 = 29,
-                                          quote_viert_18_59 = 30,
-                                          quote_viert_ue60 = 31) %>%
-                                   filter(as.numeric(ID) %in% 1:16)
 
 # ---- Länder-Vergleichstabelle erstellen ----
 # Erstes Teil-DF: Absolute Summen nach Impfstoff je Land
@@ -235,7 +209,6 @@ bl_1_df <- bl_tbl %>%
   # Bevölkerungszahlen dazuholen
   left_join(bev_bl_df, by="id") %>% 
   mutate(pop=`u5`+`05-11`+`12-17`+`18-59`+`60+`) %>% 
-  # Janssen-Impfstoff wieder zweimal zählen - bei Erst- und Durchgeimpften!
   mutate(quote_erst=personen/pop*100,
          quote_zweit=durchgeimpft/pop*100,
          quote_dritt=geboostert/pop*100,
@@ -328,6 +301,51 @@ bl_2_df <- bl_3_df %>%
     quote_viert_ue60 = `60+_4`/ `60+` * 100) %>% 
   select(id,starts_with("quote_"))
 
+# Tabelle 2 aufarbeiten - Spaltennamen letztmals angepasst 21.12.2021
+impfquoten_xlsx_df <- tabelle2 %>% 
+  select(id=1,
+         impfdosen = 3,
+         quote_erst = 8,
+         quote_erst_u12 = 10,
+         quote_erst_12_17 = 11,
+         quote_erst_18_59 =13, 
+         quote_erst_ue60 = 14,
+         quote_zweit = 15,
+         quote_zweit_u12 = 17,
+         quote_zweit_12_17 = 18,
+         quote_zweit_18_59 = 20,
+         quote_zweit_ue60 =21,
+         quote_dritt = 22,
+         #   quote_dritt_u12 nicht in der Tabelle
+         quote_dritt_u12 = 24,
+         # (wird später überschrieben, an der richtigen Stelle)
+         quote_dritt_12_17 = 23,
+         quote_dritt_18_59 = 25,
+         quote_dritt_ue60 = 26,
+         quote_viert = 27,
+         #    quote_viert_u12 nicht in der Tabelle; als Dummy-Wert!!!
+         quote_viert_u12 = 29,
+         # (wird später überschrieben, an der richtigen Stelle)
+         quote_viert_12_17 = 28,
+         quote_viert_18_59 = 30,
+         quote_viert_ue60 = 31) %>%
+  filter(as.numeric(id) %in% 1:16) %>% 
+  # in numerische Werte umwandeln
+  mutate_at(vars(starts_with("quote_")),as.numeric) %>% 
+  # Quoten für Boosterimpfungen u12 aus den Github-Daten ergänzen. 
+  # Das sind zwar extrem wenige - unter 1 Promille im April 
+  # 2022 - aber besser ist besser. 
+  left_join(bl_2_df %>% 
+              select(id, 
+                     q3u12 = quote_dritt_u12, 
+                     q4u12 = quote_viert_u12),
+            by = "id") %>% 
+  # Werte an die richtigen Tabellenspalten zuweisen 
+  # und die temporär dazugeholten Spalten löschen.
+  mutate(quote_dritt_u12 = q3u12,
+         quote_viert_u12 = q4u12) %>% 
+  select(-q3u12, -q4u12)
+
 
 
 
@@ -349,34 +367,25 @@ impfen_alle_df <- bev_bl_df %>%
   # Neue Erst-, Zweit- und Dritt- und Viertimpfungen
   left_join(bl_n_df, by="id") %>% 
   # Die Tabelle mit den Impfstoffen holen
-  left_join(bl_1_df, by="id") %>% 
+  left_join(bl_1_df %>% 
+              # Diese Tabelle (aus den Github-Daten)
+              # enthält die Gesamt-Quoten, die wir schon haben. 
+              select(-quote_erst,
+                     -quote_zweit,
+                     -quote_dritt,
+                     -quote_viert), by="id") %>% 
   # ...aber nur die Quoten für 
   # Wie oben erklärt: einstweilen sind wir hier auf die XLSX-Tabelle angewiesen
   # Tabelle hat die gleichen Spaltennahmen; Spalten 
   left_join(impfquoten_xlsx_df %>% 
-              # Spalten aussortieren, die es in der anderen Tabelle schon gibt
-              select(-quote_erst,-quote_zweit,-quote_dritt,-quote_viert,
-                     # Quoten u12 leiden nicht unter J&J-Verzerrung,
-                     # einstweilen mal aus der Github-Berechnung holen
-                     -quote_erst_u12,
-                     -quote_zweit_u12,
-                     -quote_dritt_u12,
-                     -quote_viert_u12) %>% 
-              # Quoten von Strings in Zahlen umwandeln
-              mutate(across(starts_with("quote_"),as.numeric)) %>%
+               # Quoten von Strings in Zahlen umwandeln
               # Nur die Quoten nach Altersgruppen aufheben
-              select(id=ID,starts_with("quote_")),by="id") %>% 
-  # Die Tabelle mit den Altersgruppen holen und nutzen, 
-  # um die u12-Quoten zu ergänzen
-  left_join(bl_2_df %>% select(id,
-                               quote_erst_u12,
-                               quote_zweit_u12,
-                               quote_dritt_u12,
-                               quote_viert_u12), by="id") %>% 
+              select(id,starts_with("quote_")),by="id") %>% 
+  # Seit Mai 2022 sind Quoten für alle Altersgruppen und 
+  # Impfserien in der Tabelle; muss nicht mehr ergänzt werden
   # Kompatibilität mit bisherigem Format: 
   # Spalte umbenennen, personen und durchgeimpft nach vorn sortieren
-  relocate(c(personen,durchgeimpft),.after=Bundesland) %>% 
-  rename (ID = id)
+  relocate(c(personen,durchgeimpft),.after=Bundesland)
   
 write_sheet(impfen_alle_df,aaa_id,sheet = "ImpfzahlenNational")
 
@@ -446,8 +455,8 @@ dw_publish_chart("6PRAe") # Karte mit dem Impffortschritt nach BL
 msg("Hessen-Daten bauen")
 impf_df <- impfen_alle_df %>%
   # nur Hessen
-  filter(as.numeric(ID) == 6) %>%
-  select(-ID,-Bundesland) 
+  filter(as.numeric(id) == 6) %>%
+  select(-id,-Bundesland) 
 
 # Tagestabelle schreiben
 write_sheet(impf_df,ss=aaa_id,sheet="ImpfenTagestabelle")
@@ -681,20 +690,28 @@ dw_publish_chart("l5KKN")
 # ---- Impfstoffe ----
 
 
-impfstoffe_df <- impf_df %>%
-  select(erst_Biontech = biontech_erst,
-         erst_Moderna = moderna_erst,
-         erst_AstraZeneca = az_erst,
-         erst_Janssen = janssen_erst,
-         erst_Novavax = novavax_erst) %>%
-  pivot_longer(everything(),names_prefix="erst_",values_to="Erstimpfung") %>%
-  left_join(impf_df %>% 
-              select(zweit_Biontech = biontech_zweit,
-                     zweit_Moderna = moderna_zweit,
-                     zweit_AstraZeneca = az_zweit) %>%
-              pivot_longer(everything(),names_prefix="zweit_",values_to="Zweitimpfung"),
-            by="name")
+# impfstoffe_df <- impf_df %>%
+#   select(erst_Biontech = biontech_erst,
+#          erst_Moderna = moderna_erst,
+#          erst_AstraZeneca = az_erst,
+#          erst_Janssen = janssen_erst,
+#          erst_Novavax = novavax_erst) %>%
+#   pivot_longer(everything(),names_prefix="erst_",values_to="Erstimpfung") %>%
+#   left_join(impf_df %>% 
+#               select(zweit_Biontech = biontech_zweit,
+#                      zweit_Moderna = moderna_zweit,
+#                      zweit_AstraZeneca = az_zweit) %>%
+#               pivot_longer(everything(),names_prefix="zweit_",values_to="Zweitimpfung"),
+#             by="name")
 
+# XLSX-Tabelle auswerten
+impfstoffe_df <- tabelle3 %>% 
+  filter(RS=="06") %>% 
+  select(biontech = 4, 
+         moderna = 5,
+         az = 6,
+         janssen = 7,
+         novavax = 8)
 
 write_sheet(impfstoffe_df,ss=aaa_id,sheet="Impfstoffe")
 dw_edit_chart(chart_id="BfPeh",intro=paste0("Wie oft kam in Hessen welcher Impfstoff zum Einsatz? Stand: ",
@@ -709,36 +726,32 @@ dw_publish_chart(chart_id="BfPeh")
 # Die Quote der Zweitgeimpften ist in der RKI-Tabelle höher als die 
 # der Erstgeimpften. Wenn ja: gib Erklärtext dazu mit aus. 
 
+
 ZWEITIMPFPARADOX <- impf_df$quote_erst_18_59 < impf_df$quote_zweit_18_59
 
 quoten_alter_df <- impf_df %>%
-  select(quote_viert_u12,
-         quote_viert_12_17,
-         quote_viert_18_59,
-         quote_viert_ue60,
-         quote_viert_Hessen = quote_viert,
-         quote_dritt_u12,
-         quote_dritt_12_17,
-         quote_dritt_18_59,
-         quote_dritt_ue60,
+  select(starts_with("quote_")) %>% 
+  rename(quote_viert_Hessen = quote_viert,
          quote_dritt_Hessen = quote_dritt,
-         quote_zweit_u12,
-         quote_zweit_12_17,
-         quote_zweit_18_59,
-         quote_zweit_ue60,
          quote_zweit_Hessen = quote_zweit,
-         quote_erst_u12,
-         quote_erst_12_17,
-         quote_erst_18_59,
-         quote_erst_ue60,
-         quote_erst_Hessen = quote_erst,
-  ) %>%
-  # Aufbereiten in Spalten "erst","zweit","dritt"
+         quote_erst_Hessen = quote_erst)%>%
+  # Aufbereiten in Spalten "erst","zweit","dritt", "viert", "Hessen"
   # Erst mal eine Liste
   pivot_longer(everything()) %>%
+  # Impfserie als Spalte impfung aus dem Namen ziehen: 
+  # alles nach dem Unterstrich
   mutate(impfung = str_extract(name,"(?<=\\_)[a-z]+(?=\\_)")) %>%
   mutate(name = str_replace(name,"quote_.+_","")) %>%
+  # Namen umschreiben und umsortieren
+  mutate(name = case_when(
+    name == "u12" ~ "05-12 J.",
+    name == "17"  ~ "12-17 J.",
+    name == "59"  ~ "18-59 J.",
+    name == "ue60"~ "60+ J.",
+    TRUE ~ "alle Hessen"
+  )) %>% 
   pivot_wider(names_from=impfung,values_from=value) %>%
+  arrange(name) %>% 
   # Um die Säulen stapeln zu können:
   # - "nur erstgeimpft" = erst-zweit
   # - zweitgeimpft, nicht geboostert = zweit-dritt
@@ -803,21 +816,35 @@ archiv_tabelle$durchgeimpft_quote[archiv_tabelle$am==lastdate] <- impf_df$quote_
 archiv_tabelle$biontech[archiv_tabelle$am==lastdate] <- impf_df$biontech_erst
 archiv_tabelle$moderna[archiv_tabelle$am==lastdate] <- impf_df$moderna_erst
 archiv_tabelle$az[archiv_tabelle$am==lastdate] <- impf_df$az_erst
-archiv_tabelle$janssen[archiv_tabelle$am==lastdate] <- impf_df$janssen
+archiv_tabelle$janssen[archiv_tabelle$am==lastdate] <- impf_df$janssen_erst
+archiv_tabelle$novavax[archiv_tabelle$am==lastdate] <- impf_df$novavax_erst
 # Die gab's vor dem 7.6. nicht: 
 archiv_tabelle$biontech_zweit[archiv_tabelle$am==lastdate] <- impf_df$biontech_zweit
 archiv_tabelle$moderna_zweit[archiv_tabelle$am==lastdate] <- impf_df$moderna_zweit
 archiv_tabelle$az_zweit[archiv_tabelle$am==lastdate] <- impf_df$az_zweit
+archiv_tabelle$janssen_zweit[archiv_tabelle$am==lastdate] <- impf_df$janssen_zweit
+archiv_tabelle$novavax_zweit[archiv_tabelle$am==lastdate] <- impf_df$novavax_zweit
 # Und die erst ab 1.9.:
 archiv_tabelle$biontech_dritt[archiv_tabelle$am==lastdate] <- impf_df$biontech_dritt
 archiv_tabelle$moderna_dritt[archiv_tabelle$am==lastdate] <- impf_df$moderna_dritt
 archiv_tabelle$az_dritt[archiv_tabelle$am==lastdate] <- impf_df$az_dritt
+archiv_tabelle$janssen_dritt[archiv_tabelle$am==lastdate] <- impf_df$janssen_dritt
+archiv_tabelle$novavax_dritt[archiv_tabelle$am==lastdate] <- impf_df$novavax_dritt
+# und noch mehr: 
 
+archiv_tabelle$biontech_viert[archiv_tabelle$am==lastdate] <- impf_df$biontech_viert
+archiv_tabelle$moderna_viert[archiv_tabelle$am==lastdate] <- impf_df$moderna_viert
+archiv_tabelle$az_viert[archiv_tabelle$am==lastdate] <- impf_df$az_viert
+archiv_tabelle$janssen_viert[archiv_tabelle$am==lastdate] <- impf_df$janssen_viert
+archiv_tabelle$novavax_viert[archiv_tabelle$am==lastdate] <- impf_df$novavax_viert
 # archiv_tabelle$impfdosen[archiv_tabelle$am==lastdate] <- impf_df$neu+impf_df$neu_zweit
 # Impfdosen kumulativ: Alle Impfstoffe, alle Impfungen
-archiv_tabelle$impfdosen[archiv_tabelle$am==lastdate] <- impf_df$biontech_erst +
-  impf_df$biontech_zweit + impf_df$moderna_erst + impf_df$moderna_zweit +
-  impf_df$az_erst + impf_df$az_zweit + impf_df$janssen
+archiv_tabelle$impfdosen[archiv_tabelle$am==lastdate] <- 
+  sum(impf_df %>% select(starts_with(c("biontech_",
+                                       "az_",
+                                       "moderna_",
+                                       "janssen_",
+                                       "novavax_"))))
 archiv_tabelle$quote_erst_u12[archiv_tabelle$am==lastdate] <- impf_df$quote_erst_u12
 archiv_tabelle$quote_erst_12_17[archiv_tabelle$am==lastdate] <- impf_df$quote_erst_12_17
 archiv_tabelle$quote_erst_18_59[archiv_tabelle$am==lastdate] <- impf_df$quote_erst_18_59
@@ -858,6 +885,7 @@ impftempo_df <- bl_tbl %>%
             erstgeimpft=sum(`1`,na.rm = TRUE),
             zweitgeimpft=sum(`2`,na.rm = TRUE),
             geboostert=sum(`3`,na.rm = TRUE),
+            zweitgeboostert=sum(`4`,na.rm = TRUE),
             p=0) 
 
 # Jetzt ganz stumpf aus dem Trend der letzten 7 Tage im Vergleich zur Vorwoche
@@ -877,11 +905,15 @@ impftempo_df$p[n] <- round(
      (impftempo_df$zweitgeimpft[n-1]/impftempo_df$zweitgeimpft[n-2])) +
     # Boosterimpfungen als die Zahl der letzten Woche mal Veränderung zur Vorwoche
     (impftempo_df$geboostert[n-1] * 
-     (impftempo_df$geboostert[n-1]/impftempo_df$geboostert[n-2])) - 
+     (impftempo_df$geboostert[n-1]/impftempo_df$geboostert[n-2])) +
+    # Zweitbooster
+    (impftempo_df$zweitgeboostert[n-1] * 
+       (impftempo_df$zweitgeboostert[n-1]/impftempo_df$zweitgeboostert[n-2])) - 
     # Abziehen, was schon verimpft wurde in dieser Woche
   (impftempo_df$erstgeimpft[n]+
      impftempo_df$zweitgeimpft[n]+
-     impftempo_df$geboostert[n]))
+     impftempo_df$geboostert[n]+
+     impftempo_df$zweitgeboostert[n]))
   
 if (impftempo_df$p[n] < 0) impftempo_df$p[n] <- 0
 

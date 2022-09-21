@@ -17,9 +17,9 @@
 # Bevölkerungsstatistik als Grundlage für die Inzidenzen: 
 # 
 # Basis für die Inzidenzberechnung ist die DESTATIS-Bevölkerungsstatistik nach Kreisen
-# (regionalstatistik.de: 12411-0015), zuletzt aktualisiert am 26.8.2021 auf den Stand
-# 31.12.2020. Im Abschnitt "Überblick erstellen" wird aus dem aktuellen Datenbank-Stand eine
-# Tabelle der Inzidenzen nach Kreis erzeugt - dort wird für Meldedaten vor dem 25.8. der
+# (regionalstatistik.de: 12411-0015), zuletzt aktualisiert am 21.9.2021 auf den Stand
+# 31.12.2021. Im Abschnitt "Überblick erstellen" wird aus dem aktuellen Datenbank-Stand eine
+# Tabelle der Inzidenzen nach Kreis erzeugt - dort wird für Meldedaten vor dem 21.9.2022 der
 # Bevölkerungsstand vom Vorjahr genutzt (Stand 31.12.2019), der für den Großteil der Pandemie
 # die Berechnungsgrundlage darstellte. Abweichungen für die Zeit vor dem Juli 2020, an dem das
 # RKI die Zahlen erstmalig aktualisiert hatte, werden ignoriert. 
@@ -41,7 +41,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 9.2.2022
+# Stand: 21.9.2022
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -58,8 +58,8 @@ pacman::p_load(this.path)
 setwd(this.path::this.dir())
 source("Helferskripte/server-msg-googlesheet-include.R")
 
-library(teamr)
-library(magick)
+pacman::p_load(teamr)
+pacman::p_load(magick)
 
 # ---- Zur Vorbereitung: Kreisdaten einlesen ----
 
@@ -72,20 +72,32 @@ kreise <- read.xlsx("index/kreise-index-pop.xlsx") %>%
   mutate(AGS = paste0("06",str_replace(AGS,"000","")))
 kreise2019 <- read.xlsx("index/kreise-index-pop2019.xlsx") %>%
   mutate(AGS = paste0("06",str_replace(AGS,"000","")))
+kreise2020 <- read.xlsx("index/kreise-index-pop2020.xlsx") %>%
+  mutate(AGS = paste0("06",str_replace(AGS,"000","")))
+kreise2021 <- read.xlsx("index/kreise-index-pop2021.xlsx") %>%
+  mutate(AGS = paste0("06",str_replace(AGS,"000","")))
 
 # Tabelle, in der die Bevölkerungszahlen in der jeweiligen RKI-Altersgruppe aufgerechnet sind
-# Nutzt die Daten aus der Regionalstatistik.de 12411-04-02-4
+# Nutzt die Daten von statistik.hessen.de, Stand 31.12.2021 (seit 21.9.2022 verbindlich)
 
-# Bevölkerungstabelle für alle Bundesländer vorbereiten,
-# Altersgruppen: 0-4, 5-14, 15-34, 35-59, 60-79, 80+
-# Ausgangspunkt ist der File aus GENESIS mit der Altersschichtung
-# nach Lebensjahren und Bundesland. 
-# Q: 12411-04-02-4, Stichtag 31.12.2020
-load("index/pop.rda")
+# Bevölkerungstabelle für alle Bundesländer vorbereiten
+t12411_0012_2021_df <- read_delim("./index/12411-0012.csv", 
+                                  delim = ";", escape_double = FALSE, 
+                                  locale = locale(date_names = "de", encoding = "ISO-8859-1"), trim_ws = TRUE, 
+                                  skip = 5) %>% 
+  # Spalte mit dem Stichtag raus
+  select(-1) %>% 
+  rename(ag = 1) %>% 
+  pivot_longer(cols = -ag, names_to = "bundesland", values_to = "n") %>% 
+  group_by(bundesland) %>% 
+  filter(!is.na(ag)) %>% 
+  filter(ag!="Insgesamt") %>% 
+  # id für Bundesländer dazuholen
+  left_join(read.xlsx("./index/bltabelle.xlsx"), by="bundesland")
 
-# Altersgruppen; 90 (die höchste) umfasst alle darüber. 
-bev_bl_df <- pop_bl_df %>% 
-  mutate(ag = ifelse(str_detect(ag,"^unter"),0,
+
+bev_bl_df <- t12411_0012_2021_df %>% 
+  mutate(ag = ifelse(str_detect(ag,"^[Uu]nter"),0,
                      as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
   # Zusätzliche Variable mit der Altersgruppe
   mutate(Altersgruppe = case_when(
@@ -95,14 +107,11 @@ bev_bl_df <- pop_bl_df %>%
     ag < 60 ~ "A35-A59",
     ag < 80 ~ "A60-A79",
     TRUE    ~ "A80+")) %>% 
-  select(id,Bundesland=Name,Altersgruppe,Insgesamt) %>% 
-  mutate(Insgesamt = as.numeric(Insgesamt)) %>% 
+  select(id,Bundesland = bundesland,Altersgruppe,Insgesamt = n) %>% 
   # Tabelle bauen: Bevölkerung in der jeweiligen Altersgruppe nach BL,
   # Werte aus der Variable aufsummieren. 
   pivot_wider(names_from=Altersgruppe, values_from=Insgesamt,values_fn=sum) %>% 
-  # Aus irgendwelchen Gründen enthält die GENESIS-Tabelle die Landesbezeichnung
-  # "Baden-Württemberg, Land". Korrigiere das. 
-  mutate(Bundesland = str_replace(Bundesland,"\\, Land$",""))
+  ungroup()
 
 # Für Hessen!
 # Ländercode hier ggf. anpassen. 
@@ -132,7 +141,9 @@ read_github_rki_data <- function() {
   starttime <- now()
   # Repository auf Github
   repo <- "robert-koch-institut/SARS-CoV-2_Infektionen_in_Deutschland/"
-  path <- "Aktuell_Deutschland_SarsCov2_Infektionen.csv"
+  path <- "Archiv/"
+  fname <- paste0(ymd(today()),    # Filename beginnt mit aktuellem Datum
+    "_Deutschland_SarsCov2_Infektionen.csv")
   # Wann war der letzte Commit des Github-Files? Das als Prognosedatum prog_d.
   
   github_api_url <- paste0("https://api.github.com/repos/",
@@ -155,13 +166,15 @@ read_github_rki_data <- function() {
     }
   }
   msg("Aktuelle Daten vom ",d)
-  path <- paste0("https://github.com/",
+  # Seit 21.9.2022
+  rki_csv_url <- paste0("https://github.com/",
                  repo,
                  "raw/master/",
-                 path)
+                 path,
+                 fname)
   # Am 12.8.2021 scheiterte das Programm mit einem SSL ERROR 104 - 
   # Sicherheitsfeature: wenn kein Dataframe, probiere nochmal. 
-  try(rki_ <- read_csv(path))
+  try(rki_ <- read_csv(rki_csv_url))
   # Kein Dataframe zurückbekommen (also vermutlich Fehlermeldung)?
   while (!"data.frame" %in% class(rki_)) {
     msg(rki_," - neuer Versuch in 60s")
@@ -979,7 +992,7 @@ dw_publish_chart(chart_id ="9UVBF")
 
 msg("Gesamttabelle 7-Tage-Inzidenzen nach Kreis erstellen...")
 
-# Dafür brauchen wir die Bevölkerungszahlen des Vorjahrs
+# Dafür brauchen wir die Bevölkerungszahlen der Vorjahre
 
 
 # Daten für Hessen nach Kreis und Datum pivotieren:
@@ -998,20 +1011,32 @@ hsum_df <- hessen_neu_df
 # Spalten von Integer in Double  umwandeln
 hsum_df[,2:27] <- sapply(hsum_df[,2:27],as.numeric)
 
+ags_idx <- colnames(hsum_df)
+
 # Für alle 26 Kreise: 
 for ( k in 2:27){
-  # Bevölkerung aus der Kreis-Tabelle ziehen, via AGS
-  # Datum >= 25.8.2020? Dann nutze aktuelle Bevökerungsdaten in kreise,
-  # sonst nutze die Bevölkerungsdaten in kreise2019
-  p2020 <-  as.numeric(kreise$pop[kreise$AGS == colnames(hessen_neu_df[,k])])
-  p2019 <-  as.numeric(kreise2019$pop[kreise2019$AGS == colnames(hessen_neu_df[,k])])
-  
   # Kopiere aus hessen_df eine gleitende 7-Tage-Summe und berechne die Inzidenz
   # Stumpfer Algorithmus ohne jede Raffinesse, dauert entsprechend lang
+  # 
+  # Aus der Kreisnummer k die richtigen Bevölkerungszahlen ziehen
+  pops_kr <- c(kreise2019$pop[kreise2019$AGS==ags_idx[k]],
+               kreise2020$pop[kreise2020$AGS==ags_idx[k]],
+               kreise2021$pop[kreise2021$AGS==ags_idx[k]],
+               kreise$pop[kreise$AGS==ags_idx[k]])
   for (i in 8:nrow(hessen_neu_df)){
-    is_2020 <- hessen_neu_df$Meldedatum[i] >= as_date("2021-08-25")
+    # Erst mal die richtige Bevölkerungszahl für den Kreis und den Tag
+    # aus der Tabelle holen
+    # Bevölkerung des Kreises aus der Kreis-Tabelle ziehen, via AGS
+    # und für das jeweilige Jahr
+    md <- hessen_neu_df$Meldedatum[i]
+    pop_kr <- case_when(
+      md >= as_date("2022-09-21") ~ pops_kr[4],
+      md >= as_date("2021-08-25") ~ pops_kr[3],
+      md >= as_date("2020-09-01") ~ pops_kr[2],
+      TRUE ~ pops_kr[1]
+    ) 
     hsum_df[i,k] <- round(sum(hessen_neu_df[(i-6):i,k])/
-                            ifelse(is_2020,p2020,p2019) * 100000,1)
+                            pop_kr * 100000,1)
   }
 }
 
@@ -1258,8 +1283,11 @@ tote_woche_df <- fallzahl_df %>%
 # Leichte Verzerrungen in der Sterbestatistik nach Meldedatum, 
 # weil insbesondere in Wochen, in denen die Sterbezahlen hoch sind, 
 # Verzögerungen entstehen und der Meldetag später ist als der Sterbetag. 
-# Deshalb die RKI-Statistik nach Sterbetag auswerten. 
-rki_tote_df <- read.xlsx("https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Projekte_RKI/COVID-19_Todesfaelle.xlsx?__blob=publicationFile",sheet=2) %>% 
+# Deshalb die RKI-Statistik nach Sterbetag auswerten
+#
+# Am 2.9. war die Tabelle nicht vorhanden; deshalb try(),
+# damit nicht das ganze Skript rausfliegt. 
+try(rki_tote_df <- read.xlsx("https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Projekte_RKI/COVID-19_Todesfaelle.xlsx?__blob=publicationFile",sheet=2) %>% 
   filter(Bundesland=="HE") %>% 
   select(2,3,n=4) %>% 
   mutate(n = ifelse(str_detect(n,"<4"),0,as.numeric(n))) %>%
@@ -1279,15 +1307,22 @@ rki_tote_df <- read.xlsx("https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coron
   # Stichtag in der RKI-Tabelle rausnehmen
   mutate(kill_here = ifelse(is.na(kill_here),F,kill_here)) %>% 
   mutate(Tote = ifelse(kill_here==TRUE,NA,Tote)) %>% 
-  select(Stichtag,`Nach Sterbedatum` = n,`Nach Meldedatum` = Tote)
+  select(Stichtag,`Nach Sterbedatum` = n,`Nach Meldedatum` = Tote))
+
+# Fallback: Falls die RKI-Tabelle nicht geliefert, weise der 
+# Tabelle allein die gemeldeten Toten zu
+if (!exists("rki_tote_df")) {
+  rki_tote_df <- tote_woche_df
+} else {
+  # Datawrapper-Grafik mit den Toten je Woche nach Sterbedatum
+  dw_data_to_chart(rki_tote_df,chart_id="At51m")  
+  dw_publish_chart("At51m")
+}
 
 
 # Datawrapper-Grafik Tote wochenweise aktualisieren
 dw_data_to_chart(tote_woche_df, chart_id="KCHmS") # Flächengrafik 
 dw_publish_chart(chart_id="KCHmS")
-# Datawrapper-Grafik mit den Toten je Woche nach Sterbedatum
-dw_data_to_chart(rki_tote_df,chart_id="At51m")  
-dw_publish_chart("At51m")
 
 # ---- Wochensummen, Anteile der Altersgruppen im zeitlichen Verlauf ----
 # Wochensummen der Neufälle (gruppiert nach Meldedatum), aufgeschlüsselt nach Altersgruppe

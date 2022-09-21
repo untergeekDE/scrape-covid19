@@ -180,12 +180,24 @@ scrape_ivena <- function() {
 hosp_daten_df <- get_hosp_daten_df()
 # Letztes in der Tabelle vermerktes Datum
 ivena_alt <- hosp_daten_df %>% pull(Bettenauslastung_Datum) %>% last()
-# Solange 
-ivena_neu <- ivena_alt-1
-while(ivena_neu < ivena_alt) {
-  if((scrape_df <- scrape_ivena())[1] == FALSE) stop()
-  ivena_neu <- scrape_df$Bettenauslastung_Datum
-  
+# Zeitstempel für Timeout
+ts <- now()
+# Gibt es neue Daten?
+# - Wenn die gelesenen Daten neuer sind als die zuletzt gespeicherten.
+# Wenn keine neueren Daten vorhanden sind: 
+# - Wenn heute schon mal Daten gelesen wurden, aktualisiere einfach. 
+
+if((scrape_df <- scrape_ivena())[1] == FALSE) stop()
+ivena_neu <- scrape_df$Bettenauslastung_Datum
+while((ivena_neu == ivena_alt) & (ivena_alt < today())) {
+    msg("Keine aktuellen Daten, warte 300s... ")
+    Sys.sleep(300)
+    if((scrape_df <- scrape_ivena())[1] == FALSE) stop()
+    ivena_neu <- scrape_df$Bettenauslastung_Datum
+    # Timeout nach 4h
+    if (now() > ts+dhours(4)) {
+      teams_error("Keine aktuellen HMSI-Daten nach 4h")
+    }
 }
 # Falls das Scraping keine sinnvollen Daten ergibt: brich ab.
 

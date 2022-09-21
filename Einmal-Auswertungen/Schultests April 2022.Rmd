@@ -21,7 +21,7 @@ Datenauswertung der RKI-Falldaten und Testzahlen des hessischen Kultusministeriu
 - "Durchseuchungsquoten" nach Altersgruppen - wer hatte 2021 schon eine Infektion?
 - Berechung einer Vergleichs-Inzidenz aus den Schultest-Daten, Abschätzung des Schultest-Beitrags zur Gesamtinzidenz in der AG
 
-```{r}
+```{r init}
 
 # Die üblichen Vorarbeiten: Bibliotheken laden
 # Alles weg, was noch im Speicher rumliegt
@@ -48,7 +48,7 @@ enddatum <- today()
 
 Die Testzahlen und die Anzahl der positiven und PCR-bestätigten Tests haben wir beim Kultusministerium direkt erfragt und von Hand in ein Google Sheet übertragen. Dort holt sie das Skript ab und gibt sie in Datawrapper aus. 
 
-```{r}
+```{r schultests}
 # Ungefähre Anzahl der Schülerinnen und Schüler an allgemeinbildenen Schulen in Hessen.
 pop_sus = 637000
 
@@ -68,9 +68,9 @@ Unschärfe: 5-14 umfasst natürlich nicht alle Schülerinnen und Schüler, und d
 
 # Inzidenzen 5-14 im Vergleich
 
-Das Robert-Koch-Institut schlüsselt die gemeldeten Corona-Fälle nach Altersgruppen auf - die 
+Das Robert-Koch-Institut schlüsselt die gemeldeten Corona-Fälle nach Altersgruppen auf - die Altersgruppe 5-14 lässt sich gut mit den Schulen vergleichen, da sie praktisch nur Schüler enthält. 
 
-```{r}
+```{r inzidenzen_nach_altersgruppe}
 # Kreis-Indexdatei brauchen wir auch für die Abfrage-Funktion
 kreise <- read.xlsx("../index/kreise-index-pop.xlsx") %>%
   mutate(AGS = paste0("06",str_replace(AGS,"000","")))
@@ -243,7 +243,7 @@ Um den Anteil der Inzidenz zu schätzen, der auf die Schultests zurückgeht, geh
 - Alle an den Schulen gefundenen Fälle gehen in die Inzidenzberechnung 5-14 ein.
 - Das Verhältnis "Inzidenz nur durch Schultests" (= durch Schultests gefundene Fälle je 100.000 Schüler und Woche) zu "Inzidenz insgesamt" entspricht also dem Anteil der Schultest-Fälle an den insgesamt gefundenen Fällen unter Schülern.
 
-```{r, echo=FALSE}
+```{r vergleich_schulinzidenz, echo=FALSE}
 inzidenz0514_df <- tests_df %>% 
   select(Datum = woche_bis, inz_schulen) %>% 
   left_join(inzidenz_alter_df %>% 
@@ -255,7 +255,7 @@ print(gesamt_anteil <- inzidenz0514_df %>% pull(anteil) %>% mean(.,na.rm=T))
 ...ist der durchschnittliche Prozentanteil der Gesamtinzidenz, der auf die Schultests in der Altersgruppe zurückgeht. 
 
 Umgerechnet bedeutet das: Auf 100 ohne Schultests gefundene Fälle werden...
-```{r}
+```{r umrechnung_1}
 zusaetzlich_gefunden <- 100 / (100-gesamt_anteil) * gesamt_anteil
 print(zusaetzlich_gefunden)
 ```
@@ -265,7 +265,8 @@ print(zusaetzlich_gefunden)
 
 ...gehen die gefundenen Fälle in der Altersgruppe in ähnlichem Ausmaß zurück:
 
-```{r}
+
+```{r umrechnung_2}
 print("Umrechnung des Schultestfund-Verhältnisses Ba-Wü/Hessen: ")
 print((100+11)/(100+zusaetzlich_gefunden))
 ```
@@ -276,7 +277,7 @@ print((100+11)/(100+zusaetzlich_gefunden))
 ...wird einfach so gerechnet: Alle, die dieses Jahr - also in den letzten 4 Monaten - eine Infektion hatten, nach Altersgruppen. 
 
 
-```{r}
+```{r durchseuchung}
 summe_alter_df <- rki_bl_df %>%
   # Zählung der neuen Fälle
   filter(NeuerFall %in% c(0,1)) %>% 

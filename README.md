@@ -14,9 +14,12 @@ Eine Sammlung von R-Code, um Covid-19-Fälle von den Webseiten des Robert-Koch-I
 - Quelle DIVI: Intensivregister via [CSV]h(ttps://diviexchange.blob.core.windows.net/%24web/DIVI_Intensivregister_Auszug_pro_Landkreis.csv) und API
 - Quelle Helmholtz-Zentrum für Infektologie: [R-Wert-Schätzungen für Hessen als CSV](https://gitlab.com/simm/covid19/secir/-/tree/master/img/dynamic/Rt_rawData)
 - Quelle Johns-Hopkins-Universität: [Länder als CSV](https://gitlab.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_daily_reports/)
-- Quelle: DESTATIS-Bevölkerungsdaten 2018, 2019 und 2020 (Berechnungen werden ab Meldedatum 25.8.2021 mit den Daten von 2020 berechnet, ab September 2020 mit den Daten von 2019, davor mit den Daten von 2018)
-
-Die [Quelle "Hessisches Sozialministerium"](https://soziales.hessen.de/gesundheit/infektionsschutz/coronavirus-sars-cov-2/taegliche-uebersicht-der-bestaetigten-sars-cov-2-faelle-hessen) wurde wegen mangelnder Zuverlässigkeit und fehlender API/CSV zum 21.5. aussortiert. 
+- Quelle: DESTATIS-Bevölkerungsdaten 2018, 2019,2020, 2021 (Berechnungen werden berechnet...
+  -- ab Meldedatum 21.9.2022 mit den Daten von 2021
+  -- ab Meldedatum 25.8.2021 mit den Daten von 2020 
+  -- ab Meldedatum  1.9.2020 mit den Daten von 2019
+  -- davor mit den Daten von 2018)
+ - Quelle Hessisches Sozialministerium: [Tagesberichte mit Krankenhaus-Belegungszahlen](https://soziales.hessen.de/Corona/Bulletin/Tagesaktuelle-Zahlen)  
 
 ### Endpunkte 
 
@@ -67,7 +70,11 @@ Die Authentifizierung für die Datawrapper-Zugänge muss man einmal in der R-Umg
 Wenn man von Hand aktualisieren will, reicht es, die entsprechende Grafik in Datawrapper zum Editieren zu öffnen. Dann zieht Datawrapper die aktuellen Daten vom Google-Sheet nach. Wenn man schon in der Grafik arbeitet, einmal den "Füge Daten hinzu"-Reiter zu gehen.
 
 ### Changelog:
-
+* 21.09.: Umstellung auf neue Struktur des RKI-Github-Repository (Aktuelle Daten nur noch im Unterordner "Archiv")
+* 20.09.: Umstellung auf Bevölkerungsdaten Stand 31.12.2021
+* 22.08.: HMSI liefert Hospitalisierungs-Daten nur noch 2x wöchentlich und nicht mehr als CSV; umgestellt auf Scraping
+(länger nicht aktualisiert...)
+* 2.6.: Viertimpfungen sauber ausgewertet
 * 30.4.: Impfdaten enthalten endlich die Viertimpfungen und Novavax. Überarbeitung. 
 * 10.2.: Vergleich mit Vorwochen-Zahlen nach den vor 7 Tagen gemeldeten Werten, nicht denen Stand heute mit Nachmeldungen
 * 09.2.: ESRI-CSV liefert falsche Daten; Wartezeit auf Github-Daten verlängert (und dafür gesorgt, dass erst ab 4.30 Uhr gesucht wird); read.csv durch fread() aus der data.table-Library ersetzt

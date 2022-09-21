@@ -8,7 +8,7 @@
 # Datenquelle auslesen, die Excel-Datei mit dem "Digitalen Impfquotenmonitoring auf rki.de -
 # ...mit allen ihren Schwierigkeiten und Risiken. 
 
-# Stand: 29.4.2022
+# Stand: 21.9.2022
 
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
@@ -29,40 +29,52 @@ source("Helferskripte/server-msg-googlesheet-include.R")
 
 # Bevölkerungstabelle für alle Bundesländer vorbereiten,
 # Altersgruppen: 12-17, 18-59,60+.
-# Ausgangspunkt ist der File aus GENESIS mit der Altersschichtung
-# nach Lebensjahren und Bundesland. 
-# Q: 12411-04-02-4, Stichtag 31.12.2020
-if (!file.exists("index/pop.rda")) {
-  # Gibt es die Länder-Datei mit den Bevölkerungsschichten schon?
-  pop_df <- read_delim("index/12411-04-02-4.csv", 
-                          delim = ";", escape_double = FALSE, 
-                          locale = locale(date_names = "de",         
-                                          decimal_mark = ",", grouping_mark = ".",
-                                          encoding = "ISO-8859-1"), trim_ws=TRUE, 
-                          skip = 6,
-                          show_col_types=FALSE) %>%
-    # Länder-ID und Altersgruppen insgesamt/männlich/weiblich nutzen
-    select(id=1,Name=2,ag=3,4:6) %>% 
-    # Datei enthält auch "Insgesamt"-Zeilen mit den Ländersummen - weg damit
-    filter(ag!="Insgesamt") %>% 
-    # IDs auf Länder- und Kreis-
-    filter((str_length(id)==2 &  str_detect(id,"[01][0-9]")) | str_length(id)==5)
-    # Die lange 12411-04-02-04 auf die Angaben für die Bundesländer eindampfen
-  pop_bl_df <- pop_df %>% filter(str_length(id)==2) 
-  pop_kr_df <- pop_df %>% filter(str_length(id)==5)
-  save(pop_bl_df,pop_kr_df,file = "index/pop.rda")
-} else {
-  # vorbereitete Datenbank mit den Kreis- und Länder-Bevölkerungszahlen nach Altersjahren laden
-  # enthält zwei Dataframes:
-  # jeweils id | Name | ag | Insgesamt | männlich | weiblich 
-  # - pop_bl_df
-  # - pop_kr_df
-  load("index/pop.rda")
-}
-  # Altersgruppen; 90 (die höchste) umfasst alle darüber. 
-bev_bl_df <- pop_bl_df %>% 
-  mutate(ag = ifelse(str_detect(ag,"^unter"),0,
-                    as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
+# Errechne aus Bevölkerungszahlen nach Jahr. 
+# Q: GENESIS 12411-0012 (Tiefe: Bundesländer), Stichtag 31.12.2021, 
+# Q: Statistik des Landes Hessen
+# https://statistik.hessen.de/zahlen-fakten/bevoelkerung-gebiet-haushalte-familien/bevoelkerung/tabellen
+#
+# Rohdateien müssen beide im index-Ordner liegen
+
+# Lies die Landestabelle ein
+he_ag2021_k_df <- read_csv("./index/he_Altersstruktur_Bevoelkerung_Kreise_2021.csv", 
+                           locale = locale(date_names = "de"), skip = 2) %>% 
+  select(ags = 1, ag = 2, Insgesamt = 3) %>%
+  # Sonderding für Vogelsberg, bei dem "535 Vogelsberg" in der Tabelle steht. Grrr.
+  mutate(ags = str_sub(ags,1,3)) %>% 
+  # Spalten auffüllen:
+  # Wenn eine Zahl, in AGS-String umwandeln. (06...)
+  # Wenn keine Zahl, leeren - damit es im nächsten Schritt aufgefüllt werden kann. 
+  mutate(ags = ifelse(is.na(as.numeric(ags)),
+                      NA,
+                      paste0("06",ags))) %>% 
+  fill(ags, .direction = "down") %>% 
+  filter(ag != "Insgesamt") %>% 
+  mutate(ag = ifelse(str_detect(ag,"^[Uu]nter"),0,
+                     as.numeric(str_extract(ag,"^[0-9]+")))) 
+
+# Jetzt habe ich eine Tabelle, die für alle Kreise die Bevölkerung nach Altersjahren in Hessen nennt
+# ags - Kreis-AGS
+# ag  - Altersgruppe "von"
+
+t12411_0012_2021_df <- read_delim("./index/12411-0012.csv", 
+                                  delim = ";", escape_double = FALSE, 
+                                  locale = locale(date_names = "de", encoding = "ISO-8859-1"), trim_ws = TRUE, 
+                                  skip = 5) %>% 
+  # Spalte mit dem Stichtag raus
+  select(-1) %>% 
+  rename(ag = 1) %>% 
+  pivot_longer(cols = -ag, names_to = "bundesland", values_to = "n") %>% 
+  group_by(bundesland) %>% 
+  filter(!is.na(ag)) %>% 
+  filter(ag!="Insgesamt") %>% 
+  # id für Bundesländer dazuholen
+  left_join(read.xlsx("./index/bltabelle.xlsx"), by="bundesland")
+
+
+bev_bl_df <- t12411_0012_2021_df %>% 
+  mutate(ag = ifelse(str_detect(ag,"^[Uu]nter"),0,
+                     as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
   # Zusätzliche Variable mit der Altersgruppe
   mutate(Altersgruppe = case_when(
          ag < 05 ~ "u5",
@@ -70,18 +82,13 @@ bev_bl_df <- pop_bl_df %>%
          ag < 18 ~ "12-17",
          ag < 60 ~"18-59",
          TRUE    ~ "60+")) %>% 
-  select(id,Bundesland=Name,Altersgruppe,Insgesamt) %>% 
-  mutate(Insgesamt = as.numeric(Insgesamt)) %>% 
+  select(id,Bundesland = bundesland,Altersgruppe,Insgesamt = n) %>% 
   # Tabelle bauen: Bevölkerung in der jeweiligen Altersgruppe nach BL,
   # Werte aus der Variable aufsummieren. 
   pivot_wider(names_from=Altersgruppe, values_from=Insgesamt,values_fn=sum) %>% 
-  # Aus irgendwelchen Gründen enthält die GENESIS-Tabelle die Landesbezeichnung
-  # "Baden-Württemberg, Land". Korrigiere das. 
-  mutate(Bundesland = str_replace(Bundesland,"\\, Land$",""))
+  ungroup()
   
-bev_kr_df <- pop_kr_df %>% 
-  mutate(ag = ifelse(str_detect(ag,"^unter"),0,
-                     as.numeric(str_extract(ag,"^[0-9]+")))) %>% 
+bev_kr_df <- he_ag2021_k_df %>% 
   # Zusätzliche Variable mit der Altersgruppe
   mutate(Altersgruppe = case_when(
     ag < 5 ~ "u5",
@@ -89,7 +96,9 @@ bev_kr_df <- pop_kr_df %>%
     ag < 18 ~ "12-17",
     ag < 60 ~"18-59",
     TRUE    ~ "60+")) %>% 
-  select(id,Kreis=Name,Altersgruppe,Insgesamt) %>% 
+  left_join(read.xlsx("./index/kreise-namen-index.xlsx") %>% 
+                        select(ags = AGS,kreis),by="ags") %>% 
+  select(id = ags, Kreis = kreis, Altersgruppe, Insgesamt) %>% 
   filter(!is.na(as.numeric(Insgesamt))) %>% 
   mutate(Insgesamt = as.numeric(Insgesamt,na.rm=T)) %>% 
   # Tabelle bauen: Bevölkerung in der jeweiligen Altersgruppe nach BL,
@@ -391,7 +400,8 @@ write_sheet(impfen_alle_df,aaa_id,sheet = "ImpfzahlenNational")
 
 # Tabelle nur mit den Boosterimpfungen anlegen
 # Dafür erst Gesamt-Quote berechnen
-pop_de <- sum(as.numeric(pop_bl_df$Insgesamt))
+# Deutsche Gesamtbevölkerung: alle Bundesländer alle Altersgruppen
+pop_de <- sum(bev_bl_df %>% select(-Bundesland,-id))
 booster_de <- sum(impfen_alle_df$geboostert)
 
 booster_de_df <- tibble(Bundesland="<br><br><strong>Deutschland</strong><br><br>",quote_dritt=booster_de/pop_de*100)

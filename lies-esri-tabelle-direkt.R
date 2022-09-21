@@ -47,7 +47,7 @@ if (server) {
   # Google-Bucket befüllen
   system('gsutil -h "Cache-Control:no-cache, max_age=0" cp ./daten/esri-tabelle-hessen.csv gs://d.data.gcp.cloud.hr.de/esri-tabelle-hessen.csv')
 }  
-msg("Geschrieben. ESRI-Status: ",get_esri_status()$Status)
+#msg("Geschrieben. ESRI-Status: ",get_esri_status()$Status)
 
 # Was wo liegt, bekommt man über daten_liste$features$attributes$LAN_ew_GEN
 # Daten von gestern holen und vergleichen

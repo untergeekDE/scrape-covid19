@@ -380,4 +380,3 @@ cc$add_section(new_section = sec3)
 # Karte vorbereiten und abschicken. 
 
 cc$send()
-

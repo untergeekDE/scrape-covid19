@@ -265,6 +265,7 @@ print(zusaetzlich_gefunden)
 
 ...gehen die gefundenen Fälle in der Altersgruppe in ähnlichem Ausmaß zurück:
 
+
 ```{r umrechnung_2}
 print("Umrechnung des Schultestfund-Verhältnisses Ba-Wü/Hessen: ")
 print((100+11)/(100+zusaetzlich_gefunden))

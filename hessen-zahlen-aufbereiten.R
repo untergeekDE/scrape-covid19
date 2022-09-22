@@ -41,7 +41,7 @@
 #
 # jan.eggers@hr.de hr-Datenteam 
 #
-# Stand: 21.9.2022
+# Stand: 22.9.2022
 
 # ---- Bibliotheken, Einrichtung der Message-Funktion; Server- vs. Lokal-Variante ----
 # Alles weg, was noch im Speicher rumliegt
@@ -140,7 +140,7 @@ read_github_rki_data <- function() {
   }
   starttime <- now()
   # Repository auf Github
-  repo <- "robert-koch-institut/SARS-CoV-2_Infektionen_in_Deutschland/"
+  repo <- "robert-koch-institut/SARS-CoV-2-Infektionen_in_Deutschland_Archiv/"
   path <- "Archiv/"
   fname <- paste0(ymd(today()),    # Filename beginnt mit aktuellem Datum
     "_Deutschland_SarsCov2_Infektionen.csv")
